@@ -273,7 +273,8 @@ class AuthenticationIntegrationTest {
         other);
     jdbc.update(
         "insert into missions(id,organization_id,title,goal,status,priority,created_at,updated_at)"
-            + " values (?,?,'Foreign','Goal','DRAFT','NORMAL',current_timestamp,current_timestamp)",
+            + " values"
+            + " (?,?,'Foreign','Goal','CREATED','NORMAL',current_timestamp,current_timestamp)",
         mission,
         other);
     var cookie = login();
