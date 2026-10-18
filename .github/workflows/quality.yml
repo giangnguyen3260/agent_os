@@ -1,0 +1,55 @@
+name: Code quality
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Google Java import rules
+        run: python3 scripts/check-java-imports.py
+      - name: Backend formatting, tests and coverage
+        run: mvn --batch-mode --no-transfer-progress -f backend/pom.xml verify
+      - name: Frontend dependencies
+        working-directory: frontend
+        run: npm ci
+      - name: Frontend Google style and type/build checks
+        working-directory: frontend
+        run: npm run lint && npm run format:check && npm run test:tooling && npm run build
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: quality-evidence
+          path: |
+            backend/target/surefire-reports
+            backend/target/site/jacoco
+            frontend/dist
+      - name: Require Sonar connection
+        env:
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          test -n "$SONAR_HOST_URL" || { echo 'Configure SONAR_HOST_URL before quality can pass.'; exit 1; }
+          test -n "$SONAR_TOKEN" || { echo 'Configure SONAR_TOKEN before quality can pass.'; exit 1; }
+      - name: Sonar analysis and server quality gate
+        uses: SonarSource/sonarqube-scan-action@v5
+        env:
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

@@ -1,0 +1,41 @@
+name: Docker build and smoke test
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compose-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Create ephemeral local database secret
+        run: |
+          python3 - <<'PY'
+          import secrets
+          from pathlib import Path
+          with Path('.env').open('w') as config:
+              print('POSTGRES_PASSWORD=' + secrets.token_hex(32), file=config)
+              print('APP_PORT=18080', file=config)
+          PY
+      - name: Validate Compose
+        run: docker compose config --quiet
+      - name: Build and start healthy stack
+        run: docker compose up --build --detach --wait --wait-timeout 180
+      - name: Verify frontend, SPA, API and private management path
+        run: |
+          curl --fail --silent http://127.0.0.1:18080/healthz
+          curl --fail --silent http://127.0.0.1:18080/missions | grep -q '<app-root'
+          curl --fail --silent http://127.0.0.1:18080/api/v1/organizations | python3 -c 'import json,sys; r=json.load(sys.stdin); assert isinstance(r["data"], list)'
+          status=$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:18080/actuator/health)
+          test "$status" = 404
+      - name: Container status
+        if: always()
+        run: docker compose ps --all
+      - name: Stop disposable CI stack
+        if: always()
+        run: docker compose down --volumes

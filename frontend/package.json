@@ -1,0 +1,44 @@
+{
+  "name": "agentos-frontend",
+  "version": "0.1.0",
+  "scripts": {
+    "start": "ng serve --host 0.0.0.0 --port 4200",
+    "build": "ng build",
+    "test": "ng test",
+    "lint": "eslint src --max-warnings 0",
+    "format": "prettier --write \"src/**/*.{ts,css,html}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,css,html}\"",
+    "test:tooling": "node scripts/test-editor-dependency.cjs"
+  },
+  "private": true,
+  "dependencies": {
+    "@angular/animations": "^21.2.0",
+    "@angular/common": "^21.2.0",
+    "@angular/compiler": "^21.2.0",
+    "@angular/core": "^21.2.0",
+    "@angular/forms": "^21.2.0",
+    "@angular/platform-browser": "^21.2.0",
+    "@angular/platform-browser-dynamic": "^21.2.0",
+    "@angular/router": "^21.2.0",
+    "rxjs": "~7.8.0",
+    "tslib": "^2.6.0",
+    "zone.js": "~0.16.0"
+  },
+  "devDependencies": {
+    "@angular/cli": "^21.2.0",
+    "@angular/compiler-cli": "^21.2.0",
+    "typescript": "~5.9.3",
+    "gts": "7.0.0",
+    "eslint": "9.39.2",
+    "prettier": "3.6.2",
+    "@angular/build": "^21.2.0"
+  },
+  "engines": {
+    "node": ">=24.0.0 <25"
+  },
+  "overrides": {
+    "external-editor": {
+      "tmp": "0.2.7"
+    }
+  }
+}

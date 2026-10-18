@@ -1,0 +1,38 @@
+# Coding standards and review gate
+
+User requirement: clean code, Google coding style and SonarQube checks. Applies to all new code and changed files. Baseline formatting is a separate mechanical change from functional edits.
+
+## Java
+
+Use Google Java Style via pinned google-java-format and Maven Spotless. Run `mvn spotless:apply` to format, `mvn verify` to check formatting, execute tests and produce JaCoCo XML. Use Java21. No manual formatting exceptions without review. Formatters do not replace review of naming, cohesion or business invariants.
+
+## Angular / TypeScript
+
+Use Google's `gts` ESLint configuration and Prettier configuration, with Angular application TypeScript settings retained. Use two-space indentation, explicit contracts, descriptive names, typed reactive forms and small feature-owned services. Angular decorators require a documented lint exception if the Google config enables a conflicting rule; never disable the whole linter. Run `npm run lint`, `npm run format:check`, `npm run build`. Use `npm run format` for formatting. Runtime auth/tenant authorization always remains server-side.
+
+## Clean code and security
+
+Keep domain rules separate from HTTP/persistence; constructor injection; DTO allowlists; avoid cross-module repository access. No blanket catches, silent errors, secret logging, arbitrary `any`, duplicate business rules or speculative abstractions. Prefer readable functions and meaningful tests over a rigid function-length limit. Parameterized persistence, explicit tenant ownership and auditable state transitions are mandatory. Do not use `NOSONAR`, broad exclusions or suppression to manufacture a passing gate. Narrow justified exceptions require SA/QC review and a tracked reason.
+
+## SonarQube
+
+The repository supplies scanner inputs; the quality profile and gate live on the Sonar server, not in this properties file. Configure server-side new-code gate: coverage >=80%, duplication <=3%, no new reliability/security issues, maintainability rating A, all new security hotspots reviewed. Confirm exact available metrics against the deployed Sonar version. Any policy exception requires a named owner and expiry, never silent acceptance. Pin the new-code baseline (reference branch or release version) before interpreting metrics.
+
+CI waits for the server quality gate. Missing SONAR_HOST_URL or SONAR_TOKEN fails the job; do not mark it Pass. Use a narrowly scoped analysis token as a CI secret. Fork pull requests do not receive secrets; their Sonar step will remain blocked until a trusted pipeline can analyze them. Do not switch to pull_request_target to run untrusted code with secrets.
+
+Java coverage input is JaCoCo XML. Frontend LCOV is reserved for the later FE test slice; absent coverage is a gap, not a reason to exclude FE production code. Authentication, encryption, load, browser E2E and Sonar runtime verification are not completed merely because foundation build checks pass.
+
+## QC definition of done
+
+BA acceptance + code review + formatting/lint/type checks + relevant unit/integration/security/E2E tests + actual Sonar gate + independent QC evidence. Status is PASS / FAIL / BLOCKED / NOT_RUN. A coded item with blocked required checks is not Verified or release-ready. QC records test data, steps, expected/actual result, evidence and defect severity; developer fixes and QC retests. Static analysis never replaces functional or penetration testing.
+
+References:
+- https://google.github.io/styleguide/javaguide.html
+- https://google.github.io/styleguide/tsguide.html
+- https://github.com/google/google-java-format
+- https://github.com/google/gts
+- https://docs.sonarsource.com/sonarqube-community-build/quality-standards-administration/managing-quality-gates/introduction-to-quality-gates
+
+## Temporary dependency override
+
+The gts7 -> inquirer -> external-editor chain selected vulnerable tmp. Scope the override to external-editor/tmp0.2.7: the 0.2.6 fix for GHSA-ph9p-34f9-6g65 also required the follow-up patch for GHSA-7c78-jf6q-g5cm. Do not use npm audit fix --force to downgrade Angular. `npm run test:tooling` verifies the real consumer can create/read/cleanup a temporary file through the patched dependency without launching an editor, and rejects string/array traversal prefixes. Recheck the override after upstream gts/external-editor updates. This limited smoke test is not a general interactive-editor or penetration-test result.

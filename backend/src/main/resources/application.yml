@@ -1,0 +1,28 @@
+spring:
+  application:
+    name: agentos
+  datasource:
+    url: jdbc:postgresql://localhost:5432/agentos
+    username: agentos
+    password: agentos
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+
+server:
+  port: 8080
+
+agentos:
+  orchestration:
+    max-task-retries: 3
+    max-planning-retries: 2
+    max-discussion-rounds: 5
+    max-delegation-depth: 4
+  resource:
+    default-mission-cost-limit: 5.00
+    default-agent-daily-cost-limit: 20.00
+  governance:
+    approval-timeout-hours: 24

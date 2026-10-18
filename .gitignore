@@ -1,0 +1,12 @@
+node_modules/
+dist/
+target/
+coverage/
+.angular/
+.scannerwork/
+.env
+.env.*
+!.env.example
+*.log
+.idea/
+.vscode/
