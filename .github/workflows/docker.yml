@@ -75,4 +75,6 @@ jobs:
         run: docker compose ps --all
       - name: Stop disposable CI stack
         if: always()
-        run: docker compose down --volumes
+        run: |
+          python3 -c 'from pathlib import Path; Path("auth-session-probe.json").unlink(missing_ok=True)'
+          docker compose down --volumes

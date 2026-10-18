@@ -162,3 +162,53 @@ The fixture-related historical 18/19 failure is superseded for this corrected re
 Docker job `117734172022` remains **RUNNING / final outcome not observed**, per main. Real PostgreSQL stack and authenticated browser E2E results remain unverified; do not infer success from backend tests or the earlier static Chromium renders. Earlier pending statements describe their historical snapshots and are superseded only to the extent stated here.
 
 **Overall disposition remains NOT ACCEPTED. Recovery dependency UNAVAILABLE; workspace handoff NOT FULL-SCREEN ACCEPTANCE; ALL SCREENS NOT COMPLETE.** Remaining security, browser/design and adjacent-flow evidence gates still apply. Sonar remains PAUSED.
+
+## Review 6 — restart probe source review and partial Docker progress
+
+Main reports Docker job `117734172022` passed build/start-healthy Compose, smoke checks and `Verify migrated identity and session schema`; browser installation is now in progress. Record these as **main-reported completed stages**, not a complete Docker job or authenticated E2E pass. This advances real PostgreSQL startup/schema evidence beyond H2; restart durability and full PostgreSQL/auth/browser acceptance remain pending. The previously reported backend 19/19 pass retains its exact revision and H2 limitation from review 5.
+
+QC read `scripts/auth-session-probe.py`, its workflow integration and Git ignore entry. No runtime check performed and no source modified by QC.
+
+- **No P0/P1 identified in the inspected disposable CI probe.** Credentials are read from environment and URL-encoded for login; neither credentials, CSRF tokens, session cookie nor response bodies are explicitly printed. Both success messages are fixed strings. This is a source inspection, not a captured-log leakage test.
+- State contains only identity ID and session cookie. Creation uses `os.open` with `O_EXCL` and mode `0600`, avoiding overwrite of an existing path and exposing no group/other permissions at creation. `auth-session-probe.json` is Git-ignored. It remains a session secret despite being ignored.
+- Resume sends the exact saved cookie explicitly, checks the same identity after the workflow's backend restart/readiness wait, obtains CSRF for logout, then reuses that saved cookie expecting 401. This is meaningful restart-persistence and logout-replay verification rather than checking that a new login works. It does not demonstrate database restart, credential reauthentication, simultaneous instances, bootstrap race behavior or session expiry.
+- **Actionable cleanup gap (main-owned, non-P1 in ephemeral CI):** `resume` unlinks state in `finally`, but loading/parsing state occurs before that block. Failure/cancellation after save, restart/readiness failure, or malformed state before the try leaves the session file behind; the workflow's always-run teardown only removes Compose resources. Add always-run removal of `auth-session-probe.json` to teardown, including failures before resume. Avoid artifact upload or diagnostic printing of this file. No such cleanup fix was made by QC.
+- The new probe/workflow changes are additional source awaiting publication/execution; no successful probe result or association with the already-running job is inferred. Main should record the exact commit and result when this step actually runs.
+
+**NOT ACCEPTED.** Recovery dependency UNAVAILABLE; workspace handoff NOT FULL-SCREEN ACCEPTANCE; ALL SCREENS NOT COMPLETE. Browser/install/restart and final CI outcomes remain pending as scoped above. Sonar PAUSED.
+
+## Review 7 — independently fetched completed CI evidence
+
+QC independently fetched GitHub job logs and job/step outcomes using the GitHub connector, and queried workflow runs for commit `ae48419f8505de317664a0c44dcebf5f1b209010`. Both returned completed/success. This upgrades the corresponding main-reported evidence to independently retrieved evidence; it supersedes previous pending statements for these runs only.
+
+| Exact revision | Run / job | Independently observed bounded PASS |
+|---|---|---|
+| `ae48419f8505de317664a0c44dcebf5f1b209010` | Quality `39147482417` / `117734172206` | Java21 backend 19 tests, 0 failures/errors/skips: Bootstrap 4, AuthIntegration 7, Agent 5, Organization 3. BUILD SUCCESS logged at `2026-10-18T17:00:07.9301792Z`. Java import, backend formatting/tests/coverage and frontend style/type/build steps completed successfully. |
+| Same revision | Docker `39147482389` / `117734172022` | Build/start healthy real PostgreSQL Compose stack; frontend/SPA/API/management smoke; migrated identity/session schema verification; browser install; real-backend Playwright all completed successfully. Log reports `12 passed (10.0s)` at `2026-10-18T17:02:32.5252823Z`. Teardown and complete job also successful. |
+
+Run links: [Quality](https://github.com/giangnguyen3260/agent_os/actions/runs/39147482417), [Docker](https://github.com/giangnguyen3260/agent_os/actions/runs/39147482389).
+
+The 12 browser passes are four scenarios across desktop/tablet/mobile (1440/768/390): anonymous API/CSRF denial, empty/responsive/keyboard form, invalid credentials without session, and persisted login across page reload followed by logout/cookie replay denial. This establishes actual tested HTTP/browser behavior with the PostgreSQL-backed stack, beyond static frontend rendering. Backend unit/integration suite itself remains H2-based. No full recovery, all-screen, complete accessibility/visual equivalence, process restart, database restart or multi-instance acceptance follows from these passes.
+
+Main reports new revision `7206d3aefbf06cdfacf93355f36a76cc0f4b519c` adds the restart probe and supporting CI/ignore/QC changes. QC fetched new run jobs: Docker `39147792358` / `117735066501` is in progress, with restart step pending; Quality `39147792311` / `117735066071` has successful backend/frontend verification steps but job completion was still pending at this observation. No pass transferred automatically from the prior revision. Awaiting actual restart-probe outcome before final handoff.
+
+Overall remains **NOT ACCEPTED**: recovery dependency UNAVAILABLE; workspace handoff NOT FULL-SCREEN ACCEPTANCE; ALL SCREENS NOT COMPLETE. Sonar PAUSED. Probe failure-path secret-file cleanup recommendation from review 6 remains open in the inspected source.
+
+## Review 8 — final bounded probe/cleanup handoff
+
+QC re-read the unchanged probe and the latest local workflow. The always-run `Stop disposable CI stack` step now executes `Path("auth-session-probe.json").unlink(missing_ok=True)` before `docker compose down --volumes`. **Failure-path cleanup recommendation addressed in source; statically verified, not runtime verified.** This covers ordinary earlier-step failures before resume; it does not claim execution after forced runner termination. Main will publish the limited CI cleanup change with this report; no business-code change is inferred.
+
+Probe review remains: exclusive 0600 ignored secret file, no explicit secret stdout, exact pre-restart cookie identity check and post-logout replay expecting 401. No outstanding P0/P1 identified in this probe review. Its functional check in run `39147792358` remains applicable to the probe source even though this additional teardown cleanup is not part of that running revision. Main will append the actual restart result and final tested/published revisions when available; QC makes no restart-pass claim here. No further local checks or scope expansion.
+
+Independently retrieved prior revision evidence remains bounded PASS: `ae48419f8505de317664a0c44dcebf5f1b209010`, quality 19/19 and Docker real PostgreSQL/schema plus Playwright 12/12, as recorded in review 7. **Overall NOT ACCEPTED; recovery dependency UNAVAILABLE; workspace handoff NOT FULL-SCREEN ACCEPTANCE; ALL SCREENS NOT COMPLETE; Sonar PAUSED.**
+
+Final asynchronous status observation: GitHub commit-run query for `7206d3aefbf06cdfacf93355f36a76cc0f4b519c` returned Quality `39147792311` completed/success. Docker `39147792358` / job `117735066501` was still building; restart step pending. No new test count inferred from status alone. Main owns subsequent result append.
+
+
+## Review 9 — restart persistence verification, final source handoff
+
+Main retrieved actual GitHub Docker job `117735066501`, run `39147792358`, on source commit `7206d3aefbf06cdfacf93355f36a76cc0f4b519c`. The backend-restart probe step completed successfully: a real PostgreSQL-backed session issued before restart authenticated as the same human after backend restart; logout then rejected replay of that exact cookie with401. The real-stack browser suite again reported12 passed. Quality run `39147792311` completed successfully on the same source revision. This verifies backend-process restart persistence, not PostgreSQL restart, multi-instance load/failover or complete security coverage.
+
+The final publication adds only this accumulated QC evidence and the statically reviewed always-run secret-file cleanup before CI teardown. Application and probe source are identical to the tested7206d3a revision; the final cleanup change has not itself been executed in the completed run. No additional application pass is inferred for changed code.
+
+Core login/session verification is evidenced. Overall screen acceptance remains open: password recovery is explicitly unavailable; workspace is only a live membership hand-off; comprehensive visual/accessibility, HTTPS cookie, absolute expiry, broader abuse controls and full role/grant flows remain tracked dependencies. No all-screen or production-completion claim. Sonar remains paused.
