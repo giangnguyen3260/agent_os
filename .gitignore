@@ -12,3 +12,4 @@ coverage/
 .vscode/
 playwright-report/
 test-results/
+auth-session-probe.json

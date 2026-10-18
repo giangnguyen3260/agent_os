@@ -122,3 +122,43 @@ Next event-driven handoff: BE resolves QC-A04 and supplies actual test output; m
 5. **BA / designer / main: keep recovery and full workspace acceptance open.** Recovery dependency UNAVAILABLE; workspace handoff NOT FULL-SCREEN ACCEPTANCE; all screens NOT COMPLETE. Full recovery lifecycle, responsive visual comparison/accessibility and missing browser error/expiry/repeated-submit scenarios still need evidence.
 
 Prior independently executed FE lint remains PASS for its recorded snapshot; build was not duplicated. Sonar remains PAUSED. No automatic acceptance follows from a draft PR, configured tests, successful compile, or source fixes.
+
+## Review 4 — fixture fix and local browser evidence handoff, 2026-10-18
+
+**Disposition: NOT ACCEPTED.** The evidence below was reported by main; QC has not independently rerun these checks or fetched CI results. Main will append new CI outcomes when available. This section supplements earlier pending-execution entries without retroactively turning them into passes.
+
+### Historical backend execution failure and current retest
+
+- Main reports actual CI run `117733690786` compiled under Java21 and executed 19 tests: **18 passed, 1 failed**. The failure was attributed to an invalid `DRAFT` fixture value. This is a historical failed run, not a passing backend suite and not merely an unexecuted test plan.
+- Fixture correction published at commit `ae48419f8505de317664a0c44dcebf5f1b209010` (main-reported). Corrected source does not establish that the failing test or full suite now passes.
+- New quality run `39147482417`: **PENDING RETEST / outcome not observed by QC**.
+- New Docker run `39147482389`: **PENDING / outcome not observed by QC**. No real PostgreSQL integration or full authenticated Playwright pass is claimed from the existence of this run.
+- Earlier source findings were against the recorded changing working tree. Main must attach final CI evidence to the exact tested revision; this report does not assume the two new runs passed or independently verify their commit association.
+
+### Actual local Chromium rendering (main-reported evidence)
+
+Main obtained local Chromium 153 through an npm-package workaround after the earlier browser download/install blockage. The earlier failed install remains historical; it no longer means every local browser check is blocked. Actual static frontend pages were rendered at all three widths:
+
+| Viewport width | Login card bounds (CSS px) | Reported checks |
+|---|---|---|
+| 1440 | x=440, y=126, width=560, height=498 | No horizontal overflow; empty inputs |
+| 768 | x=104, y=126, width=560, height=498 | No horizontal overflow; empty inputs |
+| 390 | x=16, y=110, width=358, height=526 | No horizontal overflow; empty inputs |
+
+Main also reports required-email and required-password validation checks passed, and the recovery dialog closed with Escape. Main visually viewed the mobile screenshot. These are bounded UI observations, not QC's own executed checks or independent designer signoff. Viewport heights and a screenshot artifact/immutable render revision were not supplied in this handoff; no additional geometry or visual-comparison result is inferred.
+
+No API stubbing/interception was needed for these static page checks. **No authentication API was tested by this local render exercise.** It does not verify credential handling, successful/failed server login, session/CSRF rotation, disabled-account revocation, membership scope, logout replay, expiry, PostgreSQL persistence or the 12 configured authenticated/HTTP Playwright test instances. It also does not establish full keyboard navigation, contrast, all touch targets, all designed states, or desktop/tablet/mobile Figma equivalence.
+
+### Remaining acceptance gates
+
+Await actual quality/backend and Docker/PostgreSQL/Playwright results, with exact revision and sanitized failure/retest evidence. Retain the remaining security and coverage checks in review 3. Recovery dependency remains **UNAVAILABLE**; workspace handoff remains **NOT FULL-SCREEN ACCEPTANCE**; **ALL SCREENS NOT COMPLETE**. Sonar remains **PAUSED**. Neither the fixture fix, partial historical test success nor the reported static browser checks constitutes acceptance of the login delivery.
+
+## Review 5 — backend fixture retest result, 2026-10-18
+
+Main/QA reports fetching actual GitHub job `117734172206` logs for commit `ae48419f8505de317664a0c44dcebf5f1b209010`. The logs show **19 tests run, 19 passed**, with **BUILD SUCCESS at 17:00:07Z**: Bootstrap 4, AuthIntegration 7, Agent 5, Organization 3. QC records this as main-fetched CI evidence, not a local QC execution or independently fetched log. No additional local checks performed.
+
+The fixture-related historical 18/19 failure is superseded for this corrected revision by the reported successful retest; retain the failed run as history. Backend test execution is therefore no longer wholly pending for this commit. These integration tests use **H2**, not PostgreSQL: their pass does not verify PostgreSQL migration/locking behavior, restart persistence, bootstrap concurrency or multi-instance session propagation.
+
+Docker job `117734172022` remains **RUNNING / final outcome not observed**, per main. Real PostgreSQL stack and authenticated browser E2E results remain unverified; do not infer success from backend tests or the earlier static Chromium renders. Earlier pending statements describe their historical snapshots and are superseded only to the extent stated here.
+
+**Overall disposition remains NOT ACCEPTED. Recovery dependency UNAVAILABLE; workspace handoff NOT FULL-SCREEN ACCEPTANCE; ALL SCREENS NOT COMPLETE.** Remaining security, browser/design and adjacent-flow evidence gates still apply. Sonar remains PAUSED.
