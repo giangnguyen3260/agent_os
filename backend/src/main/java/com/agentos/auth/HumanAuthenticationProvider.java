@@ -75,14 +75,15 @@ public class HumanAuthenticationProvider implements AuthenticationProvider {
     }
     var accounts =
         jdbc.query(
-            "select id, email, display_name, password_hash, enabled from human_accounts where email"
-                + " = ?",
+            "select id, email, display_name, password_hash, enabled, credential_version from"
+                + " human_accounts where email = ?",
             (rs, row) ->
                 new Account(
                     new HumanIdentity(
                         rs.getObject("id", UUID.class),
                         rs.getString("email"),
-                        rs.getString("display_name")),
+                        rs.getString("display_name"),
+                        rs.getLong("credential_version")),
                     rs.getString("password_hash"),
                     rs.getBoolean("enabled")),
             email);

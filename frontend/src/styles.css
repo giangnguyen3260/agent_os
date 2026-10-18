@@ -303,3 +303,32 @@ dialog :focus-visible {
 .auth-login-heading .auth-subtitle {
   margin-top: 20px;
 }
+
+.auth-recovery {
+  font-size: 14px;
+  line-height: 22px;
+}
+.auth-recovery-notice {
+  background: var(--bg);
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.auth-recovery-notice h2 {
+  font-size: 16px;
+  line-height: 22px;
+  font-weight: 600;
+  margin: 0;
+}
+.auth-recovery-notice p,
+.auth-recovery-policy {
+  margin: 0;
+}
+.auth-recovery-policy {
+  color: var(--muted);
+}
+.auth-recovery .field-error {
+  font-size: 14px;
+}

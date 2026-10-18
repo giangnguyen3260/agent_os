@@ -29,6 +29,8 @@ jobs:
           with Path('.env').open('w') as config:
               print('POSTGRES_PASSWORD=' + secrets.token_hex(32), file=config)
               print('APP_PORT=18080', file=config)
+              print('MAILPIT_PORT=18025', file=config)
+              print('AGENTOS_RECOVERY_FRONTEND_BASE_URL=http://127.0.0.1:18080', file=config)
               print('AGENTOS_BOOTSTRAP_ENABLED=true', file=config)
               print('AGENTOS_BOOTSTRAP_EMAIL=qc@example.test', file=config)
               print('AGENTOS_BOOTSTRAP_DISPLAY_NAME=QC Operator', file=config)
@@ -52,6 +54,15 @@ jobs:
       - name: Verify migrated identity and session schema
         run: |
           docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT version, success FROM flyway_schema_history ORDER BY installed_rank;"'
+      # Separate disposable humans keep password reset tests from changing the login fixture.
+      - name: Provision isolated recovery test accounts
+        run: |
+          docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<'SQL'
+          INSERT INTO human_accounts(id,email,display_name,password_hash)
+          SELECT gen_random_uuid(), 'recovery-' || surface || '@example.test', 'Recovery QC', password_hash
+          FROM human_accounts CROSS JOIN (VALUES ('desktop'), ('tablet'), ('mobile')) AS surfaces(surface)
+          WHERE email = 'qc@example.test';
+          SQL
       - name: Install browser test dependencies
         working-directory: frontend
         run: |
@@ -61,6 +72,7 @@ jobs:
         working-directory: frontend
         env:
           E2E_BASE_URL: http://127.0.0.1:18080
+          E2E_MAILPIT_URL: http://127.0.0.1:18025
         run: npm run test:e2e
       - name: Session and account survive backend restart
         env:

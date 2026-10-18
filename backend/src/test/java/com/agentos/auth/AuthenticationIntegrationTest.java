@@ -341,5 +341,20 @@ class AuthenticationIntegrationTest {
         .andExpect(status().isOk());
   }
 
+  @Test
+  void recoveryIsUnavailableByDefault() throws Exception {
+    var token = csrf(null);
+    for (String endpoint : new String[] {"request", "confirm"}) {
+      mvc.perform(
+              post("/api/v1/auth/recovery/" + endpoint)
+                  .cookie(token.cookie())
+                  .header(token.header(), token.token())
+                  .contentType("application/json")
+                  .content("{}"))
+          .andExpect(status().isServiceUnavailable())
+          .andExpect(jsonPath("error.code").value("RECOVERY_UNAVAILABLE"));
+    }
+  }
+
   private record Bootstrap(Cookie cookie, String token, String header) {}
 }
