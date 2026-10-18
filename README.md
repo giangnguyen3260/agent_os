@@ -74,4 +74,4 @@ npm run test:tooling
 npm run build
 ```
 
-Follow [Google coding standards](docs/engineering/CODING_STANDARDS.md). SonarQube requires SONAR_HOST_URL repository variable and SONAR_TOKEN secret; the quality workflow fails rather than reporting Pass when they are absent. The independent Docker workflow does not replace that quality gate. Database/key-management/security, browser and load checks remain required before production.
+Follow [Google coding standards](docs/engineering/CODING_STANDARDS.md). SonarQube scanning is temporarily paused. CI still enforces Java formatting, backend tests and coverage generation, frontend lint/format/tooling checks and build. Docker build and smoke checks run independently. The Sonar configuration is retained for later reactivation; a green CI run does not imply a Sonar quality gate has passed. Database/key-management/security, browser and load checks remain required before production.
