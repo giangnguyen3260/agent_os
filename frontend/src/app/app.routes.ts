@@ -1,44 +1,71 @@
 import {Routes} from '@angular/router';
+import {authGuard, previewGuard} from './core/auth/auth.guard';
 
 export const routes: Routes = [
-  {path: '', pathMatch: 'full', redirectTo: 'dashboard'},
+  {path: '', pathMatch: 'full', redirectTo: 'workspace'},
   {
-    path: 'dashboard',
+    path: 'login',
     loadComponent: () =>
-      import('./features/dashboard/dashboard-page.component').then(
-        module => module.DashboardPageComponent,
+      import('./features/auth/login-page.component').then(
+        module => module.LoginPageComponent,
       ),
   },
   {
-    path: 'organization',
+    path: 'workspace',
+    canActivate: [authGuard],
     loadComponent: () =>
-      import('./features/organization/organization-page.component').then(
-        module => module.OrganizationPageComponent,
+      import('./features/workspace/workspace-page.component').then(
+        module => module.WorkspacePageComponent,
       ),
   },
   {
-    path: 'agents',
+    path: '',
+    canActivate: [authGuard, previewGuard],
     loadComponent: () =>
-      import('./features/agents/agent-list-page.component').then(
-        module => module.AgentListPageComponent,
+      import('./core/layout/shell-layout.component').then(
+        module => module.ShellLayoutComponent,
       ),
-  },
-  {
-    path: 'missions',
-    loadComponent: () =>
-      import('./features/missions/mission-list-page.component').then(
-        module => module.MissionListPageComponent,
-      ),
-  },
-  {
-    path: 'approvals',
-    loadComponent: () =>
-      import('./features/approvals/approval-list-page.component').then(
-        module => module.ApprovalListPageComponent,
-      ),
+    children: [
+      {
+        path: 'dashboard',
+        loadComponent: () =>
+          import('./features/dashboard/dashboard-page.component').then(
+            module => module.DashboardPageComponent,
+          ),
+      },
+      {
+        path: 'organization',
+        loadComponent: () =>
+          import('./features/organization/organization-page.component').then(
+            module => module.OrganizationPageComponent,
+          ),
+      },
+      {
+        path: 'agents',
+        loadComponent: () =>
+          import('./features/agents/agent-list-page.component').then(
+            module => module.AgentListPageComponent,
+          ),
+      },
+      {
+        path: 'missions',
+        loadComponent: () =>
+          import('./features/missions/mission-list-page.component').then(
+            module => module.MissionListPageComponent,
+          ),
+      },
+      {
+        path: 'approvals',
+        loadComponent: () =>
+          import('./features/approvals/approval-list-page.component').then(
+            module => module.ApprovalListPageComponent,
+          ),
+      },
+    ],
   },
   {
     path: '**',
+    canActivate: [authGuard, previewGuard],
     loadComponent: () =>
       import('./features/not-found/not-found-page.component').then(
         module => module.NotFoundPageComponent,

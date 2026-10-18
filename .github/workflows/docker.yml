@@ -13,14 +13,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
       - name: Create ephemeral local database secret
         run: |
           python3 - <<'PY'
           import secrets
+          import os
           from pathlib import Path
+          password = secrets.token_urlsafe(24)
+          print('::add-mask::' + password)
           with Path('.env').open('w') as config:
               print('POSTGRES_PASSWORD=' + secrets.token_hex(32), file=config)
               print('APP_PORT=18080', file=config)
+              print('AGENTOS_BOOTSTRAP_ENABLED=true', file=config)
+              print('AGENTOS_BOOTSTRAP_EMAIL=qc@example.test', file=config)
+              print('AGENTOS_BOOTSTRAP_DISPLAY_NAME=QC Operator', file=config)
+              print('AGENTOS_BOOTSTRAP_PASSWORD=' + password, file=config)
+          with Path(os.environ['GITHUB_ENV']).open('a') as env:
+              print('E2E_EMAIL=qc@example.test', file=env)
+              print('E2E_PASSWORD=' + password, file=env)
           PY
       - name: Validate Compose
         run: docker compose config --quiet
@@ -30,9 +45,23 @@ jobs:
         run: |
           curl --fail --silent http://127.0.0.1:18080/healthz
           curl --fail --silent http://127.0.0.1:18080/missions | grep -q '<app-root'
-          curl --fail --silent http://127.0.0.1:18080/api/v1/organizations | python3 -c 'import json,sys; r=json.load(sys.stdin); assert isinstance(r["data"], list)'
+          status=$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:18080/api/v1/organizations)
+          test "$status" = 401
           status=$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:18080/actuator/health)
           test "$status" = 404
+      - name: Verify migrated identity and session schema
+        run: |
+          docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT version, success FROM flyway_schema_history ORDER BY installed_rank;"'
+      - name: Install browser test dependencies
+        working-directory: frontend
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Real backend browser login across three viewports
+        working-directory: frontend
+        env:
+          E2E_BASE_URL: http://127.0.0.1:18080
+        run: npm run test:e2e
       - name: Container status
         if: always()
         run: docker compose ps --all

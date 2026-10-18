@@ -9,11 +9,21 @@ spring:
     hibernate:
       ddl-auto: validate
     open-in-view: false
+  session:
+    timeout: ${AGENTOS_SESSION_TIMEOUT:30m}
+    jdbc:
+      initialize-schema: never
   flyway:
     enabled: true
 
 server:
   port: 8080
+  servlet:
+    session:
+      cookie:
+        http-only: true
+        same-site: lax
+        secure: ${AGENTOS_SESSION_COOKIE_SECURE:true}
 
 agentos:
   orchestration:

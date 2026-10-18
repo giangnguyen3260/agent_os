@@ -28,6 +28,6 @@ public class ObservabilityController {
   @GetMapping("/missions/{missionId}/trace")
   public ApiResponse<List<AuditEventResponse>> missionTrace(
       @PathVariable UUID organizationId, @PathVariable UUID missionId) {
-    return ApiResponse.ok(traceService.missionTrace(missionId));
+    return ApiResponse.ok(traceService.missionTrace(organizationId, missionId));
   }
 }

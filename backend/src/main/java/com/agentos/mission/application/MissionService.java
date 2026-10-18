@@ -20,14 +20,20 @@ public class MissionService {
   private final MissionJpaRepository missions;
   private final OrganizationJpaRepository organizations;
   private final AuditService auditService;
+  private final com.agentos.organization.infrastructure.TeamJpaRepository teams;
+  private final com.agentos.agent.infrastructure.AgentJpaRepository agents;
 
   public MissionService(
       MissionJpaRepository missions,
       OrganizationJpaRepository organizations,
-      AuditService auditService) {
+      AuditService auditService,
+      com.agentos.organization.infrastructure.TeamJpaRepository teams,
+      com.agentos.agent.infrastructure.AgentJpaRepository agents) {
     this.missions = missions;
     this.organizations = organizations;
     this.auditService = auditService;
+    this.teams = teams;
+    this.agents = agents;
   }
 
   @Transactional
@@ -35,6 +41,17 @@ public class MissionService {
     if (!organizations.existsById(organizationId)) {
       throw new EntityNotFoundException("Organization not found");
     }
+    if (request.teamId() != null
+        && teams
+            .findById(request.teamId())
+            .filter(team -> team.getOrganizationId().equals(organizationId))
+            .isEmpty()) throw new IllegalArgumentException("Team does not belong to organization");
+    if (request.managerAgentId() != null
+        && agents
+            .findById(request.managerAgentId())
+            .filter(agent -> agent.getOrganizationId().equals(organizationId))
+            .isEmpty())
+      throw new IllegalArgumentException("Manager does not belong to organization");
     var entity =
         new MissionJpaEntity(
             UUID.randomUUID(),
@@ -71,13 +88,8 @@ public class MissionService {
 
   @Transactional
   public MissionResponse requestPlanning(UUID organizationId, UUID missionId) {
-    var mission =
-        missions
-            .findById(missionId)
-            .filter(item -> item.getOrganizationId().equals(organizationId))
-            .orElseThrow(() -> new EntityNotFoundException("Mission not found"));
-    auditService.record(organizationId, missionId, AuditEventType.MISSION_PLANNING_REQUESTED, "{}");
-    return toResponse(mission);
+    throw new org.springframework.web.server.ResponseStatusException(
+        org.springframework.http.HttpStatus.NOT_IMPLEMENTED, "Planning is not implemented");
   }
 
   private MissionResponse toResponse(MissionJpaEntity entity) {

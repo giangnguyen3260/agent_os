@@ -1,6 +1,6 @@
 # AgentOS
 
-Java21 / Spring Boot backend, Angular21 frontend and PostgreSQL. This is a local-development foundation, not a production release: authentication/authorization and runtime workflows are still incomplete. See [implementation status](IMPLEMENTATION_STATUS.md) and [QC evidence](docs/qc/FOUNDATION_QC_REPORT.md).
+Java21 / Spring Boot backend, Angular21 frontend and PostgreSQL. This is a local-development foundation, not a production release: the login feature adds persisted human accounts and server sessions, while full roles, recovery and runtime workflows remain incomplete. See [implementation status](IMPLEMENTATION_STATUS.md) and [QC evidence](docs/qc/FOUNDATION_QC_REPORT.md).
 
 ## Build and run everything with Docker
 
@@ -15,7 +15,7 @@ docker compose config --quiet
 docker compose up --build --detach --wait --wait-timeout 180
 ```
 
-Open http://localhost:8080. Override APP_PORT in .env if busy. The browser reaches `/api/` through Nginx; PostgreSQL, Redis and the backend have no published host ports in this stack. The default frontend binding is loopback-only because the backend currently lacks completed authentication. Redis is included for later runtime/session work and is not yet wired into Spring sessions.
+Open http://localhost:8080. Override APP_PORT in .env if busy. The browser reaches `/api/` through Nginx; PostgreSQL, Redis and the backend have no published host ports in this stack. The default frontend binding is loopback-only. Spring sessions are stored in PostgreSQL; Redis is reserved for later runtime work. See [login setup](docs/engineering/AUTH_RUNTIME.md) for opt-in first-account provisioning. No default account or demo workspace is created.
 
 - `backend/Dockerfile`: Maven + JDK21 build; runs Spotless, unit tests and package through `mvn verify`; non-root JRE runtime.
 - `frontend/Dockerfile`: Node24 + `npm ci`, lint/format/tooling test/build; non-root Nginx runtime with SPA fallback and same-origin API proxy.

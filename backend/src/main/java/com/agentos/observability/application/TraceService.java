@@ -12,9 +12,13 @@ import org.springframework.transaction.annotation.Transactional;
 public class TraceService {
 
   private final AuditEventJpaRepository auditEvents;
+  private final com.agentos.mission.infrastructure.MissionJpaRepository missions;
 
-  public TraceService(AuditEventJpaRepository auditEvents) {
+  public TraceService(
+      AuditEventJpaRepository auditEvents,
+      com.agentos.mission.infrastructure.MissionJpaRepository missions) {
     this.auditEvents = auditEvents;
+    this.missions = missions;
   }
 
   @Transactional(readOnly = true)
@@ -25,8 +29,13 @@ public class TraceService {
   }
 
   @Transactional(readOnly = true)
-  public List<AuditEventResponse> missionTrace(UUID missionId) {
+  public List<AuditEventResponse> missionTrace(UUID organizationId, UUID missionId) {
+    if (missions
+        .findById(missionId)
+        .filter(mission -> mission.getOrganizationId().equals(organizationId))
+        .isEmpty()) throw new jakarta.persistence.EntityNotFoundException("Mission not found");
     return auditEvents.findByMissionIdOrderByCreatedAtAsc(missionId).stream()
+        .filter(event -> event.getOrganizationId().equals(organizationId))
         .map(this::toResponse)
         .toList();
   }
