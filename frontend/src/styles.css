@@ -161,3 +161,145 @@ dialog :focus-visible {
     --content-padding: 16px;
   }
 }
+
+/* Authentication and the minimal live workspace hand-off. */
+.auth-wrapper {
+  width: min(560px, calc(100% - 32px));
+  margin: 40px auto;
+}
+.auth-brand {
+  margin-bottom: 24px;
+}
+.auth-brand div {
+  color: var(--primary);
+  font-size: 25px;
+  font-weight: 600;
+  line-height: 36px;
+}
+.auth-brand p {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 22px;
+  margin: 4px 0 0;
+}
+.auth-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.auth-card h1 {
+  font-size: 28px;
+  line-height: 36px;
+  font-weight: 600;
+  margin: 0;
+}
+.auth-subtitle {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 22px;
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+}
+.auth-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.auth-field label {
+  font-size: 14px;
+  line-height: 22px;
+}
+.auth-field input {
+  height: 46px;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--surface);
+}
+.auth-field input::placeholder {
+  color: var(--muted);
+}
+.auth-field input[aria-invalid='true'] {
+  border-color: #a13d35;
+}
+.auth-action.button {
+  min-height: 48px;
+  font-size: 14px;
+  font-weight: 400;
+}
+.auth-action.button.secondary {
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.auth-action:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+.auth-small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 22px;
+  margin: 0;
+}
+.auth-error {
+  background: #fcece9;
+  color: #a13d35;
+  padding: 12px;
+  border-radius: 8px;
+  margin: 0;
+  font-size: 14px;
+  line-height: 22px;
+}
+.field-error {
+  margin: 0;
+  color: #a13d35;
+  font-size: 12px;
+  line-height: 22px;
+}
+.auth-dialog {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 24px;
+  width: min(480px, calc(100% - 32px));
+}
+.auth-dialog::backdrop {
+  background: var(--overlay);
+}
+.auth-dialog h2 {
+  font-size: 24px;
+  margin: 0;
+}
+.auth-dialog p {
+  font-size: 14px;
+  line-height: 22px;
+}
+.workspace-list {
+  margin: 0;
+  padding-left: 20px;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 599px) {
+  .auth-wrapper {
+    margin-top: 24px;
+  }
+  .auth-card {
+    padding: 16px;
+  }
+  .auth-card h1 {
+    font-size: 24px;
+  }
+}
+
+.auth-login-heading .auth-subtitle {
+  margin-top: 20px;
+}

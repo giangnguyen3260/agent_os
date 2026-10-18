@@ -1,10 +1,16 @@
 spring:
   datasource:
-    url: jdbc:h2:mem:agentos;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE
+    url: jdbc:h2:mem:agentos;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;INIT=CREATE DOMAIN IF NOT EXISTS TIMESTAMPTZ AS TIMESTAMP WITH TIME ZONE
     username: sa
     password:
   flyway:
-    enabled: false
+    enabled: true
   jpa:
     hibernate:
-      ddl-auto: create-drop
+      ddl-auto: validate
+
+server:
+  servlet:
+    session:
+      cookie:
+        secure: false
