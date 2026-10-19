@@ -42,3 +42,21 @@ Main owns real Docker/PostgreSQL E2E and CI evidence; FE owns auth-generation re
 ## Auth generation regression evidence
 
 Main ran `cd frontend && node scripts/test-auth-generation.cjs`: both delayed session success and delayed 401 cases passed after logout/login as B. The harness transpiles the actual service and replaces Angular DI/HTTP adapters to control completion order; this verifies service state logic, not browser rendering or Angular transport integration. This command is now part of the quality workflow. CI verification remains pending.
+
+## Independent follow-up and local visual check
+
+QC independently reran both auth-generation regression cases successfully and found no remaining actionable blocker for the reviewed development scope. Angular adapter integration and full visual/accessibility acceptance remain outside that harness.
+
+Main rendered the production SPA in Chromium 153 using explicit HTTP fixtures (not the real backend) at 1440, 768 and 390 px for membership and empty states. All six cases had no horizontal overflow, including a long Vietnamese workspace name. Mobile populated/empty and desktop populated screenshots were visually inspected against the Figma layout. These checks do not establish PostgreSQL behavior or full accessibility acceptance.
+
+Initial CI at f535739 stopped on Google Java formatting before tests. Both flagged files were formatted with the repository's Google Java formatter; the corrected source is 4f3e795e51aef43e389b8bbe61f56ae9e177987e. Final runtime disposition awaits that revision's jobs.
+
+## Final executed development gate
+
+**Ready for development use for this bounded workspace flow.** Verified application revision: `4f3e795e51aef43e389b8bbe61f56ae9e177987e`. This final evidence supersedes the earlier pending execution states above. PR remains draft/unmerged; full dashboard, administrative provisioning UI, complete team roles and production acceptance remain unfinished.
+
+- Quality run [39185058221](https://github.com/giangnguyen3260/agent_os/actions/runs/39185058221), job 117845627729: completed success. 33 backend tests, zero failures/errors/skips (12 authentication, 9 recovery, 4 bootstrap, 5 agent, 3 organization); Maven BUILD SUCCESS at 2026-10-19T01:23:36Z. Frontend lint/format/tooling/build and both deterministic auth-generation cases passed.
+- Docker run [39185058204](https://github.com/giangnguyen3260/agent_os/actions/runs/39185058204), job 117845627779: completed success. Built healthy stack with real PostgreSQL and migrations; 33 browser instances passed at 01:26:21Z (11 cases × 3 viewports, including 9 workspace instances). Membership removal followed by same-URL reload passed on desktop, tablet and mobile. Login/recovery regressions and real Mailpit SMTP recovery passed.
+- Existing real PostgreSQL concurrent-login/reset barrier passed at 01:26:23Z. Exact session survived backend restart and logout replay was rejected at 01:26:52Z.
+
+Main inspected completed job logs directly. These results cover the tested application revision; a later documentation-only commit does not change the application and may have separate CI status. Sonar remains paused. Optional wider failure-injection, complete accessibility and multi-replica production checks remain outside this development gate.

@@ -10,4 +10,4 @@ No memberships: explain the state, allow a fresh permission check and real logou
 
 CI provisions disposable test-only accounts and organizations through PostgreSQL; this is not production seed data. Production membership provisioning remains an operator responsibility pending the administration flow. Existing login/recovery suites remain required, alongside workspace membership isolation, reload, empty-state and viewport coverage. Sonar remains paused per user decision.
 
-Validation status: implementation in progress; no CI pass is claimed until job results are inspected.
+Validation: application revision 4f3e795 passed quality and Docker jobs with 33 backend tests and 33 browser instances across three viewports. Independent QC found no remaining development-scope blocker. See docs/qc/AUTH_WORKSPACE_QC_REPORT.md for exact runs and limits. The context page is a bounded hand-off, not the completed dashboard.
