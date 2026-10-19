@@ -2,14 +2,14 @@
 
 ## Current branch outcome
 
-On `feature/dashboard-live`, the organization overview and task drilldown are being implemented from Forest S01 on top of unmerged workspace PR4. V004 adds real task persistence with tenant/team/mission integrity; Running/Pending/Review derive from unique task rows. Capacity and performance remain unavailable because their runtime sources do not exist. Dashboard validation is pending until the exact revision's CI logs are reviewed; previous auth/workspace passes are not dashboard evidence.
+On `feature/dashboard-live`, the organization overview and task drilldown are implemented as a bounded read flow from Forest S01 on top of unmerged workspace PR4. V004 adds real task persistence with tenant/team/mission integrity; Running/Pending/Review derive from unique task rows. Capacity and performance remain unavailable because their runtime sources do not exist. Application revision `3c5abe22` is verified by recovered CI execution logs:39 backend tests and54 browser instances passed, including corrected filter state/team assertions at all three widths. See [dashboard QC](docs/qc/DASHBOARD_QC_REPORT.md) for exact runs and scope.
 
 Prior workspace application revision `4f3e795` passed 33 backend tests and 33 browser instances, with real PostgreSQL/Mailpit, reset race and restart/session/logout probes. Login/recovery/workspace changes remain stacked, draft and unmerged; no deployment to the user's Mac is claimed. Sonar remains temporarily paused, not passed.
 
 | Scope | Actual state |
 |---|---|
 | Human login/session, recovery, workspace selection | Development gates verified; see the respective reports under docs/qc |
-| Organization overview and pending-task read drilldown | Implementation and QC in progress on this branch; actual PostgreSQL rows, no sample business data |
+| Organization overview and pending-task read drilldown | Bounded development read gate verified; actual PostgreSQL rows, no sample business data |
 | Capacity/performance/cost | Explicitly unavailable; no allocator, execution-run history or billing ledger implemented |
 | Task mutation/execution, team/agent creation screens, approvals and administration | Full designed flows incomplete; older static previews remain blocked |
 | Production security/scale | Complete roles/grants, load/failover, full visual/accessibility and release hardening not accepted |

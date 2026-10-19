@@ -32,3 +32,7 @@ Backend integration tests: mixed-task counts/deduplication, empty state, team he
 ## Persistence and rollout
 
 Tasks have required organization, team and mission; composite foreign keys require all three references to agree, including the task team matching its mission team. Status domain: DRAFT, READY, RUNNING, WAITING, BLOCKED, IN_REVIEW, COMPLETED, FAILED, CANCELLED. V004 also constrains existing mission organization/team consistency. Legacy inconsistent data causes migration to fail closed for operator review; never silently repair tenant ownership or delete data. Existing valid rows and unassigned missions remain supported; tasks require a team-assigned mission.
+
+## Delivery evidence
+
+Application revision `3c5abe22` passes the bounded development gate:39 backend tests and54 browser instances, including real PostgreSQL task transition/refresh, pending details, current filter values and membership revocation. See docs/qc/DASHBOARD_QC_REPORT.md for revision-attributed logs, metadata/log retrieval caveat and remaining scope. PR5 is draft/unmerged. Creation/admin/execution/capacity/performance remain unfinished as defined above.

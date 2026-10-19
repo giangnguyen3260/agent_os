@@ -1,70 +1,38 @@
-# Dashboard independent BA/QC report
+# Dashboard independent QC outcome
 
-Review: 2026-10-19, branch `feature/dashboard-live`, baseline HEAD `42ae8120ee361ccc34409e55e1bbddaf3f34b3c4` plus shared uncommitted changes. QC edited only this report. This final source checkpoint supersedes earlier interim findings.
+Date: 2026-10-19. **Bounded development gate verified** for organization overview and task read drilldown at application head `3c5abe22bad9bad8f2f4f0df94b2793f83ce86e3`, based on `42ae8120ee361ccc34409e55e1bbddaf3f34b3c4`. CI checkout logs identify merge `cfce147` of that exact head/base. Independent QC and coordinator both inspected the execution logs. PR5 remains draft/unmerged; this is not production or full S01 feature acceptance.
 
-## Disposition
+## Executed evidence
 
-**No blocking source defect identified for the bounded dashboard development flow. Runtime gate remains pending actual CI results.** Contract DQC-01–04 are resolved; missing route/template/import checkpoint findings DQC-05–06 are closed. Earlier missing-font build failure is resolved by the dependency installation and independently successful build. No CI, backend test or browser pass is claimed.
-
-Scope is organization overview plus inline task drilldown, with explicit refresh. Execution engine, task mutations, creation/admin flows, allocator and billing remain out of scope. Optional wider testing is not a blocker for this bounded development gate.
-
-## Source findings
-
-| Area | Review conclusion |
+| Evidence | Actual result |
 | --- | --- |
-| Counts and deduplication | RUNNING, WAITING/BLOCKED and IN_REVIEW are counted from unique persisted task rows. Summary tasks have no multiplicative joins; team agent/task aggregates are calculated independently before joining teams. No approval summation or mission substitution. Archived teams/tasks remain included. |
-| SQL and consistency | Summary and task reads use repeatable-read transactions. Five summary statements, two task statements or three with team filter are consistent with source and instrumentation assertions. All data queries filter organization; task team-name join also matches organization. Values are bound parameters; state predicates come from a fixed switch. Ordering and bounds match clarified contract. Separate offset page requests can shift as documented. |
-| Schema and rollout | V004 composite organization/team/mission foreign keys enforce same organization and team, with required task mission/team and restricted status domain. WAITING/BLOCKED require nonblank reason/resolver and timestamp; other states require null pending metadata. Existing mission/team constraint fails closed on inconsistent legacy rows; rollout document provides read-only precheck and operator handling. Supporting indexes exist. PostgreSQL migration execution remains pending. |
-| Security | Existing organization URL membership authorization applies to both endpoints on each request. Foreign/missing team filters share scoped not-found logic. Resolver is operational display text, not an identity lookup. No source tenant bypass found. Membership revocation is enforced on subsequent requests, not promised as push invalidation. |
-| Component request state | Overview load cancels prior requests and clears prior data/context; version and destruction guards reject delayed context completion. Task requests are canceled and generation-guarded on filter/route/overview changes and destruction. 401/403 clear protected state; task 404 offers recovery. Failed task loads do not retain previous task rows. No blocking stale tenant/task response path identified in inspected source; deterministic dashboard race execution remains a follow-up, not a claimed test result. |
-| Flow and UI | Protected workspace/:id/dashboard route and context entry are present; original context heading retained. Team Open uses same task panel. Team/task pages have separate state. Unsupported navigation/creation visibly unavailable; workspace switch/logout present. Capacity/performance explicitly unavailable. Responsive shell and pending metadata rendering present. No fake capacity, cost or performance found. |
+| [Quality run39277933530](https://github.com/giangnguyen3260/agent_os/actions/runs/39277933530), job118146771121 | 39 backend tests, zero failures/errors/skips at2026-10-19T15:27:10Z; Maven BUILD SUCCESS15:27:12Z. Six dashboard, four bootstrap, twelve auth, nine recovery, five agent and three organization tests. Frontend lint/format/tooling/build and both delayed-auth regression cases passed. |
+| [Docker run39277933393](https://github.com/giangnguyen3260/agent_os/actions/runs/39277933393), job118146771007 | Native PostgreSQL migration and fixtures, healthy application stack and 54 browser instances passed (53.6s), finished15:30:01Z. Seven dashboard cases at1440/768/390 =21 instances; existing login/recovery/workspace regressions =33 instances. |
+| Filter regression | Corrected real-backend case passes at all three widths: Pending select value agrees with pending rows; changing to Running returns the running task; opening a team's Pending action selects that team and Pending. |
+| Persistence and auth probes | PostgreSQL account-first concurrent login/reset barrier passed15:30:03Z. Exact session survived backend restart and logout rejected cookie replay15:30:37Z. Logs reach final cleanup15:30:46Z. |
+| Local rendered inspection | Production SPA in Chromium153 with explicit HTTP fixtures: nine populated/empty/error states and three pending panels across1440/768/390; compact menu Escape at768/390; no horizontal overflow. Selected state/team values, changing state and resetting to all teams were checked after the fix. Desktop/mobile screenshots visually compared to Figma. These are layout/interaction fixtures, not backend evidence. |
 
-DQC-01 now specifies maximum page 107374182, signed-int parsing and beyond-last empty results. DQC-02 specifies resolver display string and metadata nullability. DQC-03 specifies task relationships/status and legacy rollout behavior. DQC-04 specifies approximate transaction timestamp, ascending task order and independent live offset paging. These contract issues are closed in source.
+GitHub status metadata temporarily stayed queued/in_progress with empty steps and Docker log retrieval temporarily returned BlobNotFound, even after execution had finished. The outcome above is based on recovered, revision-attributed execution logs, including all test/probe results and final cleanup; no unobserved job conclusion is invented. A later documentation-only commit can have separate CI status.
 
-## Independent execution
+## Review and coverage
 
-Frontend files were hashed at two source inspections and again after checks; dashboard TS/HTML/CSS/service, routes and context entry hashes were unchanged throughout validation. Commands below ran against that stable source checkpoint without application edits.
+- Running counts unique RUNNING tasks; Pending counts unique WAITING/BLOCKED tasks; Review counts IN_REVIEW. Mission/approval counts never substitute. Separate team-agent and task aggregates prevent multiplication.
+- Tests cover health precedence, empty/unavailable measurements, stable pagination, input boundaries, tenant/team filtering, missing membership, pending metadata and composite task/team/mission integrity. Backend integration uses H2 PostgreSQL mode; native PostgreSQL migration and application reads are exercised by Docker/browser tests. Negative constraint assertions are not claimed as native-PostgreSQL-specific tests.
+- Query instrumentation verifies constant budgets before/after data growth: five summary statements; two task statements, or three with team filter. Repeatable-read transaction isolation is checked. This does not establish concurrent-writer stress behavior or production scale.
+- Read endpoints retain existing organization membership authorization; all data queries/joins are organization scoped. Missing/foreign team filters share scoped404 behavior. Resolver is operational responsibility display text, not an identity lookup.
+- Overview/task request cancellation and version guards clear stale tenant data and reject obsolete component responses.401/403 clear protected content. Forced delayed dashboard-response races remain follow-up coverage, not a claimed runtime pass.
+- Browser cases verify real task counts and pending explanations, persisted state transition + refresh, foreign organization/team denial, empty organization, membership revocation + reload, transport retry, and compact navigation/team filter. Fixtures are disposable CI data and restored after mutations; no production examples are seeded.
 
-| Command | Actual result |
-| --- | --- |
-| `python3 scripts/check-java-imports.py` | PASS after backend completion; wildcard import finding closed. |
-| `cd frontend && npm run lint` | PASS. |
-| `cd frontend && npm run format:check` | PASS; all matched source files formatted. |
-| `cd frontend && npm run test:tooling` | PASS; editor dependency create/read/cleanup and traversal rejection checks. |
-| `cd frontend && node scripts/test-auth-generation.cjs` | PASS; both delayed session success and delayed unauthorized cases. Service harness, not dashboard browser race coverage. |
-| `cd frontend && npm run build` | PASS, Angular production bundle including dashboard templates/styles; completed 2026-10-19T15:12:35.877Z. |
-| `node --check frontend/tests/e2e/dashboard.spec.mjs` | PASS; syntax only. |
+## Defects fixed before this gate
 
-Backend tests were not executed by QC: local runtime lacks Maven/Docker and has Java 17 versus required 21. Main additionally reports Maven DNS failure; QC has not independently reproduced that failure. Java formatting is reported passed by main; QC independently executed only the import check. Sonar remains paused.
+Initial attempt `dd8ecb1` failed test compilation: a private Spring Security helper return type and an organization variable shadowing package references. Public RequestPostProcessor and explicit imports corrected these.
 
-## Pending runtime evidence and concrete cases
+Revision `156a158` passed the earlier suite but final visual inspection found Pending data alongside a select showing Running. Direct select.value binding ran before dynamic options existed. Angular FormsModule/NgModel now owns both selects; explicit accessible labels and strengthened selected-value/data assertions close the regression. The earlier passing suite alone did not close this defect.
 
-Six dashboard backend integration methods are present: aggregate counts/health/live reads, input/access/empty behavior, fresh organization, stable pagination/team filters, query budget, and schema rejection. The query-budget harness instruments physical statements over a real application connection inside a repeatable-read transaction; assertions are present but not yet executed. `application-test.yml` uses H2 PostgreSQL mode, so this suite alone cannot establish native PostgreSQL behavior.
+## Scope and remaining work
 
-Seven browser cases are present, configured for 1440/768/390: real snapshot/pending explanation, DB transition refresh, foreign org/team isolation, empty data, membership revocation on reload, transport retry and compact navigation/team filter. Disposable SQL fixtures are wired into Docker CI against real PostgreSQL; mutation cases restore fixtures in finally and browser configuration is serial. Test presence is not a passing result.
+Verified: dashboard task persistence/read model, current task metrics, team health explanations, bounded team/task pages and pending metadata drilldown. No blocking defect remains in that bounded development scope.
 
-Before development gate approval, collect actual quality and Docker results for the final published application revision, preserving existing login/recovery/workspace regressions. Confirm real PostgreSQL migration/fixture success and all seven dashboard cases across three configured viewports. Investigate actual failures; do not require optional breadth merely to close this bounded gate.
+Not implemented here: task mutation/execution, allocator/capacity measurement, performance/billing ledger, team creation wizard, complete administrative roles/grants or other business modules. Capacity and performance remain visibly unavailable. Older static business previews stay blocked. Production load/failover, exhaustive accessibility/visual acceptance and broader failure injection are not accepted. Sonar remains paused by user instruction, not passed.
 
-Useful follow-up cases if runtime reveals a concern: hold Alpha overview/task responses while switching organization/filter and release them late; verify no stale data/error can replace the new selection. Concurrent-write snapshot probing, broader failure injection and exhaustive accessibility are not presently source blockers. Record any final changes after this checkpoint and recheck affected areas before claiming acceptance.
-
-## PR 5 source recommendation
-
-Main reports published revision `dd8ecb1156b3498397126b572aad3358900ca5b9`, no subsequent application changes, and CI started. **Recommend proceeding through the bounded development CI gate; no source blocker identified.** This is not runtime approval or a merge/production recommendation.
-
-QC could not independently bind the reviewed working tree to that SHA: the shared checkout remains at `42ae812` with implementation changes uncommitted, and the published commit object is unavailable locally (`git show`: bad object). The source recommendation therefore covers the inspected working tree; attribution to the published SHA relies on main's statement.
-
-Main expects 39 backend tests and 54 browser instances. These are expected counts, not results. Require actual completed quality/Docker logs for the published revision before recording a passing development gate. Mocked-HTTP static visual checks can establish layout observations only; they do not replace real PostgreSQL/browser evidence.
-
-## Corrected revision and executed quality evidence
-
-Application source is now `156a158212b0f3f07cfcd1b09df58091b6229f67`, available as the clean local HEAD and published PR5 head. This supersedes the earlier attribution limitation. The first published attempt dd8ecb1 failed test compilation (private Spring Security helper type and a variable/package-name collision); both were corrected before this revision.
-
-Quality run [39276615879](https://github.com/giangnguyen3260/agent_os/actions/runs/39276615879), job118142443348, completed SUCCESS. Main and independent QC inspected logs:39 backend tests, zero failures/errors/skips; six dashboard methods passed at2026-10-19T15:17:45Z and aggregate result at15:18:01Z. Maven BUILD SUCCESS at15:18:04Z. Frontend lint/format/tooling/build and both auth-generation cases passed. Dashboard tests run H2 PostgreSQL mode; native PostgreSQL evidence still depends on Docker.
-
-Main additionally rendered the production SPA in Chromium153 with explicit HTTP fixtures, separately from real-backend tests:populated/empty/error at1440/768/390 (nine states), pending detail at each width (three states), compact menu Escape at768/390. No horizontal overflow. Desktop and mobile populated/pending screenshots were inspected against Figma; status-action spacing and user-facing explanations were refined and rechecked. Fixtures prove layout only, not persistence or backend correctness. Full visual/accessibility and forced stale-response testing remain outside the bounded development gate.
-
-Docker/native PostgreSQL/browser outcome remains pending at this checkpoint. Sonar remains paused.
-
-## Filter synchronization defect and correction
-
-Final rendered inspection found a blocking mismatch at revision156a158: the pending task list displayed WAITING/BLOCKED while its newly created native select showed Running. Binding select.value before dynamic options existed did not reliably select the requested state. Team selection had the same timing risk. The component now uses Angular FormsModule/NgModel for both selects and explicit accessible labels. The first real-backend dashboard E2E now asserts Pending's selected value, changes to Running and verifies returned task titles, then opens a team's Pending action and asserts both team and state values. Earlier successful CI does not close this newly discovered defect; corrected-revision runtime evidence is required below.
+V004 adds a composite mission/team constraint to existing rows; inconsistent legacy tenant data stops migration for operator review. Read backend/DASHBOARD_MIGRATION.md before rollout. No silent tenant reassignment or deletion is performed.
