@@ -1,6 +1,6 @@
 # Login runtime and local setup
 
-This feature branch implements human-account login; it does not complete the full designed application. Password recovery is not implemented and explicitly reports that limitation. Workspace display is an authenticated membership hand-off, not completed workspace management. Existing static business previews are not reachable from the authenticated application until their real implementations are delivered.
+This feature branch implements human-account login and password recovery through the local SMTP stack; it does not complete the full designed application. See `AUTH_RECOVERY.md` for the reset flow and Mailpit inbox. Workspace display is an authenticated membership hand-off, not completed workspace management. Existing static business previews are not reachable from the authenticated application until their real implementations are delivered.
 
 ## Initial account on a local Mac
 

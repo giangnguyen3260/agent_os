@@ -31,3 +31,9 @@ Follow `AUTH_RUNTIME.md` for initial human provisioning. Root Compose includes M
 Backend tests must cover generic responses, CSRF, disabled/malformed/expired/replayed tokens, password byte/Unicode boundaries, concurrent token consumption, stale credentials, invalidation, SMTP failure/retry and configured URL validation. H2 passes do not establish PostgreSQL lock semantics or timing indistinguishability. Docker CI provides actual PostgreSQL+Mailpit and browser integration at1440/768/390, with isolated per-viewport accounts so reset does not mutate the base login fixture.
 
 QC records execution on exact commits. Full UI visual/accessibility, failure modes, statistical timing and multi-instance/load results remain distinct from a compiler or happy-path pass. Sonar is temporarily paused by user instruction.
+
+## Verified development gate — 2026-10-19
+
+Application and hardened probe source `9a4159c5682b0c990471360c0b2d5c1a3b050bc4` passed [quality run39183379255](https://github.com/giangnguyen3260/agent_os/actions/runs/39183379255) and [Docker run39183379306](https://github.com/giangnguyen3260/agent_os/actions/runs/39183379306):29 backend tests,24 browser instances across three viewports, real SMTP via Mailpit, PostgreSQL account-first lock barrier with overlapping login/reset and stale-session denial, and session persistence/replay denial across a backend restart. This is development-use readiness for the recovery flow, not full-application or production-security acceptance.
+
+Replacement tokens supersede older tokens only after SMTP acknowledges the new message. A failed replacement attempt removes only its own digest, preserving the previously delivered link. The mocked-failure regression verifies this behavior; real transport outage/crash/ambiguous-ack guarantees remain separate operational work. The final evidence/documentation publication does not change the tested application or probe source.

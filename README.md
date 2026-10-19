@@ -1,6 +1,6 @@
 # AgentOS
 
-Java21 / Spring Boot backend, Angular21 frontend and PostgreSQL. This is a local-development foundation, not a production release: the login feature adds persisted human accounts and server sessions, while full roles, recovery and runtime workflows remain incomplete. See [implementation status](IMPLEMENTATION_STATUS.md) and [QC evidence](docs/qc/FOUNDATION_QC_REPORT.md).
+Java21 / Spring Boot backend, Angular21 frontend and PostgreSQL. This is a local-development foundation, not a production release: persisted login/session and password recovery through local SMTP are implemented; full roles, workspace management and runtime workflows remain incomplete. See [recovery setup and verification](docs/engineering/AUTH_RECOVERY.md) and [independent recovery QC](docs/qc/AUTH_RECOVERY_QC_REPORT.md).
 
 ## Build and run everything with Docker
 
