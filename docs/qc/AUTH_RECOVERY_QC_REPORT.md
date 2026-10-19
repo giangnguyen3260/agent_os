@@ -253,3 +253,14 @@ Latest-head [quality run 39183379255](https://github.com/giangnguyen3260/agent_o
 **Bounded disposition:** application code has independently successful first-run backend/browser/local-SMTP/restart evidence. Final development-readiness signoff at `9a4159c5682b0c990471360c0b2d5c1a3b050bc4` remains conditional only on the agreed latest-head Docker stages completing successfully, particularly the hardened PG probe. Do not reopen the functional gate for production timing or multi-replica scope. R4's identified source inversion is fixed with passing H2 and original PG regression evidence; final hardened proof pending. R5 is fixed with passing mocked-failure regression; real happy-path SMTP now passes separately. Preserve all previously declared production limitations. Full application remains incomplete; parent PR #2 remains unmerged.
 
 Latest quality log detail independently verified: checkout `f4bb0fe` merges full head `9a4159c5682b0c990471360c0b2d5c1a3b050bc4` into the stated parent. RecoveryIntegrationTest: nine passes; total 29 tests with zero failures/errors/skips; Maven BUILD SUCCESS finished `2026-10-19T01:01:58Z`. Therefore the backend-test condition is now verified on the latest PR merge as well, not only transferred by application-code equivalence.
+
+## Final development disposition — 2026-10-19
+
+The completed QC review and coordinator log retrieval supersede the preceding in-progress snapshot. **Recovery is ready for development use at source `9a4159c5682b0c990471360c0b2d5c1a3b050bc4`.**
+
+- Quality run `39183379255`, job `117840666063`: completed/success;29 tests, zero failures/errors/skips, Maven BUILD SUCCESS at01:01:58Z.
+- Docker run `39183379306`, job `117840666525`: completed/success;24 browser instances passed at01:04:35Z, including real Mailpit delivery and reset behavior across1440/768/390.
+- Hardened PostgreSQL probe: PASS at01:04:38Z, identifying the barrier/wait chain, attempt-row NOWAIT assertion, overlapping login/reset completion and old-session denial.
+- Parent restart probe: PASS at01:05:07Z; the exact pre-restart session survives backend restart and logout rejects replay.
+
+QC independently retrieved the completed results and returned the development-ready verdict; the coordinator also fetched the final logs. R4/R5 are closed within this bounded gate. Final evidence/documentation commits do not change application or probe source. This is not production-security acceptance: timing privacy, multi-replica stress/failover, complete visual/accessibility review and broader real SMTP failure/crash/ambiguous-ack guarantees remain follow-up. Full application remains incomplete; PR2/PR3 remain unmerged. Sonar remains paused.
