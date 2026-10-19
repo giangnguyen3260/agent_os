@@ -1,5 +1,6 @@
 package com.agentos.common.api;
 
+import com.agentos.organization.application.NewTeamDraftService.Conflict;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -9,6 +10,12 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+  @ExceptionHandler(Conflict.class)
+  public ResponseEntity<ApiErrorResponse> handleTeamConflict(Conflict ex) {
+    return ResponseEntity.status(HttpStatus.CONFLICT)
+        .body(ApiErrorResponse.of(ex.code(), ex.getMessage()));
+  }
 
   @ExceptionHandler(EntityNotFoundException.class)
   public ResponseEntity<ApiErrorResponse> handleNotFound(EntityNotFoundException ex) {

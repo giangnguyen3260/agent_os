@@ -54,8 +54,9 @@
       <button
         class="button"
         type="button"
-        disabled
-        aria-describedby="unfinished"
+        [disabled]="context()?.role !== 'ADMIN' || loading() || accessLost()"
+        aria-describedby="create-team-access"
+        (click)="createTeam()"
       >
         Create Team</button
       ><button
@@ -88,8 +89,15 @@
         Làm mới
       </button>
     </div>
+    <p id="create-team-access" class="caption">
+      {{
+        context()?.role === 'ADMIN'
+          ? 'Tạo team draft trong workspace này.'
+          : 'Chỉ quản trị viên tổ chức (ADMIN) có thể tạo team.'
+      }}
+    </p>
     <p id="unfinished" class="caption">
-      Tạo team, quản trị thành viên và các mô-đun khác chưa hoàn thiện.
+      Quản trị thành viên và các mô-đun khác chưa hoàn thiện.
     </p>
     @if (logoutError()) {
       <p class="auth-error" role="alert">{{ logoutError() }}</p>

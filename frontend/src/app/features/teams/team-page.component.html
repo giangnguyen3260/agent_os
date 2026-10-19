@@ -1,0 +1,404 @@
+<div class="forest-shell">
+  <aside class="desktop-sidebar">
+    <div class="brand">agentos</div>
+    <nav aria-label="Điều hướng workspace">
+      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a
+      ><button disabled>Organization map</button
+      ><span class="selected" aria-current="page">Teams</span
+      ><button disabled>Agents</button><button disabled>Missions</button
+      ><button disabled>Approvals</button><button disabled>Trace</button>
+    </nav>
+  </aside>
+  <header class="compact-header">
+    <span class="brand">agentos</span
+    ><button
+      type="button"
+      class="button secondary"
+      [attr.aria-expanded]="menuOpen()"
+      aria-controls="team-menu"
+      (click)="menuOpen.set(!menuOpen())"
+    >
+      Menu
+    </button>
+  </header>
+  @if (menuOpen()) {
+    <nav id="team-menu" class="compact-menu" aria-label="Điều hướng workspace">
+      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a
+      ><a routerLink="/workspace">Đổi workspace</a>
+    </nav>
+  }
+  <main>
+    <div class="breadcrumb">
+      <span>{{ context()?.name }}</span
+      ><span>{{ auth.user()?.displayName }}</span>
+    </div>
+    @if (teamId) {
+      <h1>
+        {{
+          saved()?.status === 'DRAFT' ? 'Team draft created' : 'Team details'
+        }}
+      </h1>
+      @if (saved(); as team) {
+        <section
+          class="panel review"
+          data-testid="saved-team"
+          aria-label="Saved team"
+        >
+          <h2>{{ team.name }}</h2>
+          <dl>
+            <dt>Purpose</dt>
+            <dd>{{ team.purpose }}</dd>
+            <dt>Description</dt>
+            <dd class="exact-text">{{ team.description || '—' }}</dd>
+            <dt>Status</dt>
+            <dd>{{ team.status }}</dd>
+            <dt>Manager</dt>
+            <dd>{{ team.managerAgentId || 'Thiết lập sau' }}</dd>
+            <dt>Existing agents</dt>
+            <dd>{{ team.agentIds?.join(', ') || 'Chưa chọn' }}</dd>
+            <dt>Intake</dt>
+            <dd>{{ team.intake || '—' }}</dd>
+            <dt>Concurrency</dt>
+            <dd>{{ team.concurrency ?? '—' }}</dd>
+            <dt>Monthly budget (USD)</dt>
+            <dd>{{ team.monthlyBudget ?? '—' }}</dd>
+          </dl>
+        </section>
+      }
+    } @else {
+      <header class="heading">
+        <h1>Create Team / {{ steps[step - 1] }}</h1>
+        <p>Bước {{ step }}/3 · Tạo team draft</p>
+      </header>
+    }
+    @if (loading()) {
+      <p role="status">Đang tải…</p>
+    }
+    @if (denied()) {
+      <p class="auth-error" role="alert">
+        Bạn không có quyền truy cập. Chỉ quản trị viên tổ chức (ADMIN) có thể
+        tạo team.
+      </p>
+    }
+    @if (error()) {
+      <p class="auth-error" role="alert">{{ error() }}</p>
+      @if (teamId && !denied()) {
+        <button
+          class="button"
+          type="button"
+          (click)="context() ? loadDetail() : load()"
+        >
+          Thử lại
+        </button>
+      } @else if (!context() && !denied()) {
+        <button class="button" type="button" (click)="load()">Thử lại</button>
+      }
+    }
+    @if (!loading() && !denied() && context() && !teamId) {
+      <section class="wizard" data-testid="team-step" [attr.data-step]="step">
+        <div class="steps">
+          <h2>Các bước</h2>
+          <ol>
+            @for (label of steps; track label; let i = $index) {
+              <li [attr.aria-current]="step === i + 1 ? 'step' : null">
+                {{ step === i + 1 ? '● ' : '' }}{{ label }}
+              </li>
+            }
+          </ol>
+        </div>
+        <form
+          id="team-form"
+          class="panel team-form"
+          novalidate
+          (ngSubmit)="step < 3 ? next() : create()"
+        >
+          <fieldset [disabled]="frozen() || busy()">
+            @if (step === 1) {
+              <div class="field">
+                <label for="team-name">Team name</label
+                ><input
+                  id="team-name"
+                  name="name"
+                  [(ngModel)]="name"
+                  required
+                  [attr.aria-invalid]="!!errors['name']"
+                  aria-describedby="name-error"
+                />
+                <p id="name-error" class="field-error">{{ errors['name'] }}</p>
+              </div>
+              <div class="field">
+                <label for="purpose">Purpose</label
+                ><textarea
+                  id="purpose"
+                  name="purpose"
+                  [(ngModel)]="purpose"
+                  required
+                  rows="1"
+                  [attr.aria-invalid]="!!errors['purpose']"
+                  aria-describedby="purpose-error"
+                ></textarea>
+                <p id="purpose-error" class="field-error">
+                  {{ errors['purpose'] }}
+                </p>
+              </div>
+              <div class="field">
+                <label for="description">Description</label
+                ><textarea
+                  id="description"
+                  name="description"
+                  [(ngModel)]="description"
+                  rows="1"
+                  [attr.aria-invalid]="!!errors['description']"
+                  aria-describedby="description-error"
+                ></textarea>
+                <p id="description-error" class="field-error">
+                  {{ errors['description'] }}
+                </p>
+              </div>
+            } @else if (step === 2) {
+              <div class="field">
+                <label for="manager">Manager</label
+                ><select
+                  id="manager"
+                  name="manager"
+                  [ngModel]="manager"
+                  (ngModelChange)="changeManager($event)"
+                >
+                  <option value="">Thiết lập sau</option>
+                  @for (agent of managers(); track agent.id) {
+                    <option [value]="agent.id">{{ agent.name }}</option>
+                  }</select
+                ><small
+                  >Manager là tùy chọn. Tìm và duyệt các trang agent để chọn
+                  MANAGER.</small
+                >
+              </div>
+              <section class="field" aria-labelledby="agents-title">
+                <h3 id="agents-title">Existing agents</h3>
+                <label for="agent-search">Tìm agent</label
+                ><input
+                  id="agent-search"
+                  name="query"
+                  type="search"
+                  maxlength="100"
+                  [(ngModel)]="query"
+                  (ngModelChange)="loadCandidates()"
+                />
+                @if (candidateLoading()) {
+                  <p role="status">Đang tải agent…</p>
+                }
+                @if (candidateError()) {
+                  <p role="alert">{{ candidateError() }}</p>
+                  <button
+                    class="button secondary"
+                    type="button"
+                    (click)="loadCandidates()"
+                  >
+                    Thử lại
+                  </button>
+                }
+                <div id="agents-error" class="field-error">
+                  {{ errors['agents'] }}
+                </div>
+                <div
+                  tabindex="-1"
+                  [attr.aria-invalid]="!!errors['agents']"
+                  aria-describedby="agents-error"
+                >
+                  @if (candidates(); as page) {
+                    @for (agent of page.items; track agent.id) {
+                      <label class="candidate"
+                        ><input
+                          type="checkbox"
+                          [checked]="selected.includes(agent.id)"
+                          [disabled]="
+                            agent.id === manager ||
+                            (!selected.includes(agent.id) &&
+                              selected.length >= 50)
+                          "
+                          (change)="
+                            toggle(agent.id, $any($event.target).checked)
+                          "
+                        />{{ agent.name }} · {{ agent.level }} ·
+                        {{ agent.status }}</label
+                      >
+                    }
+                    @if (!page.items.length) {
+                      <p>Không có agent phù hợp.</p>
+                    }
+                    <div class="pagination">
+                      <button
+                        class="button secondary"
+                        type="button"
+                        [disabled]="page.page === 0"
+                        (click)="loadCandidates(page.page - 1)"
+                      >
+                        Agent trước</button
+                      ><span
+                        >Trang {{ page.page + 1 }} ·
+                        {{ page.total }} agent</span
+                      ><button
+                        class="button secondary"
+                        type="button"
+                        [disabled]="(page.page + 1) * page.size >= page.total"
+                        (click)="loadCandidates(page.page + 1)"
+                      >
+                        Agent sau
+                      </button>
+                    </div>
+                  }
+                </div>
+                @if (selected.length) {
+                  <div class="selection">
+                    <p>Đã chọn {{ selected.length }}/50</p>
+                    @for (id of selected; track id) {
+                      <button
+                        type="button"
+                        class="button secondary"
+                        (click)="toggle(id, false)"
+                      >
+                        Bỏ {{ agentName(id) }}
+                      </button>
+                    }
+                  </div>
+                }
+              </section>
+              <div class="field">
+                <label for="intake">Intake</label
+                ><select id="intake" name="intake" [(ngModel)]="intake">
+                  <option value="MANUAL">Manual</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="concurrency">Concurrency</label
+                ><input
+                  id="concurrency"
+                  name="concurrency"
+                  inputmode="numeric"
+                  [(ngModel)]="concurrency"
+                  required
+                  [attr.aria-invalid]="!!errors['concurrency']"
+                  aria-describedby="concurrency-error"
+                />
+                <p id="concurrency-error" class="field-error">
+                  {{ errors['concurrency'] }}
+                </p>
+              </div>
+              <div class="field">
+                <label for="budget">Monthly budget (USD)</label
+                ><input
+                  id="budget"
+                  name="budget"
+                  inputmode="decimal"
+                  [(ngModel)]="budget"
+                  required
+                  [attr.aria-invalid]="!!errors['budget']"
+                  aria-describedby="budget-error"
+                />
+                <p id="budget-error" class="field-error">
+                  {{ errors['budget'] }}
+                </p>
+              </div>
+            } @else {
+              <div class="field">
+                <h3>Team</h3>
+                <div class="review-value">{{ name.trim() }}</div>
+                <p class="exact-text">{{ purpose.trim() }}</p>
+                <p class="exact-text">{{ description }}</p>
+              </div>
+              <div class="field">
+                <h3>Configuration</h3>
+                <div class="review-value">
+                  Draft · Manager:
+                  {{ manager ? agentName(manager) : 'Thiết lập sau' }} · Intake:
+                  Manual
+                </div>
+              </div>
+              <div class="field">
+                <h3>Effective limits</h3>
+                <div class="review-value">
+                  {{ concurrency }} slots · {{ budget }} USD/month
+                </div>
+                <small
+                  >Giới hạn cấu hình được lưu, không phải dung lượng
+                  runtime.</small
+                >
+              </div>
+              <div class="field">
+                <h3>Membership</h3>
+                <div class="review-value">
+                  @for (id of selected; track id) {
+                    <p>{{ agentName(id) }}</p>
+                  }
+                  @if (!selected.length) {
+                    Chưa chọn agent
+                  }
+                </div>
+                <small
+                  >Không chuyển agent từ team khác tự động. Team được tạo ở
+                  trạng thái DRAFT.</small
+                >
+              </div>
+            }
+          </fieldset>
+        </form>
+        <div class="actions">
+          @if (step < 3) {
+            <button class="button" type="submit" form="team-form">
+              Continue
+            </button>
+          } @else {
+            <button
+              class="button"
+              type="submit"
+              form="team-form"
+              [disabled]="busy() || keyConflict()"
+            >
+              Create draft
+            </button>
+          }
+          <button
+            class="button secondary"
+            type="button"
+            [disabled]="step === 1 || frozen() || busy()"
+            (click)="back()"
+          >
+            Back</button
+          ><button
+            class="button secondary"
+            type="button"
+            [disabled]="busy()"
+            (click)="cancel()"
+          >
+            Cancel
+          </button>
+        </div>
+        @if (busy()) {
+          <p role="status">Đang tạo draft…</p>
+        }
+        <aside class="guidance">
+          <h2>Điều kiện / hướng xử lý</h2>
+          <p>
+            Validate trường bắt buộc; lỗi giữ dữ liệu. Chỉ tạo khi xác nhận bước
+            cuối.
+          </p>
+          @if (frozen()) {
+            <p>
+              Yêu cầu đã được khóa để xác nhận kết quả an toàn. Thử lại dùng
+              cùng dữ liệu và khóa.
+            </p>
+          }
+        </aside>
+      </section>
+    }
+    @if (teamId || denied()) {
+      <div class="actions">
+        <a
+          class="button secondary"
+          [routerLink]="['/workspace', id, 'dashboard']"
+          >Overview</a
+        >
+      </div>
+    }
+  </main>
+</div>

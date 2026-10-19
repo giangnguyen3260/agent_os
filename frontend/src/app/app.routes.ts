@@ -33,6 +33,34 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'workspace/:id/teams/new',
+    canDeactivate: [
+      (
+        component: import('./features/teams/team-page.component').TeamPageComponent,
+      ) => component.canLeave(),
+    ],
+    canActivate: [authGuard],
+    runGuardsAndResolvers: 'always',
+    loadComponent: () =>
+      import('./features/teams/team-page.component').then(
+        module => module.TeamPageComponent,
+      ),
+  },
+  {
+    path: 'workspace/:id/teams/:teamId',
+    canDeactivate: [
+      (
+        component: import('./features/teams/team-page.component').TeamPageComponent,
+      ) => component.canLeave(),
+    ],
+    canActivate: [authGuard],
+    runGuardsAndResolvers: 'always',
+    loadComponent: () =>
+      import('./features/teams/team-page.component').then(
+        module => module.TeamPageComponent,
+      ),
+  },
+  {
     path: 'workspace/:id/dashboard',
     canActivate: [authGuard],
     runGuardsAndResolvers: 'always',

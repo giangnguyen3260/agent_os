@@ -79,6 +79,9 @@ jobs:
       - name: Provision isolated dashboard tasks
         run: |
           docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < scripts/dashboard-ci-fixture.sql
+      - name: Provision isolated team creation fixtures
+        run: |
+          docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < scripts/team-create-ci-fixture.sql
       - name: Install browser test dependencies
         working-directory: frontend
         run: |
