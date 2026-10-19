@@ -127,7 +127,7 @@ left join (select team_id,
               if (rs.getString("status").equals("ARCHIVED")) {
                 health = "ARCHIVED";
                 reason = "Team is archived";
-              } else if (rs.getLong("managers") == 0) {
+              } else if (rs.getString("status").equals("DRAFT") || rs.getLong("managers") == 0) {
                 health = "SETUP_REQUIRED";
                 reason = "No active manager agent";
               } else if (rs.getLong("pending") > 0 || rs.getLong("degraded") > 0) {

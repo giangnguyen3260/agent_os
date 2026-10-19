@@ -204,6 +204,7 @@ test('ambiguous result retries immutable key without duplicate team', async ({
 test('member writes and missing CSRF are denied', async ({page}) => {
   await login(page, 'team-member@example.test');
   await page.goto(`/workspace/${org}/teams/new`);
+  await expect(page.getByRole('alert')).toBeVisible();
   await expect(create(page)).toHaveCount(0);
   const csrf = (await (await page.request.get('/api/v1/auth/csrf')).json())
     .data;
