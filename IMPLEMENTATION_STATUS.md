@@ -1,6 +1,9 @@
-# Implementation status — 19 October 2026
+# Implementation status — 20 October 2026
 
 ## Current branch outcome
+
+On `feature/team-create`, the three-step Create Team flow (Basics → Setup → Review) saves a real DRAFT with optional manager, eligible agents and configured limits. Application revision `5e1548061a048a8503d2317613feebf5503db348` passed 49 backend tests and 72 browser instances, including 18 new Team instances on desktop/tablet/mobile. The bounded development gate passed independent QC. Draft PR6 is stacked on dashboard PR5 and remains unmerged. Team activation and agent creation are not delivered by this slice. See [Team QC](docs/qc/TEAM_CREATE_QC_REPORT.md) and [V005 rollout](backend/TEAM_DRAFT_MIGRATION.md).
+
 
 On `feature/dashboard-live`, the organization overview and task drilldown are implemented as a bounded read flow from Forest S01 on top of unmerged workspace PR4. V004 adds real task persistence with tenant/team/mission integrity; Running/Pending/Review derive from unique task rows. Capacity and performance remain unavailable because their runtime sources do not exist. Application revision `3c5abe22` is verified by recovered CI execution logs:39 backend tests and54 browser instances passed, including corrected filter state/team assertions at all three widths. See [dashboard QC](docs/qc/DASHBOARD_QC_REPORT.md) for exact runs and scope.
 
@@ -11,7 +14,8 @@ Prior workspace application revision `4f3e795` passed 33 backend tests and 33 br
 | Human login/session, recovery, workspace selection | Development gates verified; see the respective reports under docs/qc |
 | Organization overview and pending-task read drilldown | Bounded development read gate verified; actual PostgreSQL rows, no sample business data |
 | Capacity/performance/cost | Explicitly unavailable; no allocator, execution-run history or billing ledger implemented |
-| Task mutation/execution, team/agent creation screens, approvals and administration | Full designed flows incomplete; older static previews remain blocked |
+| Team Draft creation | Development gate verified; atomic assignments, scoped authorization and duplicate-safe retries |
+| Task mutation/execution, team activation/agent creation screens, approvals and administration | Full designed flows incomplete; older static previews remain blocked |
 | Production security/scale | Complete roles/grants, load/failover, full visual/accessibility and release hardening not accepted |
 
 ## Historical foundation snapshot — 15 October 2026
