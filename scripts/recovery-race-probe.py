@@ -89,22 +89,33 @@ def main():
     threading.Thread(target=lambda: [lines.put(line.strip()) for line in barrier.stdout],
                      daemon=True).start()
     try:
-        barrier.stdin.write("BEGIN; SET LOCAL idle_in_transaction_session_timeout='20s';\n"
+        barrier.stdin.write("SET statement_timeout='15s'; SET lock_timeout='10s';\n"
+                            "SELECT 'BARRIER_PID=' || pg_backend_pid();\n"
+                            "BEGIN; SET LOCAL idle_in_transaction_session_timeout='20s';\n"
                             "SELECT id FROM human_accounts WHERE email='" + email
                             + "' FOR UPDATE;\n\\echo ACCOUNT_LOCKED\n")
         barrier.stdin.flush()
         deadline = time.monotonic() + 10
-        while lines.get(timeout=max(0.1, deadline - time.monotonic())) != "ACCOUNT_LOCKED":
+        barrier_pid = None
+        while True:
+            line = lines.get(timeout=max(0.1, deadline - time.monotonic()))
+            if line.startswith("BARRIER_PID="):
+                barrier_pid = int(line.split("=", 1)[1])
+            if line == "ACCOUNT_LOCKED":
+                break
             assert time.monotonic() < deadline, "Barrier not established"
+        assert barrier_pid, "Barrier PostgreSQL connection not identified"
         with ThreadPoolExecutor(max_workers=2) as pool:
             auth = pool.submit(login.call, "/api/v1/auth/login",
                                urllib.parse.urlencode({"username": email, "password": initial}).encode(),
                                login_headers)
             deadline = time.monotonic() + 8
             while True:
-                blocked = sql("SELECT count(*) FROM pg_stat_activity WHERE wait_event_type='Lock' "
-                              "AND query ILIKE '%human_accounts%for update%' AND pid<>pg_backend_pid();")
-                if int(blocked) > 0:
+                blocked = sql("SELECT pid FROM pg_stat_activity WHERE wait_event_type='Lock' "
+                              "AND query ILIKE '%human_accounts%for update%' AND "
+                              + str(barrier_pid) + " = ANY(pg_blocking_pids(pid));")
+                if blocked:
+                    login_pid = int(blocked.splitlines()[0])
                     break
                 assert time.monotonic() < deadline and not auth.done(), "Login did not wait account-first"
                 time.sleep(0.1)
@@ -115,6 +126,17 @@ def main():
             changed = pool.submit(reset.call, "/api/v1/auth/recovery/confirm",
                                   json.dumps({"token": token, "password": replacement}).encode(),
                                   reset_headers)
+            deadline = time.monotonic() + 6
+            while True:
+                waiting_reset = sql("SELECT count(*) FROM pg_stat_activity WHERE wait_event_type='Lock' "
+                                    "AND query ILIKE '%human_accounts%for update%' AND pid<>"
+                                    + str(login_pid) + " AND (" + str(barrier_pid)
+                                    + " = ANY(pg_blocking_pids(pid)) OR " + str(login_pid)
+                                    + " = ANY(pg_blocking_pids(pid)));")
+                if int(waiting_reset) > 0:
+                    break
+                assert time.monotonic() < deadline and not changed.done(), "Reset did not reach the barrier"
+                time.sleep(0.1)
             barrier.stdin.write("COMMIT;\n\\q\n")
             barrier.stdin.flush()
             barrier.wait(timeout=8)

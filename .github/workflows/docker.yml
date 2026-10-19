@@ -75,10 +75,18 @@ jobs:
           E2E_MAILPIT_URL: http://127.0.0.1:18025
         run: npm run test:e2e
       - name: PostgreSQL barrier for concurrent login and password reset
+        timeout-minutes: 2
         env:
           E2E_BASE_URL: http://127.0.0.1:18080
           E2E_MAILPIT_URL: http://127.0.0.1:18025
-        run: python3 scripts/recovery-race-probe.py
+        run: |
+          # Bound database waits in this disposable CI stack, including application connections.
+          docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<'SQL'
+          ALTER SYSTEM SET statement_timeout='15s';
+          ALTER SYSTEM SET lock_timeout='10s';
+          SELECT pg_reload_conf();
+          SQL
+          python3 scripts/recovery-race-probe.py
       - name: Session and account survive backend restart
         env:
           E2E_BASE_URL: http://127.0.0.1:18080
