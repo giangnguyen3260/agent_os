@@ -33,6 +33,15 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'workspace/:id',
+    canActivate: [authGuard],
+    runGuardsAndResolvers: 'always',
+    loadComponent: () =>
+      import('./features/workspace/workspace-context-page.component').then(
+        module => module.WorkspaceContextPageComponent,
+      ),
+  },
+  {
     path: '',
     canActivate: [authGuard, previewGuard],
     loadComponent: () =>

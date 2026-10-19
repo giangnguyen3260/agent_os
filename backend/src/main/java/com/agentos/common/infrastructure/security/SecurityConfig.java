@@ -99,7 +99,10 @@ public class SecurityConfig {
                             return new AuthorizationDecision(false);
                           }
                         })
-                    .requestMatchers("/api/v1/auth/session", "/api/v1/auth/workspaces")
+                    .requestMatchers(
+                        "/api/v1/auth/session",
+                        "/api/v1/auth/workspaces",
+                        "/api/v1/auth/workspaces/*")
                     .authenticated()
                     .anyRequest()
                     .denyAll())

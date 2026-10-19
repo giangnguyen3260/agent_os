@@ -144,6 +144,97 @@ class AuthenticationIntegrationTest {
   }
 
   @Test
+  void workspaceOpenUsesUrlAndCurrentDatabaseMembership() throws Exception {
+    var cookie = login();
+    mvc.perform(get("/api/v1/auth/workspaces/" + organization).cookie(cookie))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("data.id").value(organization.toString()))
+        .andExpect(jsonPath("data.name").value("Workspace"))
+        .andExpect(jsonPath("data.role").value("ADMIN"))
+        .andExpect(jsonPath("data", org.hamcrest.Matchers.aMapWithSize(3)));
+    UUID second = UUID.randomUUID();
+    jdbc.update(
+        "insert into organizations(id,name,slug,status,created_at,updated_at) values"
+            + " (?, 'Second', ?, 'ACTIVE',current_timestamp,current_timestamp)",
+        second,
+        second.toString());
+    jdbc.update(
+        "insert into organization_memberships(account_id,organization_id,role) values"
+            + " (?,?,'MEMBER')",
+        account,
+        second);
+    mvc.perform(get("/api/v1/auth/workspaces/" + second).cookie(cookie))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("data.id").value(second.toString()))
+        .andExpect(jsonPath("data.role").value("MEMBER"));
+    jdbc.update(
+        "delete from organization_memberships where account_id = ? and organization_id = ?",
+        account,
+        second);
+    var revoked =
+        mvc.perform(get("/api/v1/auth/workspaces/" + second).cookie(cookie))
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("error.code").value("NOT_FOUND"))
+            .andExpect(jsonPath("error.message").value("Workspace not found"))
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    var missing =
+        mvc.perform(get("/api/v1/auth/workspaces/" + UUID.randomUUID()).cookie(cookie))
+            .andExpect(status().isNotFound())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    assertThat(json.readTree(revoked).get("error")).isEqualTo(json.readTree(missing).get("error"));
+    mvc.perform(get("/api/v1/auth/workspaces/" + organization).cookie(cookie))
+        .andExpect(status().isOk());
+  }
+
+  @Test
+  void workspaceOpenRejectsAnotherAccountsWorkspace() throws Exception {
+    UUID otherAccount = UUID.randomUUID();
+    jdbc.update(
+        "insert into human_accounts(id,email,display_name,password_hash) values (?,?,?,?)",
+        otherAccount,
+        "other@example.test",
+        "Other",
+        encoder.encode(PASSWORD));
+    jdbc.update("delete from organization_memberships where account_id = ?", account);
+    jdbc.update(
+        "insert into organization_memberships(account_id,organization_id,role) values"
+            + " (?,?,'ADMIN')",
+        otherAccount,
+        organization);
+    mvc.perform(get("/api/v1/auth/workspaces/" + organization).cookie(login()))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("error.code").value("NOT_FOUND"))
+        .andExpect(jsonPath("error.message").value("Workspace not found"));
+  }
+
+  @Test
+  void workspaceOpenRequiresAuthenticationAndValidUuid() throws Exception {
+    mvc.perform(get("/api/v1/auth/workspaces/" + organization))
+        .andExpect(status().isUnauthorized())
+        .andExpect(jsonPath("error.code").value("UNAUTHORIZED"));
+    mvc.perform(get("/api/v1/auth/workspaces/not-a-uuid").cookie(login()))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void workspaceOpenRejectsDisabledAccountAndStaleCredentials() throws Exception {
+    var cookie = login();
+    jdbc.update(
+        "update human_accounts set credential_version = credential_version + 1 where id = ?",
+        account);
+    mvc.perform(get("/api/v1/auth/workspaces/" + organization).cookie(cookie))
+        .andExpect(status().isUnauthorized());
+    var freshCookie = login();
+    jdbc.update("update human_accounts set enabled = false where id = ?", account);
+    mvc.perform(get("/api/v1/auth/workspaces/" + organization).cookie(freshCookie))
+        .andExpect(status().isUnauthorized());
+  }
+
+  @Test
   void credentialsAreGenericDisabledRejectedAndBcryptStored() throws Exception {
     String hash =
         jdbc.queryForObject(

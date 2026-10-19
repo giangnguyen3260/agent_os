@@ -24,7 +24,11 @@ interface CsrfToken {
   token: string;
   headerName: string;
 }
-export type AuthFailureKind = 'unauthorized' | 'network' | 'server';
+export type AuthFailureKind =
+  | 'unauthorized'
+  | 'not-found'
+  | 'network'
+  | 'server';
 export class AuthFailure extends Error {
   constructor(
     readonly kind: AuthFailureKind,
@@ -40,18 +44,24 @@ export class AuthService {
   private readonly currentUser = signal<AuthUser | null>(null);
   readonly user = this.currentUser.asReadonly();
   private readonly base = '/api/v1/auth';
+  private authEpoch = 0;
 
   private async request<T>(operation: () => Promise<T>): Promise<T> {
+    const epoch = this.authEpoch;
     try {
       return await operation();
     } catch (error) {
       if (error instanceof HttpErrorResponse) {
         if (error.status === 401) {
-          this.currentUser.set(null);
+          if (epoch === this.authEpoch) this.currentUser.set(null);
           throw new AuthFailure('unauthorized');
         }
         throw new AuthFailure(
-          error.status === 0 ? 'network' : 'server',
+          error.status === 404
+            ? 'not-found'
+            : error.status === 0
+              ? 'network'
+              : 'server',
           error.status === 400 &&
           error.error?.error?.code === 'INVALID_RESET_TOKEN'
             ? 'INVALID_RESET_TOKEN'
@@ -70,16 +80,18 @@ export class AuthService {
   }
 
   session(): Promise<AuthUser> {
+    const epoch = this.authEpoch;
     return this.request(async () => {
       const response = await firstValueFrom(
         this.http.get<ApiResponse<AuthUser>>(`${this.base}/session`),
       );
-      this.currentUser.set(response.data);
+      if (epoch === this.authEpoch) this.currentUser.set(response.data);
       return response.data;
     });
   }
 
   login(email: string, password: string): Promise<AuthUser> {
+    const epoch = ++this.authEpoch;
     return this.request(async () => {
       const headers = (await this.csrfHeaders()).set(
         'Content-Type',
@@ -95,7 +107,7 @@ export class AuthService {
           {headers},
         ),
       );
-      this.currentUser.set(response.data);
+      if (epoch === this.authEpoch) this.currentUser.set(response.data);
       return response.data;
     });
   }
@@ -141,13 +153,27 @@ export class AuthService {
     );
   }
 
+  getWorkspace(id: string): Promise<Workspace> {
+    return this.request(
+      async () =>
+        (
+          await firstValueFrom(
+            this.http.get<ApiResponse<Workspace>>(
+              `${this.base}/workspaces/${encodeURIComponent(id)}`,
+            ),
+          )
+        ).data,
+    );
+  }
+
   logout(): Promise<void> {
+    const epoch = ++this.authEpoch;
     return this.request(async () => {
       const headers = await this.csrfHeaders();
       await firstValueFrom(
         this.http.post<void>(`${this.base}/logout`, null, {headers}),
       );
-      this.currentUser.set(null);
+      if (epoch === this.authEpoch) this.currentUser.set(null);
     });
   }
 }

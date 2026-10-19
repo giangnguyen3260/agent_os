@@ -78,12 +78,12 @@ test('real persisted login survives reload; logout revokes the session', async (
   expect(authCookie.sameSite).toBe('Lax');
   await page.reload();
   await expect(
-    page.getByRole('button', {name: 'Đăng xuất', exact: true}),
+    page.getByRole('button', {name: 'Đổi tài khoản', exact: true}),
   ).toBeVisible();
   expect((await page.request.get('/api/v1/auth/workspaces')).status()).toBe(
     200,
   );
-  await page.getByRole('button', {name: 'Đăng xuất', exact: true}).click();
+  await page.getByRole('button', {name: 'Đổi tài khoản', exact: true}).click();
   await expect(page).toHaveURL(/\/login$/);
   expect((await page.request.get('/api/v1/auth/session')).status()).toBe(401);
   const replay = await page.request.get('/api/v1/auth/session', {
