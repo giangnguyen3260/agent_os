@@ -33,6 +33,15 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'workspace/:id/dashboard',
+    canActivate: [authGuard],
+    runGuardsAndResolvers: 'always',
+    loadComponent: () =>
+      import('./features/dashboard/dashboard-page.component').then(
+        module => module.DashboardPageComponent,
+      ),
+  },
+  {
     path: 'workspace/:id',
     canActivate: [authGuard],
     runGuardsAndResolvers: 'always',
@@ -49,13 +58,7 @@ export const routes: Routes = [
         module => module.ShellLayoutComponent,
       ),
     children: [
-      {
-        path: 'dashboard',
-        loadComponent: () =>
-          import('./features/dashboard/dashboard-page.component').then(
-            module => module.DashboardPageComponent,
-          ),
-      },
+      {path: 'dashboard', pathMatch: 'full', redirectTo: '/workspace'},
       {
         path: 'organization',
         loadComponent: () =>

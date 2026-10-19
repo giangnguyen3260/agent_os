@@ -1,0 +1,399 @@
+<ng-template #navigation>
+  <nav aria-label="Điều hướng workspace">
+    <span class="selected" aria-current="page">Overview</span
+    ><button type="button" (click)="viewTeams()">Teams</button>
+    @for (module of modules; track module) {
+      <button type="button" disabled>{{ module }} · Chưa hoàn thiện</button>
+    }
+    <a routerLink="/workspace">Đổi workspace</a>
+  </nav>
+  @if (context(); as workspace) {
+    <p class="muted">{{ workspace.name }} · {{ role(workspace.role) }}</p>
+  }
+</ng-template>
+<div class="forest-shell">
+  <aside class="desktop-sidebar">
+    <div class="brand">agentos</div>
+    <ng-container *ngTemplateOutlet="navigation" />
+  </aside>
+  <header class="compact-header">
+    <span class="brand">agentos</span
+    ><button
+      class="button secondary"
+      type="button"
+      aria-haspopup="dialog"
+      (click)="menu.showModal()"
+    >
+      Menu
+    </button>
+  </header>
+  <dialog #menu class="auth-dialog" aria-label="Menu workspace">
+    <button class="button secondary" type="button" (click)="menu.close()">
+      Đóng menu</button
+    ><ng-container *ngTemplateOutlet="navigation" />
+  </dialog>
+  <main>
+    <header class="breadcrumb">
+      <span>{{ context()?.name || 'Workspace' }} / Overview</span
+      ><span>{{ auth.user()?.displayName }}</span>
+    </header>
+    <section class="heading">
+      <h1>
+        {{
+          accessLost() ? 'Không còn quyền truy cập' : 'Organization overview'
+        }}
+      </h1>
+      <p>Quản lý công việc, trạng thái và các bước cần xử lý.</p>
+    </section>
+    <div class="actions">
+      <button
+        class="button"
+        type="button"
+        disabled
+        aria-describedby="unfinished"
+      >
+        Create Team</button
+      ><button
+        class="button secondary"
+        type="button"
+        [disabled]="!data()"
+        (click)="viewTeams()"
+      >
+        View teams</button
+      ><button
+        class="button secondary"
+        type="button"
+        disabled
+        aria-describedby="unfinished"
+      >
+        Thành viên &amp; quyền</button
+      ><button
+        class="button secondary"
+        type="button"
+        [disabled]="signingOut()"
+        (click)="logout()"
+      >
+        Đăng xuất</button
+      ><button
+        class="button secondary"
+        type="button"
+        [disabled]="loading() || accessLost()"
+        (click)="load()"
+      >
+        Làm mới
+      </button>
+    </div>
+    <p id="unfinished" class="caption">
+      Tạo team, quản trị thành viên và các mô-đun khác chưa hoàn thiện.
+    </p>
+    @if (logoutError()) {
+      <p class="auth-error" role="alert">{{ logoutError() }}</p>
+    }
+    @if (loading()) {
+      <p role="status">Đang xác thực workspace và tải tổng quan…</p>
+    } @else if (accessLost()) {
+      <section class="panel" role="alert">
+        <p>Workspace không tồn tại hoặc tư cách thành viên đã thay đổi.</p>
+        <a class="button secondary" routerLink="/workspace"
+          >Quay lại chọn workspace</a
+        >
+      </section>
+    } @else if (error()) {
+      <section class="panel" role="alert">
+        <p>{{ error() }}</p>
+        <button class="button" type="button" (click)="load()">Thử lại</button
+        ><a class="button secondary" routerLink="/workspace">Đổi workspace</a>
+      </section>
+    } @else if (data(); as dashboard) {
+      <section class="metrics" aria-label="Hiện tại — snapshot">
+        <button
+          class="metric"
+          data-testid="metric-running"
+          type="button"
+          (click)="openTasks('RUNNING')"
+        >
+          <span>Running</span><strong>{{ dashboard.snapshot.running }}</strong
+          ><small>Hiện tại</small>
+        </button>
+        <button
+          class="metric"
+          data-testid="metric-pending"
+          type="button"
+          (click)="openTasks('PENDING')"
+        >
+          <span>Pending</span><strong>{{ dashboard.snapshot.pending }}</strong
+          ><small>Task duy nhất</small>
+        </button>
+        <button
+          class="metric"
+          data-testid="metric-review"
+          type="button"
+          (click)="openTasks('REVIEW')"
+        >
+          <span>Review</span><strong>{{ dashboard.snapshot.review }}</strong
+          ><small>Chờ review</small>
+        </button>
+        <article class="metric" data-testid="metric-capacity">
+          <span>Capacity</span><strong>—</strong><small>Chưa khả dụng</small
+          ><small>{{ dashboard.capacity.reason }}</small>
+        </article>
+      </section>
+      <p class="caption">
+        Snapshot: {{ dashboard.generatedAt | date: 'medium' }} · Cập nhật khi
+        làm mới.<br />{{ dashboard.snapshot.totalTeams }} teams ·
+        {{ dashboard.snapshot.totalAgents }} agents ·
+        {{ dashboard.snapshot.activeAgents }} active agents
+      </p>
+      @if (state(); as selected) {
+        <section
+          #taskSection
+          class="panel task-panel"
+          role="region"
+          aria-label="Danh sách task"
+          tabindex="-1"
+          [attr.aria-busy]="taskLoading()"
+        >
+          <div class="section-heading">
+            <h2>Danh sách task · {{ label(selected) }}</h2>
+            <button
+              class="button secondary"
+              type="button"
+              (click)="closeTasks()"
+            >
+              Đóng danh sách task
+            </button>
+          </div>
+          <div class="filters">
+            <label
+              >Trạng thái<select
+                #stateFilter
+                [value]="selected"
+                (change)="changeState(stateFilter.value)"
+              >
+                @for (value of states; track value) {
+                  <option [value]="value">{{ label(value) }}</option>
+                }
+              </select></label
+            >
+            <label
+              >Team<select
+                #teamFilter
+                [value]="teamId()"
+                (change)="changeTeam(teamFilter.value)"
+              >
+                <option value="">Tất cả teams</option>
+                @if (teamId()) {
+                  <option [value]="teamId()">{{ teamName() }}</option>
+                }
+                @for (team of dashboard.teams.items; track team.id) {
+                  @if (team.id !== teamId()) {
+                    <option [value]="team.id">{{ team.name }}</option>
+                  }
+                }
+              </select></label
+            ><button
+              class="button secondary"
+              type="button"
+              [disabled]="taskLoading()"
+              (click)="loadTasks()"
+            >
+              Làm mới task
+            </button>
+          </div>
+          <p class="caption">
+            20 task mỗi trang. Danh sách được đọc riêng tại thời điểm tải. Bộ
+            lọc team hiển thị teams trên trang hiện tại.
+          </p>
+          @if (taskLoading()) {
+            <p role="status">Đang tải task…</p>
+          } @else if (taskError()) {
+            <p class="auth-error" role="alert">{{ taskError() }}</p>
+            <button class="button" type="button" (click)="loadTasks()">
+              Thử lại task
+            </button>
+          } @else if (tasks(); as result) {
+            @if (!result.items.length) {
+              <p role="status">Không có task trong bộ lọc này.</p>
+            }
+            <div class="task-list">
+              @for (task of result.items; track task.id) {
+                <article class="task-record" data-testid="task-row">
+                  <h3>{{ task.title }}</h3>
+                  <dl>
+                    <div>
+                      <dt>Task ID</dt>
+                      <dd>{{ task.id }}</dd>
+                    </div>
+                    <div>
+                      <dt>Trạng thái</dt>
+                      <dd>{{ task.status }}</dd>
+                    </div>
+                    <div>
+                      <dt>Team</dt>
+                      <dd>{{ task.teamName }}</dd>
+                    </div>
+                    <div>
+                      <dt>Mission ID</dt>
+                      <dd>{{ task.missionId || '—' }}</dd>
+                    </div>
+                    @if (selected === 'PENDING') {
+                      <div>
+                        <dt>Lý do chờ</dt>
+                        <dd data-testid="pending-reason">
+                          {{ task.pendingReason || 'Chưa được cung cấp' }}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>Chờ từ</dt>
+                        <dd>
+                          {{
+                            task.waitingSince
+                              ? (task.waitingSince | date: 'medium')
+                              : 'Chưa được cung cấp'
+                          }}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>Người xử lý</dt>
+                        <dd data-testid="resolver">
+                          {{ task.resolver || 'Chưa được cung cấp' }}
+                        </dd>
+                      </div>
+                    }
+                  </dl>
+                </article>
+              }
+            </div>
+            <div class="pagination" aria-label="Phân trang task">
+              <button
+                class="button secondary"
+                type="button"
+                [disabled]="result.page === 0"
+                (click)="loadTasks(result.page - 1)"
+              >
+                Task trước</button
+              ><span>Trang {{ result.page + 1 }} · {{ result.total }} task</span
+              ><button
+                class="button secondary"
+                type="button"
+                [disabled]="(result.page + 1) * result.size >= result.total"
+                (click)="loadTasks(result.page + 1)"
+              >
+                Task sau
+              </button>
+            </div>
+          }
+        </section>
+      }
+      <section
+        #teamsSection
+        class="teams-section"
+        aria-label="Teams"
+        tabindex="-1"
+      >
+        <h2>Teams</h2>
+        <div class="team-head">
+          <span>Team</span><span>Health</span><span>Running</span
+          ><span>Pending / Review</span><span>Action</span>
+        </div>
+        @for (team of dashboard.teams.items; track team.id) {
+          <article class="team-row" data-testid="team-row">
+            <div>
+              <strong>{{ team.name }}</strong
+              ><small>{{ team.status }} · {{ team.agentCount }} agents</small>
+            </div>
+            <div>
+              <span
+                class="health"
+                [class.attention]="
+                  team.health === 'ATTENTION' ||
+                  team.health === 'SETUP_REQUIRED'
+                "
+                >{{ health(team.health) }}</span
+              ><small>{{ team.healthReason }}</small>
+            </div>
+            <button
+              type="button"
+              class="text-action"
+              (click)="openTasks('RUNNING', team.id, team.name)"
+            >
+              {{ team.running }} Running
+            </button>
+            <div>
+              <button
+                type="button"
+                class="text-action"
+                (click)="openTasks('PENDING', team.id, team.name)"
+              >
+                {{ team.pending }} Pending</button
+              ><button
+                type="button"
+                class="text-action"
+                (click)="openTasks('REVIEW', team.id, team.name)"
+              >
+                {{ team.review }} Review
+              </button>
+            </div>
+            <button
+              class="text-action"
+              type="button"
+              [attr.aria-label]="'Open ' + team.name + ' tasks'"
+              (click)="openTasks('RUNNING', team.id, team.name)"
+            >
+              Open tasks
+            </button>
+          </article>
+        } @empty {
+          <p class="panel" role="status">Chưa có team trong workspace này.</p>
+        }
+        <div class="pagination" aria-label="Phân trang teams">
+          <button
+            class="button secondary"
+            type="button"
+            [disabled]="dashboard.teams.page === 0"
+            (click)="load(dashboard.teams.page - 1)"
+          >
+            Teams trước</button
+          ><span
+            >Trang {{ dashboard.teams.page + 1 }} ·
+            {{ dashboard.teams.total }} teams</span
+          ><button
+            class="button secondary"
+            type="button"
+            [disabled]="
+              (dashboard.teams.page + 1) * dashboard.teams.size >=
+              dashboard.teams.total
+            "
+            (click)="load(dashboard.teams.page + 1)"
+          >
+            Teams sau
+          </button>
+        </div>
+      </section>
+      <section class="panel health-panel">
+        <h2>Team health</h2>
+        <p class="caption">
+          Quy tắc vận hành: Archived → Setup required (chưa có ACTIVE MANAGER) →
+          Attention (task chờ hoặc agent DEGRADED) → Normal. Không phải bằng
+          chứng runtime health.
+        </p>
+        @for (team of dashboard.teams.items; track team.id) {
+          <p>
+            {{ team.name }} · {{ health(team.health) }} —
+            {{ team.healthReason }}
+          </p>
+        } @empty {
+          <p>Chưa có team để đánh giá.</p>
+        }
+      </section>
+      <section class="panel performance">
+        <h2>Performance &amp; cost</h2>
+        <p>Chưa khả dụng · {{ dashboard.performance.reason }}</p>
+        <p class="muted">
+          Chưa có execution attempts và billing ledger để tính hiệu suất hoặc
+          chi phí.
+        </p>
+      </section>
+    }
+  </main>
+</div>
