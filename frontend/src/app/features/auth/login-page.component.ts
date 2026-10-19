@@ -1,12 +1,12 @@
 import {Component, inject, signal} from '@angular/core';
 import {FormsModule} from '@angular/forms';
-import {ActivatedRoute, Router} from '@angular/router';
+import {ActivatedRoute, Router, RouterLink} from '@angular/router';
 import {AuthFailure, AuthService} from '../../core/auth/auth.service';
 
 @Component({
   selector: 'app-login-page',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, RouterLink],
   template: `
     <main class="auth-wrapper">
       <header class="auth-brand">
@@ -69,39 +69,15 @@ import {AuthFailure, AuthService} from '../../core/auth/auth.service';
         <button class="button auth-action" type="submit" [disabled]="pending()">
           {{ pending() ? 'Đang đăng nhập…' : 'Đăng nhập' }}
         </button>
-        <button
-          class="button secondary auth-action"
-          type="button"
-          (click)="recovery.showModal()"
-        >
+        <a class="button secondary auth-action" routerLink="/forgot-password">
           Quên mật khẩu
-        </button>
+        </a>
         @if (!error()) {
           <p class="auth-small">
             Liên hệ quản trị viên nếu bạn chưa được cấp quyền truy cập.
           </p>
         }
       </form>
-      <dialog
-        #recovery
-        aria-labelledby="recovery-title"
-        aria-describedby="recovery-description"
-        class="auth-dialog"
-      >
-        <h2 id="recovery-title">Khôi phục mật khẩu</h2>
-        <p id="recovery-description">
-          Khôi phục mật khẩu chưa khả dụng. Liên hệ quản trị viên để được hỗ
-          trợ.
-        </p>
-        <button
-          class="button secondary auth-action"
-          type="button"
-          autofocus
-          (click)="recovery.close()"
-        >
-          Đóng
-        </button>
-      </dialog>
     </main>
   `,
 })

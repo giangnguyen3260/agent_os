@@ -1,4 +1,21 @@
-# Foundation implementation status — 15 October 2026
+# Implementation status — 19 October 2026
+
+## Current branch outcome
+
+On `feature/auth-recovery`, login/session and password recovery are verified for development use at application/probe source `9a4159c5682b0c990471360c0b2d5c1a3b050bc4`:29 backend tests,24 browser instances at desktop/tablet/mobile widths, real PostgreSQL/Mailpit, concurrent login/reset lock barrier, and backend-restart session persistence/logout replay denial passed in GitHub Actions. See [recovery evidence](docs/engineering/AUTH_RECOVERY.md) and [independent QC](docs/qc/AUTH_RECOVERY_QC_REPORT.md).
+
+PR3 is stacked on unmerged PR2. These changes are not deployed to the user's Mac or merged into main by this status update. Sonar is temporarily paused by user instruction, not passed.
+
+| Scope | Actual state |
+|---|---|
+| Human login/session and password recovery | Development gate verified; PostgreSQL persistence, real local SMTP and revocation tested |
+| Workspace selection/provisioning | Live membership hand-off only; full workflow incomplete |
+| Team, agent, mission, approval and operational dashboards | Full designed flows incomplete; old static previews are blocked from normal authenticated navigation |
+| Production security/scale | Not accepted: complete roles/grants, timing/privacy and edge abuse controls, multi-replica/load/failover, full visual/accessibility and release hardening remain |
+
+## Historical foundation snapshot — 15 October 2026
+
+The text below records that earlier slice and its environment limitations. It is superseded for current login/recovery and CI status by the outcome above; historical blocked checks are not current failures or current completion evidence.
 
 ## Implemented in the first coding slice
 

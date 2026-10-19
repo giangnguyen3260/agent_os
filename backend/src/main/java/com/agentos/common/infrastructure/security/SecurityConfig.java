@@ -45,9 +45,10 @@ public class SecurityConfig {
                     && !Boolean.TRUE.equals(
                         jdbc.queryForObject(
                             "select count(*) > 0 from human_accounts where id = ? and enabled ="
-                                + " true",
+                                + " true and credential_version = ?",
                             Boolean.class,
-                            human.id()))) {
+                            human.id(),
+                            human.credentialVersion()))) {
                   var existing = request.getSession(false);
                   if (existing != null) existing.invalidate();
                   org.springframework.security.core.context.SecurityContextHolder.clearContext();
@@ -62,6 +63,8 @@ public class SecurityConfig {
                 auth.requestMatchers(
                         "/api/v1/auth/csrf",
                         "/api/v1/auth/login",
+                        "/api/v1/auth/recovery/request",
+                        "/api/v1/auth/recovery/confirm",
                         "/actuator/health",
                         "/actuator/health/**")
                     .permitAll()

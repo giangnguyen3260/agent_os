@@ -5,6 +5,17 @@ spring:
     url: jdbc:postgresql://localhost:5432/agentos
     username: agentos
     password: agentos
+  mail:
+    host: ${SPRING_MAIL_HOST:localhost}
+    port: ${SPRING_MAIL_PORT:1025}
+    username: ${AGENTOS_SMTP_USERNAME:}
+    password: ${AGENTOS_SMTP_PASSWORD:}
+    properties:
+      mail.smtp.auth: ${AGENTOS_SMTP_AUTH:false}
+      mail.smtp.starttls.enable: ${AGENTOS_SMTP_STARTTLS:false}
+      mail.smtp.connectiontimeout: ${AGENTOS_SMTP_CONNECTION_TIMEOUT:5000}
+      mail.smtp.timeout: ${AGENTOS_SMTP_READ_TIMEOUT:5000}
+      mail.smtp.writetimeout: ${AGENTOS_SMTP_WRITE_TIMEOUT:5000}
   jpa:
     hibernate:
       ddl-auto: validate
@@ -26,6 +37,12 @@ server:
         secure: ${AGENTOS_SESSION_COOKIE_SECURE:true}
 
 agentos:
+  recovery:
+    enabled: ${AGENTOS_RECOVERY_ENABLED:false}
+    frontend-base-url: ${AGENTOS_RECOVERY_FRONTEND_BASE_URL:}
+    from: ${AGENTOS_RECOVERY_FROM:}
+    dispatch-delay-ms: ${AGENTOS_RECOVERY_DISPATCH_DELAY_MS:1000}
+    retry-delay-seconds: ${AGENTOS_RECOVERY_RETRY_DELAY_SECONDS:60}
   orchestration:
     max-task-retries: 3
     max-planning-retries: 2

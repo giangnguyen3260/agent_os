@@ -39,9 +39,16 @@ services:
       AGENTOS_BOOTSTRAP_DISPLAY_NAME: ${AGENTOS_BOOTSTRAP_DISPLAY_NAME:-}
       AGENTOS_BOOTSTRAP_PASSWORD: ${AGENTOS_BOOTSTRAP_PASSWORD:-}
       AGENTOS_SESSION_COOKIE_SECURE: ${AGENTOS_SESSION_COOKIE_SECURE:-false}
+      AGENTOS_RECOVERY_ENABLED: ${AGENTOS_RECOVERY_ENABLED:-true}
+      AGENTOS_RECOVERY_FRONTEND_BASE_URL: ${AGENTOS_RECOVERY_FRONTEND_BASE_URL:-http://localhost:8080}
+      AGENTOS_RECOVERY_FROM: ${AGENTOS_RECOVERY_FROM:-no-reply@agentos.local}
+      SPRING_MAIL_HOST: mailpit
+      SPRING_MAIL_PORT: '1025'
     depends_on:
       postgres:
         condition: service_healthy
+      mailpit:
+        condition: service_started
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     restart: unless-stopped
@@ -58,6 +65,13 @@ services:
         condition: service_healthy
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+
+  # Development mailbox only; messages never relay to external email services.
+  mailpit:
+    image: axllent/mailpit:v1.27.4
+    ports:
+      - '127.0.0.1:${MAILPIT_PORT:-8025}:8025'
     restart: unless-stopped
 
 volumes:

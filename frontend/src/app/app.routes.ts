@@ -11,6 +11,20 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'forgot-password',
+    loadComponent: () =>
+      import('./features/auth/forgot-password-page.component').then(
+        module => module.ForgotPasswordPageComponent,
+      ),
+  },
+  {
+    path: 'reset',
+    loadComponent: () =>
+      import('./features/auth/reset-password-page.component').then(
+        module => module.ResetPasswordPageComponent,
+      ),
+  },
+  {
     path: 'workspace',
     canActivate: [authGuard],
     loadComponent: () =>

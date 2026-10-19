@@ -26,7 +26,10 @@ interface CsrfToken {
 }
 export type AuthFailureKind = 'unauthorized' | 'network' | 'server';
 export class AuthFailure extends Error {
-  constructor(readonly kind: AuthFailureKind) {
+  constructor(
+    readonly kind: AuthFailureKind,
+    readonly code?: 'INVALID_RESET_TOKEN',
+  ) {
     super(kind);
   }
 }
@@ -47,7 +50,13 @@ export class AuthService {
           this.currentUser.set(null);
           throw new AuthFailure('unauthorized');
         }
-        throw new AuthFailure(error.status === 0 ? 'network' : 'server');
+        throw new AuthFailure(
+          error.status === 0 ? 'network' : 'server',
+          error.status === 400 &&
+          error.error?.error?.code === 'INVALID_RESET_TOKEN'
+            ? 'INVALID_RESET_TOKEN'
+            : undefined,
+        );
       }
       throw error;
     }
@@ -88,6 +97,36 @@ export class AuthService {
       );
       this.currentUser.set(response.data);
       return response.data;
+    });
+  }
+
+  requestRecovery(email: string): Promise<void> {
+    return this.request(async () => {
+      const headers = await this.csrfHeaders();
+      const response = await firstValueFrom(
+        this.http.post<ApiResponse<{accepted: boolean}>>(
+          `${this.base}/recovery/request`,
+          {email},
+          {headers, observe: 'response'},
+        ),
+      );
+      if (response.status !== 202 || response.body?.data?.accepted !== true) {
+        throw new AuthFailure('server');
+      }
+    });
+  }
+
+  confirmRecovery(token: string, password: string): Promise<void> {
+    return this.request(async () => {
+      const headers = await this.csrfHeaders();
+      const response = await firstValueFrom(
+        this.http.post<void>(
+          `${this.base}/recovery/confirm`,
+          {token, password},
+          {headers, observe: 'response'},
+        ),
+      );
+      if (response.status !== 204) throw new AuthFailure('server');
     });
   }
 
