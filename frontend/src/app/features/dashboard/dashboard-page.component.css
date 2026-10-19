@@ -305,3 +305,9 @@ dialog {
     width: 100%;
   }
 }
+
+.team-task-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

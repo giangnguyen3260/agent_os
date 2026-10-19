@@ -1,70 +1,56 @@
-# Dashboard independent BA/QC review
+# Dashboard independent BA/QC report
 
-Review date: 2026-10-19. Branch: `feature/dashboard-live`. Baseline HEAD: `42ae812` (shared working tree, not an immutable implementation revision). Reviewed `docs/engineering/DASHBOARD_DELIVERY_CONTRACT.md`, routes, dashboard component, initial schema, organization security, quality workflow and browser configuration. QC owns only this report; no application changes made.
+Review: 2026-10-19, branch `feature/dashboard-live`, baseline HEAD `42ae8120ee361ccc34409e55e1bbddaf3f34b3c4` plus shared uncommitted changes. QC edited only this report. This final source checkpoint supersedes earlier interim findings.
 
 ## Disposition
 
-**Blocked for dashboard acceptance: delivery is in progress and executed dashboard evidence is absent.** Initially only the untracked contract was present. Agent application changes appeared during review; the follow-up below supersedes the initial absence finding. Reinspect the final diff before acceptance. No CI pass is claimed.
+**No blocking source defect identified for the bounded dashboard development flow. Runtime gate remains pending actual CI results.** Contract DQC-01–04 are resolved; missing route/template/import checkpoint findings DQC-05–06 are closed. Earlier missing-font build failure is resolved by the dependency installation and independently successful build. No CI, backend test or browser pass is claimed.
 
-The scope is appropriately bounded to one organization overview and task drilldown. Preserve unique RUNNING tasks as Running, unique WAITING/BLOCKED tasks as Pending, and IN_REVIEW tasks as Review. Never substitute missions, approval totals or blocker totals. Resource allocation, pipeline execution and billing are not prerequisites for this read flow; their absence requires explicit unavailable states, not fabricated utilization, performance or currency. Keep mutation, creation and other module workflows unavailable.
+Scope is organization overview plus inline task drilldown, with explicit refresh. Execution engine, task mutations, creation/admin flows, allocator and billing remain out of scope. Optional wider testing is not a blocker for this bounded development gate.
 
-## Contract decisions needed before acceptance
+## Source findings
 
-| ID | Gap and concrete resolution | Acceptance evidence |
-| --- | --- | --- |
-| DQC-01 | “Excessive page” has no bound. Specify a numeric maximum for both page parameters, integer parsing rules and behavior for a valid page beyond the last result. Prefer 200 with empty items and accurate total for valid out-of-range pages; do not silently clamp. | Boundary tests for -1, 0, max, max+1, integer overflow and malformed input on both endpoints. |
-| DQC-02 | `resolver` has no wire type or disclosure rule. Specify whether it is a display string or structured identity, required fields, and permitted identity sources. Define nonblank reason/resolver and nonnull waitingSince for both WAITING and BLOCKED, and nullability for other states. Do not expose email or foreign identities accidentally. | Schema and response assertions for each pending state; reject null/blank pending metadata. Verify nullable fields on nonpending tasks and render the agreed representation. |
-| DQC-03 | The new durable task model needs explicit tenant and relationship constraints. Define task status domain, team requirement, mission optionality and whether task team must match mission team. Require referenced team/mission to belong to the task organization. Existing independent organization/team foreign keys in the initial schema alone do not prove this. | PostgreSQL rejects cross-organization task/team and task/mission inserts; reads scope every join to the organization even if legacy relationships are inconsistent. No unrelated schema redesign required. |
-| DQC-04 | Stable ordering is not a snapshot across requests. Define created_at ascending/descending and acknowledge that independently refreshed offset pages can shift during inserts/deletes. One repeatable-read transaction covers snapshot, team counts and team items in a single overview response, not subsequent pages or the task endpoint. Define generatedAt as the database snapshot acquisition time or an explicitly approximate response timestamp. | Tied names/timestamps page deterministically by ID on unchanged data. Concurrent writer cannot create mixed aggregates within one overview response. UI does not promise task-list totals equal an older overview after a live update. |
-
-Health precedence is clear. Interpret MANAGER as persisted `AgentLevel.MANAGER`, not a free-text role. Agent totals include persisted archived agents; activeAgents includes only ACTIVE. Archived teams and their tasks remain included. Define a bounded query budget in implementation evidence so “constant query count” can be verified rather than inferred from a small fixture.
-
-## Actionable acceptance cases
-
-All dashboard cases below are **not executed** at this checkpoint.
-
-| Case | Setup and required result |
+| Area | Review conclusion |
 | --- | --- |
-| DQC-T01 Real counts and deduplication | Alpha: 2 RUNNING, 1 WAITING, 1 BLOCKED, 1 IN_REVIEW, plus terminal tasks. Add multiple agents to each team and unrelated missions/audit records. Require Running=2, Pending=2, Review=1, each drilldown ID exactly once, matching team counts and uninflated agent counts. Add archived-team tasks and verify inclusion. Approval-like records never increase Pending. |
-| DQC-T02 Empty and unavailable | Fresh organization has no task rows and all task metrics are zero. Capacity/performance have available=false and meaningful reasons. No sample names, percentages, prices or limits appear. No production fixture seeding. |
-| DQC-T03 Tenant authorization and disclosure | Anonymous gets 401; authenticated nonmember gets 403 for both organization dashboard endpoints. Alpha member filtering a Beta team or nonexistent team gets equivalent 404 without names/counts/IDs. Remove membership after a successful read and retry both endpoints: 403. All task/team/mission joins remain tenant scoped. |
-| DQC-T04 Health precedence | Archived team with no manager and pending tasks is ARCHIVED. Nonarchived team without ACTIVE MANAGER is SETUP_REQUIRED even with pending/degraded records. With active manager, pending task or DEGRADED agent yields ATTENTION; otherwise NORMAL. Health reason explains the winning rule without claiming runtime telemetry. |
-| DQC-T05 Pagination and bounds | At least 41 teams and 41 tasks, duplicate names and creation times. Fixed size 20, correct totals, deterministic ID tie-break, no duplicate/missing records across unchanged pages. Check both state aliases WAITING/BLOCKED map to PENDING; unknown state and invalid UUID/page inputs use agreed errors. Team and task pagination do not alter one another. |
-| DQC-T06 Database integrity and queries | Apply migrations on real PostgreSQL, validate pending metadata and tenant constraints, and inspect indexes for organization/status/team/order access paths. Compare SQL statement counts for 1 versus 20 returned teams: no per-team queries. Coordinate a writer between overview reads and assert one consistent transaction snapshot. |
-| DQC-T07 Request races and access loss | Delay Alpha success, switch to Beta, then release Alpha response: no Alpha data returns. Repeat with stale error/401, state/team/page changes and component exit. Current 403/401/network/5xx clears protected stale content and offers the appropriate recovery. Existing global auth-epoch tests alone do not verify dashboard state. |
-| DQC-T08 Single real flow | Existing context heading remains; open protected /workspace/:id/dashboard. Running, Pending, Review and Team Open all use the actual inline list; Pending shows reason, wait start and resolver. View teams focuses actual list; switch workspace and logout work. Unsupported modules and creation show explanations and cannot navigate to static sample pages. |
-| DQC-T09 Explicit refresh and viewports | Update tasks through test-only PostgreSQL fixtures, explicitly refresh and observe new counts/list. At 1440/768/390 verify desktop sidebar, compact menu/dialog, metric columns, long text, loading/empty/error/retry, no horizontal overflow, and reset/clamp behavior when totals shrink. Do not call this realtime. |
-| DQC-T10 Regression and gate | Retain login/recovery/workspace suites, use real PostgreSQL Alpha/Beta dashboard fixtures, and collect actual final-revision integration/browser results and CI job links. Keep Sonar paused. Test presence, fixture-only rendering and historical workspace CI are not dashboard runtime acceptance. |
+| Counts and deduplication | RUNNING, WAITING/BLOCKED and IN_REVIEW are counted from unique persisted task rows. Summary tasks have no multiplicative joins; team agent/task aggregates are calculated independently before joining teams. No approval summation or mission substitution. Archived teams/tasks remain included. |
+| SQL and consistency | Summary and task reads use repeatable-read transactions. Five summary statements, two task statements or three with team filter are consistent with source and instrumentation assertions. All data queries filter organization; task team-name join also matches organization. Values are bound parameters; state predicates come from a fixed switch. Ordering and bounds match clarified contract. Separate offset page requests can shift as documented. |
+| Schema and rollout | V004 composite organization/team/mission foreign keys enforce same organization and team, with required task mission/team and restricted status domain. WAITING/BLOCKED require nonblank reason/resolver and timestamp; other states require null pending metadata. Existing mission/team constraint fails closed on inconsistent legacy rows; rollout document provides read-only precheck and operator handling. Supporting indexes exist. PostgreSQL migration execution remains pending. |
+| Security | Existing organization URL membership authorization applies to both endpoints on each request. Foreign/missing team filters share scoped not-found logic. Resolver is operational display text, not an identity lookup. No source tenant bypass found. Membership revocation is enforced on subsequent requests, not promised as push invalidation. |
+| Component request state | Overview load cancels prior requests and clears prior data/context; version and destruction guards reject delayed context completion. Task requests are canceled and generation-guarded on filter/route/overview changes and destruction. 401/403 clear protected state; task 404 offers recovery. Failed task loads do not retain previous task rows. No blocking stale tenant/task response path identified in inspected source; deterministic dashboard race execution remains a follow-up, not a claimed test result. |
+| Flow and UI | Protected workspace/:id/dashboard route and context entry are present; original context heading retained. Team Open uses same task panel. Team/task pages have separate state. Unsupported navigation/creation visibly unavailable; workspace switch/logout present. Capacity/performance explicitly unavailable. Responsive shell and pending metadata rendering present. No fake capacity, cost or performance found. |
 
-## Independently executed local checks
+DQC-01 now specifies maximum page 107374182, signed-int parsing and beyond-last empty results. DQC-02 specifies resolver display string and metadata nullability. DQC-03 specifies task relationships/status and legacy rollout behavior. DQC-04 specifies approximate transaction timestamp, ascending task order and independent live offset paging. These contract issues are closed in source.
 
-| Command | Actual result and limit |
+## Independent execution
+
+Frontend files were hashed at two source inspections and again after checks; dashboard TS/HTML/CSS/service, routes and context entry hashes were unchanged throughout validation. Commands below ran against that stable source checkpoint without application edits.
+
+| Command | Actual result |
 | --- | --- |
-| `python3 scripts/check-java-imports.py` | PASS, exit 0. Import style only. |
-| `cd frontend && node scripts/test-auth-generation.cjs` | PASS, exit 0: delayed session success and delayed unauthorized response cannot overwrite a newer account. Existing service harness, not dashboard/browser evidence. |
-| `cd frontend && npm run build` | FAIL, exit 1: cannot resolve `@fontsource/inter/400.css`, `600.css`, `700.css` imported by src/styles.css. Package is declared in package.json; local dependency installation is incomplete. Reinstall the lockfile dependencies in the build environment and rerun before attributing a source regression. |
-| Runtime prerequisites | `command -v mvn` and `command -v docker` found neither; `java -version` reports 17.0.20, while pom.xml requires 21. Backend/PostgreSQL/browser runtime suites were not attempted. Node is v24.19.0. |
+| `python3 scripts/check-java-imports.py` | PASS after backend completion; wildcard import finding closed. |
+| `cd frontend && npm run lint` | PASS. |
+| `cd frontend && npm run format:check` | PASS; all matched source files formatted. |
+| `cd frontend && npm run test:tooling` | PASS; editor dependency create/read/cleanup and traversal rejection checks. |
+| `cd frontend && node scripts/test-auth-generation.cjs` | PASS; both delayed session success and delayed unauthorized cases. Service harness, not dashboard browser race coverage. |
+| `cd frontend && npm run build` | PASS, Angular production bundle including dashboard templates/styles; completed 2026-10-19T15:12:35.877Z. |
+| `node --check frontend/tests/e2e/dashboard.spec.mjs` | PASS; syntax only. |
 
-## Follow-up ownership
+Backend tests were not executed by QC: local runtime lacks Maven/Docker and has Java 17 versus required 21. Main additionally reports Maven DNS failure; QC has not independently reproduced that failure. Java formatting is reported passed by main; QC independently executed only the import check. Sonar remains paused.
 
-Implementation owners resolve DQC-01 through DQC-04 in the contract/API/schema and provide dashboard source/tests. Record final tested commit plus any dirty diff, exact commands, counts, failures and CI URLs before changing disposition. Final implementation/runtime review remains pending.
+## Pending runtime evidence and concrete cases
 
-## Follow-up: agent changes observed during review
+Six dashboard backend integration methods are present: aggregate counts/health/live reads, input/access/empty behavior, fresh organization, stable pagination/team filters, query budget, and schema rejection. The query-budget harness instruments physical statements over a real application connection inside a repeatable-read transaction; assertions are present but not yet executed. `application-test.yml` uses H2 PostgreSQL mode, so this suite alone cannot establish native PostgreSQL behavior.
 
-Inspected the newly written DashboardService, DashboardController, V004 migration, dashboard frontend service/component and Docker fixture wiring. Working tree remains in progress on the same HEAD.
+Seven browser cases are present, configured for 1440/768/390: real snapshot/pending explanation, DB transition refresh, foreign org/team isolation, empty data, membership revocation on reload, transport retry and compact navigation/team filter. Disposable SQL fixtures are wired into Docker CI against real PostgreSQL; mutation cases restore fixtures in finally and browser configuration is serial. Test presence is not a passing result.
 
-- V004 source addresses the main DQC-03 integrity concern: composite organization/team/mission foreign keys, required mission/team, bounded status domain and pending metadata checks. Nonpending metadata must be null. PostgreSQL execution remains unverified. The new constraint on existing missions may reject legacy cross-tenant mission/team rows; migration tests should include representative existing data.
-- DQC-01 implementation selects MAX_PAGE=107374182, fixed size 20, and empty results beyond the final page. Task ordering is created_at/id ascending. Document these in the contract and test boundaries. A signed-in request with missing required state should also return 400.
-- Resolver is a nullable string in the DTO and varchar(255) in storage. WAITING/BLOCKED require nonblank reason/resolver and a timestamp. Document the display/disclosure rule and required mission in the contract.
-- Summary uses repeatable-read, five database statements, task aggregation without agent joins, and separate agent/task aggregates before joining teams. Task reads use two statements, or three with a team filter, in repeatable-read. Organization scope and parameterized values are present; state SQL is chosen from a fixed switch. No approval-count summation or fabricated capacity/performance was observed.
-- Frontend source clears data at overview load, cancels task requests, guards responses by generation and clears protected state on 401/403. This is a favorable source finding, not proof of race behavior. Independently refreshed task pages may legitimately disagree with earlier overview totals.
+Before development gate approval, collect actual quality and Docker results for the final published application revision, preserving existing login/recovery/workspace regressions. Confirm real PostgreSQL migration/fixture success and all seven dashboard cases across three configured viewports. Investigate actual failures; do not require optional breadth merely to close this bounded gate.
 
-Concrete in-progress blockers observed at this checkpoint:
+Useful follow-up cases if runtime reveals a concern: hold Alpha overview/task responses while switching organization/filter and release them late; verify no stale data/error can replace the new selection. Concurrent-write snapshot probing, broader failure injection and exhaustive accessibility are not presently source blockers. Record any final changes after this checkpoint and recheck affected areas before claiming acceptance.
 
-| ID | Finding | Required resolution |
-| --- | --- | --- |
-| DQC-05 | Independent Java import check now FAILS: DashboardController.java line 5 uses a wildcard import. | Replace with explicit imports and rerun the repository import check and required formatting. Initial baseline import PASS does not cover the new files. |
-| DQC-06 | Component references dashboard-page.component.html/css, but neither file exists at the inspected checkpoint. Required workspace/:id/dashboard route is also absent. | Finish template/styles and protected route/context entry, then run Angular build/template compilation. TypeScript-only checking cannot establish these resources or route behavior. |
-| DQC-07 | No executed dashboard integration/browser evidence; fixture wiring alone is insufficient. | Execute DQC-T01 through T10 with final revision and retain results before gate approval. |
+## PR 5 source recommendation
 
-Independent follow-up command: `cd frontend && ./node_modules/.bin/tsc --noEmit -p tsconfig.app.json` PASS, exit 0. This checks TypeScript only, not Angular external templates, migrations, HTTP behavior or browser rendering. No further build pass is claimed. The source is changing concurrently; checkpoint findings may be resolved by later agent edits and must be rechecked.
+Main reports published revision `dd8ecb1156b3498397126b572aad3358900ca5b9`, no subsequent application changes, and CI started. **Recommend proceeding through the bounded development CI gate; no source blocker identified.** This is not runtime approval or a merge/production recommendation.
+
+QC could not independently bind the reviewed working tree to that SHA: the shared checkout remains at `42ae812` with implementation changes uncommitted, and the published commit object is unavailable locally (`git show`: bad object). The source recommendation therefore covers the inspected working tree; attribution to the published SHA relies on main's statement.
+
+Main expects 39 backend tests and 54 browser instances. These are expected counts, not results. Require actual completed quality/Docker logs for the published revision before recording a passing development gate. Mocked-HTTP static visual checks can establish layout observations only; they do not replace real PostgreSQL/browser evidence.

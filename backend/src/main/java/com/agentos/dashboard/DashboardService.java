@@ -156,8 +156,8 @@ left join (select team_id,
     return new Summary(
         generatedAt,
         new Snapshot(tasks[0], tasks[1], tasks[2], totalTeams, agents[0], agents[1]),
-        new Unavailable(false, "Resource allocator is not available"),
-        new Unavailable(false, "Execution attempts and billing ledger are not available"),
+        new Unavailable(false, "Chưa có số liệu sử dụng tài nguyên"),
+        new Unavailable(false, "Chưa có số liệu hiệu suất và chi phí"),
         new Page<>(teams, page, SIZE, totalTeams));
   }
 

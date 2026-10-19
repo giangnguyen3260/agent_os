@@ -16,10 +16,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DataSourceUtils;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
+import org.springframework.transaction.TransactionDefinition;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -112,7 +115,7 @@ class DashboardIntegrationTest {
         status);
   }
 
-  SecurityMockMvcRequestPostProcessors.AuthenticationRequestPostProcessor auth() {
+  RequestPostProcessor auth() {
     return SecurityMockMvcRequestPostProcessors.authentication(
         new UsernamePasswordAuthenticationToken(
             new HumanIdentity(account, account + "@example.test", "Tester"),
@@ -297,12 +300,10 @@ class DashboardIntegrationTest {
     // that suppresses close so the transaction manager retains connection ownership.
     var tx = new org.springframework.transaction.support.TransactionTemplate(transactions);
     tx.setReadOnly(true);
-    tx.setIsolationLevel(
-        org.springframework.transaction.TransactionDefinition.ISOLATION_REPEATABLE_READ);
+    tx.setIsolationLevel(TransactionDefinition.ISOLATION_REPEATABLE_READ);
     tx.executeWithoutResult(
         transaction -> {
-          var connection =
-              org.springframework.jdbc.datasource.DataSourceUtils.getConnection(dataSource);
+          var connection = DataSourceUtils.getConnection(dataSource);
           var statements = new java.util.concurrent.atomic.AtomicInteger();
           var observed =
               (java.sql.Connection)

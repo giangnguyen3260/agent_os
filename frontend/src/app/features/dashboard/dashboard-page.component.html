@@ -1,9 +1,14 @@
 <ng-template #navigation>
   <nav aria-label="Điều hướng workspace">
-    <span class="selected" aria-current="page">Overview</span
-    ><button type="button" (click)="viewTeams()">Teams</button>
+    <span class="selected" aria-current="page">Overview</span>
+    <button type="button" disabled aria-describedby="unfinished">
+      Organization map
+    </button>
+    <button type="button" (click)="viewTeams()">Teams</button>
     @for (module of modules; track module) {
-      <button type="button" disabled>{{ module }} · Chưa hoàn thiện</button>
+      <button type="button" disabled aria-describedby="unfinished">
+        {{ module }}
+      </button>
     }
     <a routerLink="/workspace">Đổi workspace</a>
   </nav>
@@ -134,8 +139,7 @@
           ><small>Chờ review</small>
         </button>
         <article class="metric" data-testid="metric-capacity">
-          <span>Capacity</span><strong>—</strong><small>Chưa khả dụng</small
-          ><small>{{ dashboard.capacity.reason }}</small>
+          <span>Capacity</span><strong>—</strong><small>Chưa có dữ liệu</small>
         </article>
       </section>
       <p class="caption">
@@ -319,7 +323,7 @@
             >
               {{ team.running }} Running
             </button>
-            <div>
+            <div class="team-task-actions">
               <button
                 type="button"
                 class="text-action"
@@ -373,9 +377,8 @@
       <section class="panel health-panel">
         <h2>Team health</h2>
         <p class="caption">
-          Quy tắc vận hành: Archived → Setup required (chưa có ACTIVE MANAGER) →
-          Attention (task chờ hoặc agent DEGRADED) → Normal. Không phải bằng
-          chứng runtime health.
+          Setup required: cần manager hoạt động. Attention: có task chờ hoặc
+          agent cần kiểm tra.
         </p>
         @for (team of dashboard.teams.items; track team.id) {
           <p>
@@ -388,11 +391,7 @@
       </section>
       <section class="panel performance">
         <h2>Performance &amp; cost</h2>
-        <p>Chưa khả dụng · {{ dashboard.performance.reason }}</p>
-        <p class="muted">
-          Chưa có execution attempts và billing ledger để tính hiệu suất hoặc
-          chi phí.
-        </p>
+        <p class="muted">Chưa có dữ liệu về hiệu suất và chi phí.</p>
       </section>
     }
   </main>
