@@ -1,6 +1,6 @@
 # AgentOS
 
-Java21 / Spring Boot backend, Angular21 frontend and PostgreSQL. This is a local-development foundation, not a production release: persisted login/session and password recovery through local SMTP are implemented; full roles, workspace management and runtime workflows remain incomplete. See [recovery setup and verification](docs/engineering/AUTH_RECOVERY.md) and [independent recovery QC](docs/qc/AUTH_RECOVERY_QC_REPORT.md).
+Java21 / Spring Boot backend, Angular21 frontend and PostgreSQL. This is a local-development foundation, not a production release: persisted login/session, local-SMTP password recovery and membership-backed workspace selection are implemented. This branch adds a live organization overview and persisted task read model; full roles, task execution/mutation, team creation flows and runtime workflows remain incomplete. See [dashboard delivery scope](docs/engineering/DASHBOARD_DELIVERY_CONTRACT.md), [workspace scope](docs/engineering/AUTH_WORKSPACE.md), [recovery setup and verification](docs/engineering/AUTH_RECOVERY.md) and [independent recovery QC](docs/qc/AUTH_RECOVERY_QC_REPORT.md).
 
 ## Build and run everything with Docker
 
@@ -59,7 +59,7 @@ npm ci
 npm start
 ```
 
-This source-preview frontend currently uses illustrative data. The Docker Nginx API proxy is separate from the Angular dev-server setup. Stop development dependencies with `bash scripts/dev-down.sh` from repository root. Do not run both Compose setups against the same host ports without adjusting configuration.
+Authenticated login, recovery, workspace and overview routes use API data. Older business previews remain blocked by navigation guards. The overview reports zero actual tasks on a fresh database and shows unavailable capacity/performance explicitly; it does not generate examples. V004 adds a tenant-constrained task table; read [migration rollout](backend/DASHBOARD_MIGRATION.md) before applying to existing data. The Docker Nginx API proxy is separate from the Angular dev-server setup. Stop development dependencies with `bash scripts/dev-down.sh` from repository root. Do not run both Compose setups against the same host ports without adjusting configuration.
 
 ## Quality and QC
 

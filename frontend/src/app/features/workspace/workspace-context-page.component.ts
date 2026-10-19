@@ -60,8 +60,13 @@ import {
             này.
           </p>
           <p class="auth-subtitle">
-            Dashboard và các mô-đun nghiệp vụ đang được phát triển.
+            Các mô-đun nghiệp vụ khác đang được phát triển.
           </p>
+          <a
+            class="button auth-action"
+            [routerLink]="['/workspace', context.id, 'dashboard']"
+            >Mở tổng quan</a
+          >
         }
         <a class="button secondary auth-action" routerLink="/workspace"
           >Quay lại chọn workspace</a
