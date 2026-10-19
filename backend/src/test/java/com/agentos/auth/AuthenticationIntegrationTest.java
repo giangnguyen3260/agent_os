@@ -159,7 +159,8 @@ class AuthenticationIntegrationTest {
         second,
         second.toString());
     jdbc.update(
-        "insert into organization_memberships(account_id,organization_id,role) values (?,?,'MEMBER')",
+        "insert into organization_memberships(account_id,organization_id,role) values"
+            + " (?,?,'MEMBER')",
         account,
         second);
     mvc.perform(get("/api/v1/auth/workspaces/" + second).cookie(cookie))
@@ -184,8 +185,7 @@ class AuthenticationIntegrationTest {
             .andReturn()
             .getResponse()
             .getContentAsString();
-    assertThat(json.readTree(revoked).get("error"))
-        .isEqualTo(json.readTree(missing).get("error"));
+    assertThat(json.readTree(revoked).get("error")).isEqualTo(json.readTree(missing).get("error"));
     mvc.perform(get("/api/v1/auth/workspaces/" + organization).cookie(cookie))
         .andExpect(status().isOk());
   }
@@ -201,7 +201,8 @@ class AuthenticationIntegrationTest {
         encoder.encode(PASSWORD));
     jdbc.update("delete from organization_memberships where account_id = ?", account);
     jdbc.update(
-        "insert into organization_memberships(account_id,organization_id,role) values (?,?,'ADMIN')",
+        "insert into organization_memberships(account_id,organization_id,role) values"
+            + " (?,?,'ADMIN')",
         otherAccount,
         organization);
     mvc.perform(get("/api/v1/auth/workspaces/" + organization).cookie(login()))

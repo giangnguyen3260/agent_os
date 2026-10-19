@@ -48,9 +48,10 @@ public class AuthController {
   public ApiResponse<Workspace> workspace(
       @AuthenticationPrincipal HumanIdentity human, @PathVariable UUID id) {
     return ApiResponse.ok(
-        jdbc.query(
-                "select o.id, o.name, m.role from organizations o join organization_memberships m on"
-                    + " o.id = m.organization_id where m.account_id = ? and o.id = ?",
+        jdbc
+            .query(
+                "select o.id, o.name, m.role from organizations o join organization_memberships m"
+                    + " on o.id = m.organization_id where m.account_id = ? and o.id = ?",
                 (rs, row) ->
                     new Workspace(
                         rs.getObject("id", UUID.class), rs.getString("name"), rs.getString("role")),
