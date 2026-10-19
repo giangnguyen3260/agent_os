@@ -54,3 +54,17 @@ Main reports published revision `dd8ecb1156b3498397126b572aad3358900ca5b9`, no s
 QC could not independently bind the reviewed working tree to that SHA: the shared checkout remains at `42ae812` with implementation changes uncommitted, and the published commit object is unavailable locally (`git show`: bad object). The source recommendation therefore covers the inspected working tree; attribution to the published SHA relies on main's statement.
 
 Main expects 39 backend tests and 54 browser instances. These are expected counts, not results. Require actual completed quality/Docker logs for the published revision before recording a passing development gate. Mocked-HTTP static visual checks can establish layout observations only; they do not replace real PostgreSQL/browser evidence.
+
+## Corrected revision and executed quality evidence
+
+Application source is now `156a158212b0f3f07cfcd1b09df58091b6229f67`, available as the clean local HEAD and published PR5 head. This supersedes the earlier attribution limitation. The first published attempt dd8ecb1 failed test compilation (private Spring Security helper type and a variable/package-name collision); both were corrected before this revision.
+
+Quality run [39276615879](https://github.com/giangnguyen3260/agent_os/actions/runs/39276615879), job118142443348, completed SUCCESS. Main and independent QC inspected logs:39 backend tests, zero failures/errors/skips; six dashboard methods passed at2026-10-19T15:17:45Z and aggregate result at15:18:01Z. Maven BUILD SUCCESS at15:18:04Z. Frontend lint/format/tooling/build and both auth-generation cases passed. Dashboard tests run H2 PostgreSQL mode; native PostgreSQL evidence still depends on Docker.
+
+Main additionally rendered the production SPA in Chromium153 with explicit HTTP fixtures, separately from real-backend tests:populated/empty/error at1440/768/390 (nine states), pending detail at each width (three states), compact menu Escape at768/390. No horizontal overflow. Desktop and mobile populated/pending screenshots were inspected against Figma; status-action spacing and user-facing explanations were refined and rechecked. Fixtures prove layout only, not persistence or backend correctness. Full visual/accessibility and forced stale-response testing remain outside the bounded development gate.
+
+Docker/native PostgreSQL/browser outcome remains pending at this checkpoint. Sonar remains paused.
+
+## Filter synchronization defect and correction
+
+Final rendered inspection found a blocking mismatch at revision156a158: the pending task list displayed WAITING/BLOCKED while its newly created native select showed Running. Binding select.value before dynamic options existed did not reliably select the requested state. Team selection had the same timing risk. The component now uses Angular FormsModule/NgModel for both selects and explicit accessible labels. The first real-backend dashboard E2E now asserts Pending's selected value, changes to Running and verifies returned task titles, then opens a team's Pending action and asserts both team and state values. Earlier successful CI does not close this newly discovered defect; corrected-revision runtime evidence is required below.

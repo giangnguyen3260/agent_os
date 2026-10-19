@@ -170,9 +170,9 @@
           <div class="filters">
             <label
               >Trạng thái<select
-                #stateFilter
-                [value]="selected"
-                (change)="changeState(stateFilter.value)"
+                aria-label="Trạng thái"
+                [ngModel]="selected"
+                (ngModelChange)="changeState($event)"
               >
                 @for (value of states; track value) {
                   <option [value]="value">{{ label(value) }}</option>
@@ -181,9 +181,9 @@
             >
             <label
               >Team<select
-                #teamFilter
-                [value]="teamId()"
-                (change)="changeTeam(teamFilter.value)"
+                aria-label="Team"
+                [ngModel]="teamId()"
+                (ngModelChange)="changeTeam($event)"
               >
                 <option value="">Tất cả teams</option>
                 @if (teamId()) {

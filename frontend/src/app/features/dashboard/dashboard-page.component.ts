@@ -10,6 +10,7 @@ import {
   viewChild,
 } from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
+import {FormsModule} from '@angular/forms';
 import {ActivatedRoute, Router, RouterLink} from '@angular/router';
 import {Subscription} from 'rxjs';
 import {
@@ -28,7 +29,7 @@ import {
 @Component({
   selector: 'app-dashboard-page',
   standalone: true,
-  imports: [RouterLink, DatePipe, NgTemplateOutlet],
+  imports: [RouterLink, DatePipe, NgTemplateOutlet, FormsModule],
   templateUrl: './dashboard-page.component.html',
   styleUrl: './dashboard-page.component.css',
 })

@@ -68,6 +68,9 @@ test('real task snapshot and pending drilldown explain waiting work', async ({
   await expect(page.getByTestId('metric-pending')).toContainText('2');
   await expect(page.getByTestId('metric-review')).toContainText('1');
   await page.getByTestId('metric-pending').click();
+  await expect(page.getByLabel('Trạng thái', {exact: true})).toHaveValue(
+    'PENDING',
+  );
   const tasks = page.getByRole('region', {name: 'Danh sách task', exact: true});
   await expect(
     tasks.getByText('Budget approval task', {exact: true}),
@@ -80,6 +83,25 @@ test('real task snapshot and pending drilldown explain waiting work', async ({
   await expect(tasks.getByText('Secret task title', {exact: true})).toHaveCount(
     0,
   );
+  await page.getByLabel('Trạng thái', {exact: true}).selectOption('RUNNING');
+  await expect(
+    tasks.getByText('Implement runtime API', {exact: true}),
+  ).toBeVisible();
+  await expect(
+    tasks.getByText('Budget approval task', {exact: true}),
+  ).toHaveCount(0);
+  await page
+    .getByTestId('team-row')
+    .filter({hasText: 'Engineering'})
+    .getByRole('button', {name: '2 Pending', exact: true})
+    .click();
+  await expect(page.getByLabel('Team', {exact: true})).toHaveValue(team);
+  await expect(page.getByLabel('Trạng thái', {exact: true})).toHaveValue(
+    'PENDING',
+  );
+  await expect(
+    tasks.getByText('Budget approval task', {exact: true}),
+  ).toBeVisible();
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth,
