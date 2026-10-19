@@ -1,3 +1,7 @@
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/600.css';
+@import '@fontsource/inter/700.css';
+
 /* Forest foundation tokens shared by the shell and feature pages. */
 :root {
   color-scheme: light;

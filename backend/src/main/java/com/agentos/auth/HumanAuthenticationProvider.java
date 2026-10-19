@@ -55,6 +55,22 @@ public class HumanAuthenticationProvider implements AuthenticationProvider {
     } catch (java.security.NoSuchAlgorithmException ex) {
       throw new IllegalStateException(ex);
     }
+    // Match recovery lock order, including the account lock acquired by audit foreign keys.
+    var accounts =
+        jdbc.query(
+            "select id, email, display_name, password_hash, enabled, credential_version from"
+                + " human_accounts where email = ? for update",
+            (rs, row) ->
+                new Account(
+                    new HumanIdentity(
+                        rs.getObject("id", UUID.class),
+                        rs.getString("email"),
+                        rs.getString("display_name"),
+                        rs.getLong("credential_version")),
+                    rs.getString("password_hash"),
+                    rs.getBoolean("enabled")),
+            email);
+    Account account = accounts.isEmpty() ? null : accounts.get(0);
     jdbc.update(
         "insert into authentication_attempts(account_key) values (?) on conflict do nothing", key);
     var attempt =
@@ -73,21 +89,6 @@ public class HumanAuthenticationProvider implements AuthenticationProvider {
       audit(null, "LOGIN_THROTTLED");
       return null;
     }
-    var accounts =
-        jdbc.query(
-            "select id, email, display_name, password_hash, enabled, credential_version from"
-                + " human_accounts where email = ?",
-            (rs, row) ->
-                new Account(
-                    new HumanIdentity(
-                        rs.getObject("id", UUID.class),
-                        rs.getString("email"),
-                        rs.getString("display_name"),
-                        rs.getLong("credential_version")),
-                    rs.getString("password_hash"),
-                    rs.getBoolean("enabled")),
-            email);
-    Account account = accounts.isEmpty() ? null : accounts.get(0);
     boolean matches =
         password.getBytes(StandardCharsets.UTF_8).length <= 72
             && encoder.matches(password, account == null ? dummyHash : account.hash());

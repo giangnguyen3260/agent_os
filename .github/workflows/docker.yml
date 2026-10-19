@@ -60,7 +60,7 @@ jobs:
           docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<'SQL'
           INSERT INTO human_accounts(id,email,display_name,password_hash)
           SELECT gen_random_uuid(), 'recovery-' || surface || '@example.test', 'Recovery QC', password_hash
-          FROM human_accounts CROSS JOIN (VALUES ('desktop'), ('tablet'), ('mobile')) AS surfaces(surface)
+          FROM human_accounts CROSS JOIN (VALUES ('desktop'), ('tablet'), ('mobile'), ('race')) AS surfaces(surface)
           WHERE email = 'qc@example.test';
           SQL
       - name: Install browser test dependencies
@@ -74,6 +74,11 @@ jobs:
           E2E_BASE_URL: http://127.0.0.1:18080
           E2E_MAILPIT_URL: http://127.0.0.1:18025
         run: npm run test:e2e
+      - name: PostgreSQL barrier for concurrent login and password reset
+        env:
+          E2E_BASE_URL: http://127.0.0.1:18080
+          E2E_MAILPIT_URL: http://127.0.0.1:18025
+        run: python3 scripts/recovery-race-probe.py
       - name: Session and account survive backend restart
         env:
           E2E_BASE_URL: http://127.0.0.1:18080

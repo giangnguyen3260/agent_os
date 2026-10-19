@@ -16,7 +16,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -24,6 +27,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.boot.test.mock.mockito.SpyBean;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mail.MailSendException;
 import org.springframework.mail.SimpleMailMessage;
@@ -34,6 +38,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 @SpringBootTest(
     properties = {
+      "management.health.mail.enabled=false",
       "agentos.recovery.enabled=true",
       "agentos.recovery.frontend-base-url=http://localhost:3000",
       "agentos.recovery.from=no-reply@agentos.local",
@@ -46,7 +51,8 @@ class RecoveryIntegrationTest {
   @Autowired JdbcTemplate jdbc;
   @Autowired RecoveryService service;
   @Autowired ObjectMapper json;
-  @Autowired PasswordEncoder encoder;
+  @SpyBean PasswordEncoder encoder;
+  @Autowired HumanAuthenticationProvider provider;
   @MockBean JavaMailSender mail;
   UUID account;
   AtomicReference<String> delivered = new AtomicReference<>();
@@ -146,6 +152,11 @@ class RecoveryIntegrationTest {
     assertThat(confirm(token, "replacement-password")).isEqualTo(204);
     assertThat(confirm(token, "replacement-password")).isEqualTo(400);
     assertThat(
+            jdbc.queryForList(
+                "select account_id, event_type from authentication_audit where account_id = ?",
+                account))
+        .containsExactly(Map.of("account_id", account, "event_type", "PASSWORD_RESET"));
+    assertThat(
             jdbc.queryForObject(
                 "select count(*) from spring_session where principal_name=?",
                 Integer.class,
@@ -230,11 +241,15 @@ class RecoveryIntegrationTest {
   @Test
   void concurrentConsumeHasOneWinner() throws Exception {
     String token = token();
-    try (var pool = Executors.newFixedThreadPool(2)) {
+    var pool = Executors.newFixedThreadPool(2);
+    try {
       Callable<Boolean> consume = () -> service.confirm(token, "replacement-password");
-      var results = pool.invokeAll(List.of(consume, consume));
+      var results = pool.invokeAll(List.of(consume, consume), 10, TimeUnit.SECONDS);
       assertThat(List.of(results.get(0).get(), results.get(1).get()))
           .containsExactlyInAnyOrder(true, false);
+    } finally {
+      pool.shutdownNow();
+      assertThat(pool.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
     }
   }
 
@@ -245,6 +260,73 @@ class RecoveryIntegrationTest {
     String second = token();
     assertThat(confirm(first, "replacement-password")).isEqualTo(400);
     assertThat(confirm(second, "a".repeat(14))).isEqualTo(204);
+  }
+
+  @Test
+  void failedReplacementPreservesDeliveredToken() throws Exception {
+    String first = token();
+    jdbc.update("update recovery_rate_buckets set requested_at=?", Timestamp.from(Instant.EPOCH));
+    doThrow(new MailSendException("replacement rejected"))
+        .when(mail)
+        .send(any(SimpleMailMessage.class));
+    request(account + "@example.test");
+    service.dispatch();
+    assertThat(
+            jdbc.queryForList(
+                "select token_digest from password_reset_tokens where account_id=?",
+                String.class,
+                account))
+        .containsExactly(RecoveryService.digest(first));
+    assertThat(confirm(first, "replacement-password")).isEqualTo(204);
+  }
+
+  @Test
+  void loginAndResetCompleteWithoutAccountAttemptLockCycle() throws Exception {
+    String token = token();
+    CountDownLatch verifying = new CountDownLatch(1);
+    CountDownLatch releaseLogin = new CountDownLatch(1);
+    CountDownLatch resetStarted = new CountDownLatch(1);
+    doAnswer(
+            call -> {
+              verifying.countDown();
+              if (!releaseLogin.await(5, TimeUnit.SECONDS))
+                throw new IllegalStateException("Login barrier timed out");
+              return call.callRealMethod();
+            })
+        .when(encoder)
+        .matches(org.mockito.ArgumentMatchers.eq("original-password"), any(String.class));
+    var pool = Executors.newFixedThreadPool(2);
+    try {
+      var login =
+          pool.submit(
+              () ->
+                  provider.authenticate(
+                      org.springframework.security.authentication
+                          .UsernamePasswordAuthenticationToken.unauthenticated(
+                          account + "@example.test", "original-password")));
+      assertThat(verifying.await(5, TimeUnit.SECONDS)).isTrue();
+      var reset =
+          pool.submit(
+              () -> {
+                resetStarted.countDown();
+                return service.confirm(token, "replacement-password");
+              });
+      assertThat(resetStarted.await(5, TimeUnit.SECONDS)).isTrue();
+      org.assertj.core.api.Assertions.assertThatThrownBy(
+              () -> reset.get(300, TimeUnit.MILLISECONDS))
+          .isInstanceOf(TimeoutException.class);
+      releaseLogin.countDown();
+      assertThat(login.get(10, TimeUnit.SECONDS).isAuthenticated()).isTrue();
+      assertThat(reset.get(10, TimeUnit.SECONDS)).isTrue();
+      assertThat(
+              jdbc.queryForObject(
+                  "select credential_version from human_accounts where id=?", Long.class, account))
+          .isEqualTo(1L);
+    } finally {
+      releaseLogin.countDown();
+      pool.shutdownNow();
+      assertThat(pool.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
+    }
   }
 
   @Test

@@ -83,12 +83,14 @@ A reset increments `credential_version`, consumes every account token, cancels
 pending mail jobs, revokes sessions by UUID principal index and clears login
 failure state atomically. Principal credential versions are excluded from JSON.
 
+Login locks the account before attempts and audit foreign-key acquisition, matching
+reset's account-before-attempt order. Unknown logins have no account foreign key.
 Requests lock the account before inserting work; that acquisition is the enqueue
 linearization point. Confirm and dispatch also lock account before job/token
 mutations. A request serialized after confirm is a new eligible request; all work
 serialized before it is canceled. Dispatch claims one account and one job using
-`FOR UPDATE SKIP LOCKED`, with a transaction per job. New issuance invalidates
-previous tokens. Tokens contain 32 random bytes encoded URL-safe without padding;
+`FOR UPDATE SKIP LOCKED`, with a transaction per job. SMTP acknowledgement of a replacement invalidates previous tokens; a failed
+replacement removes only the new digest, preserving an earlier delivered link. Tokens contain 32 random bytes encoded URL-safe without padding;
 only SHA-256 digests persist. The 15-minute expiry is an engineering default.
 The outbox stores account IDs and job metadata, never tokens or message bodies.
 A password-change notification is queued atomically with reset and uses the same

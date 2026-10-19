@@ -147,6 +147,11 @@ public class RecoveryService {
                       + " credential_version + 1 where id = ?",
                   encoder.encode(password),
                   id);
+              jdbc.update(
+                  "insert into authentication_audit(id, account_id, event_type) values (?, ?,"
+                      + " 'PASSWORD_RESET')",
+                  UUID.randomUUID(),
+                  id);
               jdbc.update("delete from password_reset_tokens where account_id = ?", id);
               jdbc.update(
                   "delete from recovery_mail_jobs where account_id = ? and state = 'PENDING'", id);
@@ -198,7 +203,6 @@ public class RecoveryService {
           random.nextBytes(bytes);
           String token = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
           String hash = digest(token);
-          if (reset) jdbc.update("delete from password_reset_tokens where account_id = ?", id);
           if (reset)
             jdbc.update(
                 "insert into password_reset_tokens(token_digest, account_id, expires_at) values (?,"
@@ -235,6 +239,12 @@ public class RecoveryService {
                 job.id());
             return;
           }
+          // Preserve previously delivered links unless SMTP accepts the replacement.
+          if (reset)
+            jdbc.update(
+                "delete from password_reset_tokens where account_id = ? and token_digest <> ?",
+                id,
+                hash);
           jdbc.update(
               "update recovery_mail_jobs set state = 'SENT', attempts = attempts + 1 where id = ?",
               job.id());

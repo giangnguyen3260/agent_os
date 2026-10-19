@@ -65,7 +65,7 @@ class BootstrapAdminTest {
 
   @Test
   void shortAndOverlongUtf8PasswordsRejectedWithoutWrite() {
-    for (String password : new String[] {"short", "é".repeat(37)}) {
+    for (String password : new String[] {"short", "é".repeat(37), "\uD83D\uDD12".repeat(7)}) {
       var jdbc = mock(JdbcTemplate.class);
       when(jdbc.queryForObject("select count(*) from human_accounts", Long.class)).thenReturn(0L);
       var env =

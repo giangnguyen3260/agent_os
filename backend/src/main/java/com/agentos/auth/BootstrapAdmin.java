@@ -37,7 +37,7 @@ public class BootstrapAdmin implements ApplicationRunner {
         || email.length() > 254
         || name.isBlank()
         || name.length() > 255
-        || password.length() < 14
+        || password.codePointCount(0, password.length()) < 14
         || password.getBytes(StandardCharsets.UTF_8).length > 72)
       throw new IllegalArgumentException(
           "Invalid bootstrap configuration: require email, display name and password of at least 14"
