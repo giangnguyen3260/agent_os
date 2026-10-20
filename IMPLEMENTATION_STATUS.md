@@ -2,6 +2,9 @@
 
 ## Current branch outcome
 
+On `feature/agent-studio`, Draft configuration can be viewed, edited, compared before/after and saved as a new version. New structured nullable concurrency/token/budget settings are persisted alongside existing requested capability text. Immutable snapshots, current-revision checks and durable receipts prevent silent overwrites and duplicate saves. Application `218598e873b35f7fa669b34fd58bec1a87f3a960` with final test/fixture head `b8746e90` passed 66 backend tests and 117 browser instances, plus native PostgreSQL optimistic-concurrency/replay and auth/restart probes. Independent source review is closed; see final QC for bounded scope and evidence. See [Studio QC](docs/qc/AGENT_STUDIO_QC_REPORT.md), [acceptance cases](docs/qc/AGENT_STUDIO_TEST_CASES.md) and [V007 rollout](backend/AGENT_STUDIO_MIGRATION.md). Draft PR8 remains stacked on unmerged Agent creation PR7. Activation, provider grants and runtime enforcement are not included.
+
+
 On `feature/agent-create`, the four-step Agent Draft flow persists identity, contract and requested capability configuration, with optional scoped team assignment and durable retry receipts. Application `f6185f6ff7e2dffff9c256d662882ce4b5150f8f` (test locator revision `2678d402f0fd53a703691aba29f66a6df064ff41`) passed the full 57-test backend suite and FE style/tooling/build in CI. The Docker/PostgreSQL gate and all 96 browser instances passed, including 24 Agent instances and a native concurrent HTTP creation/replay probe; see [Agent QC](docs/qc/AGENT_CREATE_QC_REPORT.md), [acceptance cases](docs/qc/AGENT_CREATE_TEST_CASES.md) and [V006 rollout](backend/AGENT_DRAFT_MIGRATION.md). Draft PR7 is stacked on unmerged Team PR6. Capabilities are requested configuration; no effective grants, provider execution or activation is included.
 
 On `feature/team-create`, the three-step Create Team flow (Basics → Setup → Review) saves a real DRAFT with optional manager, eligible agents and configured limits. Application revision `5e1548061a048a8503d2317613feebf5503db348` passed 49 backend tests and 72 browser instances, including 18 new Team instances on desktop/tablet/mobile. The bounded development gate passed independent QC. Draft PR6 is stacked on dashboard PR5 and remains unmerged. Team activation and Agent creation were not delivered by that Team slice; Agent Draft creation is delivered separately above. See [Team QC](docs/qc/TEAM_CREATE_QC_REPORT.md) and [V005 rollout](backend/TEAM_DRAFT_MIGRATION.md).
@@ -16,6 +19,7 @@ Prior workspace application revision `4f3e795` passed 33 backend tests and 33 br
 | Organization overview and pending-task read drilldown | Bounded development read gate verified; actual PostgreSQL rows, no sample business data |
 | Capacity/performance/cost | Explicitly unavailable; no allocator, execution-run history or billing ledger implemented |
 | Team Draft creation | Development gate verified; atomic assignments, scoped authorization and duplicate-safe retries |
+| Agent Studio Draft edits | Development gate verified; 66 backend tests, 117 browser instances and native PostgreSQL version/replay probe |
 | Agent Draft creation | Development gate verified; 57 backend tests and 96 browser instances, plus native PostgreSQL retry probe |
 | Task mutation/execution, team/agent activation, effective grants, approvals and administration | Full designed flows incomplete; older static previews remain blocked |
 | Production security/scale | Complete roles/grants, load/failover, full visual/accessibility and release hardening not accepted |
