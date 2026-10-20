@@ -45,6 +45,11 @@
           aria-label="Saved agent"
         >
           <h2>{{ agent.name }}</h2>
+          <a
+            class="button secondary"
+            [routerLink]="['/workspace', id, 'agents', agent.id, 'studio']"
+            >Open Agent Studio</a
+          >
           <dl>
             @for (field of fields; track field.key) {
               <dt>{{ field.label }}</dt>

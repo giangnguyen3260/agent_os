@@ -1,0 +1,29 @@
+:host {
+  --studio-warning: #fff4dc;
+}
+.review {
+  display: grid;
+  gap: 16px;
+}
+.status-banner {
+  padding: 16px;
+  background: var(--studio-warning);
+  border-radius: 8px;
+}
+.diff-values {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.change {
+  display: grid;
+  gap: 8px;
+}
+.compact-menu {
+  margin-top: 0;
+}
+@media (max-width: 767px) {
+  .diff-values {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

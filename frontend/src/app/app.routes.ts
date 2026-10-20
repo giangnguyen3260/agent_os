@@ -47,6 +47,20 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'workspace/:id/agents/:agentId/studio',
+    canActivate: [authGuard],
+    canDeactivate: [
+      (
+        component: import('./features/agents/agent-studio-page.component').AgentStudioPageComponent,
+      ) => component.canLeave(),
+    ],
+    runGuardsAndResolvers: 'always',
+    loadComponent: () =>
+      import('./features/agents/agent-studio-page.component').then(
+        module => module.AgentStudioPageComponent,
+      ),
+  },
+  {
     path: 'workspace/:id/agents/:agentId',
     canDeactivate: [
       (

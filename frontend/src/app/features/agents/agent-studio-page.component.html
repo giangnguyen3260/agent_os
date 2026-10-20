@@ -1,0 +1,304 @@
+<div class="forest-shell">
+  <aside class="desktop-sidebar">
+    <div class="brand">agentos</div>
+    <nav aria-label="Điều hướng workspace">
+      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a
+      ><button disabled>Organization map</button><button disabled>Teams</button
+      ><span class="selected" aria-current="page">Agents</span
+      ><button disabled>Missions</button><button disabled>Approvals</button
+      ><button disabled>Trace</button>
+    </nav>
+  </aside>
+  <header class="compact-header">
+    <span class="brand">agentos</span
+    ><button
+      type="button"
+      class="button secondary"
+      [attr.aria-expanded]="menuOpen()"
+      aria-controls="studio-menu"
+      (click)="menuOpen.set(!menuOpen())"
+    >
+      Menu
+    </button>
+  </header>
+  @if (menuOpen()) {
+    <nav
+      id="studio-menu"
+      class="compact-menu"
+      aria-label="Điều hướng workspace"
+    >
+      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a
+      ><a routerLink="/workspace">Đổi workspace</a>
+    </nav>
+  }
+  <main>
+    <div class="breadcrumb">
+      <span>{{ context()?.name }}</span
+      ><span>{{ auth.user()?.displayName }}</span>
+    </div>
+    @if (loading()) {
+      <p role="status">Đang tải…</p>
+    }
+    @if (denied()) {
+      <p role="alert" class="auth-error">Configuration access unavailable.</p>
+    }
+    @if (error()) {
+      <p role="alert" class="auth-error">{{ error() }}</p>
+      @if (frozen()) {
+        <button
+          class="button"
+          type="button"
+          [disabled]="busy()"
+          (click)="save()"
+        >
+          Thử lại
+        </button>
+      } @else if (!configuration() && !denied()) {
+        <button
+          class="button"
+          type="button"
+          [disabled]="loading()"
+          (click)="load()"
+        >
+          Thử lại
+        </button>
+      }
+    }
+    @if (configuration(); as config) {
+      <section class="wizard" [attr.data-testid]="'studio-' + stage()">
+        <header class="heading">
+          <h1>{{ config.agent.name }} / {{ heading() }}</h1>
+          <p>
+            {{ config.agent.role }} · {{ config.agent.status }} · v{{
+              config.revision
+            }}
+          </p>
+        </header>
+        @if (stage() === 'view') {
+          <div class="actions">
+            <button
+              class="button"
+              type="button"
+              disabled
+              aria-describedby="activation-unavailable"
+            >
+              Validate &amp; Activate
+            </button>
+            @if (editable()) {
+              <button class="button secondary" type="button" (click)="edit()">
+                Edit
+              </button>
+            }
+            @if (config.agent.teamId) {
+              <a
+                class="button secondary"
+                [routerLink]="['/workspace', id, 'teams', config.agent.teamId]"
+                >Back to team</a
+              >
+            } @else {
+              <a
+                class="button secondary"
+                [routerLink]="['/workspace', id, 'dashboard']"
+                >Overview</a
+              >
+            }
+          </div>
+          <aside class="status-banner" id="activation-unavailable">
+            Activation, provider calls, grants and sandbox execution are
+            unavailable. Requested model, skills and tools do not grant
+            permissions. Structured limits are saved configuration and are not
+            enforced runtime limits.
+          </aside>
+          <section class="panel review" aria-label="Agent identity">
+            <h2>Agent</h2>
+            <dl>
+              <dt>Name</dt>
+              <dd>{{ config.agent.name }}</dd>
+              <dt>Role</dt>
+              <dd>{{ config.agent.role }}</dd>
+              <dt>Team</dt>
+              <dd>{{ config.agent.teamId || '—' }}</dd>
+              <dt>Description</dt>
+              <dd class="exact-text">{{ config.agent.description || '—' }}</dd>
+              <dt>Level</dt>
+              <dd>{{ config.agent.level }}</dd>
+              <dt>Autonomy</dt>
+              <dd>{{ config.agent.autonomyLevel }}</dd>
+              <dt>Status</dt>
+              <dd>{{ config.agent.status }}</dd>
+            </dl>
+          </section>
+          <section class="panel review" aria-label="Saved configuration">
+            <h2>Configuration · v{{ config.revision }}</h2>
+            <dl>
+              @for (field of fields; track field.key) {
+                <dt>{{ field.label }}</dt>
+                <dd class="exact-text">{{ config.agent[field.key] ?? '—' }}</dd>
+              }
+              @for (field of numericFields; track field.key) {
+                <dt>{{ field.label }}</dt>
+                <dd>{{ config[field.key] ?? '—' }}</dd>
+              }
+            </dl>
+          </section>
+        }
+        @if (stage() === 'edit') {
+          <form
+            class="panel team-form"
+            id="studio-form"
+            novalidate
+            (ngSubmit)="review()"
+          >
+            <fieldset [disabled]="frozen() || busy() || conflict()">
+              @for (field of fields; track field.key) {
+                <div class="field">
+                  <label [for]="field.key">{{ field.label }}</label>
+                  @if (field.key === 'model') {
+                    <input
+                      [id]="field.key"
+                      [name]="field.key"
+                      [(ngModel)]="values[field.key]"
+                      [attr.aria-invalid]="!!errors[field.key]"
+                      [attr.aria-describedby]="field.key + '-error'"
+                    />
+                  } @else {
+                    <textarea
+                      rows="1"
+                      [id]="field.key"
+                      [name]="field.key"
+                      [(ngModel)]="values[field.key]"
+                      [required]="field.required"
+                      [attr.aria-invalid]="!!errors[field.key]"
+                      [attr.aria-describedby]="field.key + '-error'"
+                    ></textarea>
+                  }
+                  <p class="field-error" [id]="field.key + '-error'">
+                    {{ errors[field.key] }}
+                  </p>
+                </div>
+              }
+              @for (field of numericFields; track field.key) {
+                <div class="field">
+                  <label [for]="field.key">{{ field.label }}</label>
+                  <input
+                    type="number"
+                    [id]="field.key"
+                    [name]="field.key"
+                    [(ngModel)]="numbers[field.key]"
+                    [min]="field.min"
+                    [max]="field.max"
+                    [step]="field.step"
+                    [attr.aria-invalid]="!!errors[field.key]"
+                    [attr.aria-describedby]="field.key + '-error'"
+                  />
+                  <p class="field-error" [id]="field.key + '-error'">
+                    {{ errors[field.key] }}
+                  </p>
+                </div>
+              }
+            </fieldset>
+          </form>
+          <div class="actions">
+            <button
+              class="button"
+              type="submit"
+              form="studio-form"
+              [disabled]="conflict()"
+            >
+              Validate &amp; review diff
+            </button>
+            <button
+              class="button secondary"
+              type="button"
+              [disabled]="conflict()"
+              (click)="cancel()"
+            >
+              Cancel
+            </button>
+          </div>
+        }
+        @if (stage() === 'diff') {
+          <div class="actions">
+            <button
+              class="button"
+              type="button"
+              [disabled]="busy() || frozen() || conflict()"
+              (click)="save()"
+            >
+              Save version v{{ config.revision + 1 }}
+            </button>
+            <button
+              class="button secondary"
+              type="button"
+              [disabled]="busy() || frozen() || conflict()"
+              (click)="back()"
+            >
+              Back
+            </button>
+            <button
+              class="button secondary"
+              type="button"
+              [disabled]="busy() || frozen() || conflict()"
+              (click)="cancel()"
+            >
+              Cancel
+            </button>
+          </div>
+          <section class="panel review" aria-label="Configuration diff">
+            <h2>Diff · v{{ config.revision }} → v{{ config.revision + 1 }}</h2>
+            @for (change of changes(); track change.label) {
+              <article class="change">
+                <h3>{{ change.label }}</h3>
+                <div class="diff-values">
+                  <div>
+                    <p class="caption">Before</p>
+                    <p class="exact-text">{{ change.before }}</p>
+                  </div>
+                  <div>
+                    <p class="caption">After</p>
+                    <p class="exact-text">{{ change.after }}</p>
+                  </div>
+                </div>
+              </article>
+            }
+          </section>
+        }
+        @if (busy()) {
+          <p role="status">Saving configuration…</p>
+        }
+        @if (frozen()) {
+          <p role="status">
+            Unknown save outcome. Body, expected revision and idempotency key
+            are frozen. Retry uses the identical request.
+          </p>
+        }
+        @if (conflict()) {
+          <button class="button secondary" type="button" (click)="reload()">
+            Reload latest
+          </button>
+        }
+        @if (stage() === 'saved') {
+          <div class="actions">
+            <button class="button secondary" type="button" (click)="reload()">
+              Back to studio
+            </button>
+          </div>
+          <p class="status-banner" role="status">
+            Configuration saved · v{{ config.revision }}. Activation remains
+            unavailable.
+          </p>
+        }
+        @if (stage() === 'edit' || stage() === 'diff') {
+          <aside class="guidance">
+            <h2>Điều kiện / hướng xử lý</h2>
+            <p>
+              Requested configuration only; permissions are not granted and
+              limits are not enforced. Saving does not activate the agent or run
+              a test.
+            </p>
+          </aside>
+        }
+      </section>
+    }
+  </main>
+</div>

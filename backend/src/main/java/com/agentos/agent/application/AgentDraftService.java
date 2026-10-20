@@ -1,5 +1,6 @@
 package com.agentos.agent.application;
 
+import com.agentos.agent.api.dto.AgentConfigurationResponse;
 import com.agentos.agent.api.dto.AgentDraftRequest;
 import com.agentos.agent.api.dto.AgentDraftResponse;
 import com.agentos.auth.HumanIdentity;
@@ -48,7 +49,7 @@ public class AgentDraftService {
 
   public record Candidate(UUID id, String name, String status) {}
 
-  private void authorize(UUID organizationId, HumanIdentity human, boolean admin, boolean lock) {
+  void authorize(UUID organizationId, HumanIdentity human, boolean admin, boolean lock) {
     // Creation and receipt replay lock in organization/account/membership order.
     String locking = lock ? " for update" : "";
     if (jdbc.query(
@@ -163,8 +164,8 @@ public class AgentDraftService {
     UUID id = UUID.randomUUID();
     jdbc.update(
         "insert into"
-            + " agents(id,organization_id,team_id,name,role,level,status,autonomy_level,created_at,updated_at)"
-            + " values (?,?,?,?,?,'MID','DRAFT','SUGGEST',current_timestamp,current_timestamp)",
+            + " agents(id,organization_id,team_id,name,role,level,status,autonomy_level,configuration_revision,created_at,updated_at)"
+            + " values (?,?,?,?,?,'MID','DRAFT','SUGGEST',1,current_timestamp,current_timestamp)",
         id,
         organizationId,
         r.teamId(),
@@ -185,6 +186,14 @@ public class AgentDraftService {
         r.tools(),
         r.limits());
     var response = detail(organizationId, id);
+    jdbc.update(
+        "insert into"
+            + " agent_configuration_versions(organization_id,agent_id,revision,account_id,original_response)"
+            + " values (?,?,1,?,?)",
+        organizationId,
+        id,
+        human.id(),
+        encode(new AgentConfigurationResponse(response, 1, null, null, null, "USD")));
     jdbc.update(
         "insert into"
             + " agent_create_receipts(organization_id,account_id,idempotency_key,body_sha256,original_response)"
@@ -224,7 +233,7 @@ public class AgentDraftService {
         rs.getObject("created_at", OffsetDateTime.class).toInstant());
   }
 
-  private AgentDraftResponse detail(UUID org, UUID id) {
+  AgentDraftResponse detail(UUID org, UUID id) {
     var rows = jdbc.query(SELECT + " where a.organization_id=? and a.id=?", this::map, org, id);
     if (rows.isEmpty()) throw new EntityNotFoundException("Agent not found");
     return rows.getFirst();
