@@ -127,7 +127,7 @@ async function review(page, data) {
   await step(page, 'Review & test');
   await expect(page.getByText(/not granted/i)).toBeVisible();
   await expect(page.getByText(/not enforced/i)).toBeVisible();
-  await expect(button(page, 'Run optional test')).toBeDisabled();
+  await expect(button(page, 'Run optional sandbox test')).toBeDisabled();
   await expect(page.getByText(/Sandbox test unavailable\./)).toBeVisible();
 }
 async function ready(page, data) {
