@@ -223,6 +223,17 @@ test.describe('Agent Studio independent QC', () => {
     );
     await expect(field(p, 'concurrency')).toBeFocused();
     await field(p, 'concurrency').fill('2');
+    await field(p, 'monthlyBudget').fill('12.340000001');
+    await btn(p, 'Validate & review diff').click();
+    await expect(p.getByTestId('studio-edit')).toBeVisible();
+    await expect(p.getByTestId('studio-diff')).toHaveCount(0);
+    await expect(field(p, 'monthlyBudget')).toHaveAttribute(
+      'aria-invalid',
+      'true',
+    );
+    await expect(field(p, 'monthlyBudget')).toBeFocused();
+    expect(requests).toHaveLength(0);
+    await field(p, 'monthlyBudget').fill('12.34');
     await review(p);
     await btn(p, 'Back').click();
     await expect(field(p, 'responsibilities')).toHaveValue(

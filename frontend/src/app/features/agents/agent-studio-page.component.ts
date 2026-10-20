@@ -244,7 +244,7 @@ export class AgentStudioPageComponent {
       value <= field.max &&
       (field.step === 1
         ? Number.isInteger(value)
-        : Math.abs(value * 100 - Math.round(value * 100)) < 0.000001)
+        : /^\d+(?:\.\d{1,2})?$/.test(String(value)))
     );
   }
   private revoke(): void {
@@ -338,6 +338,9 @@ export class AgentStudioPageComponent {
       );
       if (
         input?.validity.badInput ||
+        (field.key === 'monthlyBudget' &&
+          !!input?.value &&
+          !/^(?:\d+(?:\.\d{0,2})?|\.\d{1,2})$/.test(input.value)) ||
         (value !== null &&
           (typeof value !== 'number' || !this.validNumber(value, field)))
       )
