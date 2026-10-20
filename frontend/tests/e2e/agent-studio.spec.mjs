@@ -372,10 +372,13 @@ test.describe('Agent Studio independent QC', () => {
         await put(p, active, {...data, expectedRevision: readonly.revision})
       ).status(),
     ).toBe(409);
-    const foreign = api(id).replace(
+    const outside = api(id).replace(
       org,
       'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
     );
+    expect((await p.request.get(outside)).status()).toBe(403);
+    expect((await put(p, id, data, true, outside)).status()).toBe(403);
+    const foreign = api('c4444444-4444-4444-8444-444444444444');
     expect((await p.request.get(foreign)).status()).toBe(404);
     expect((await put(p, id, data, true, foreign)).status()).toBe(404);
     await login(p, 'studio-member@example.test');
