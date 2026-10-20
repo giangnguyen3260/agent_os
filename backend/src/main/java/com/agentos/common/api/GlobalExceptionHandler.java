@@ -11,6 +11,13 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+  @ExceptionHandler(com.agentos.agent.application.AgentDraftService.Conflict.class)
+  public ResponseEntity<ApiErrorResponse> handleAgentConflict(
+      com.agentos.agent.application.AgentDraftService.Conflict ex) {
+    return ResponseEntity.status(HttpStatus.CONFLICT)
+        .body(ApiErrorResponse.of(ex.code(), ex.getMessage()));
+  }
+
   @ExceptionHandler(Conflict.class)
   public ResponseEntity<ApiErrorResponse> handleTeamConflict(Conflict ex) {
     return ResponseEntity.status(HttpStatus.CONFLICT)

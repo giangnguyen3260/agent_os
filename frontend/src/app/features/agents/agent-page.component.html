@@ -1,0 +1,334 @@
+<div class="forest-shell">
+  <aside class="desktop-sidebar">
+    <div class="brand">agentos</div>
+    <nav aria-label="Điều hướng workspace">
+      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a
+      ><button disabled>Organization map</button><button disabled>Teams</button
+      ><span class="selected" aria-current="page">Agents</span
+      ><button disabled>Missions</button><button disabled>Approvals</button
+      ><button disabled>Trace</button>
+    </nav>
+  </aside>
+  <header class="compact-header">
+    <span class="brand">agentos</span
+    ><button
+      type="button"
+      class="button secondary"
+      [attr.aria-expanded]="menuOpen()"
+      aria-controls="agent-menu"
+      (click)="menuOpen.set(!menuOpen())"
+    >
+      Menu
+    </button>
+  </header>
+  @if (menuOpen()) {
+    <nav id="agent-menu" class="compact-menu" aria-label="Điều hướng workspace">
+      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a
+      ><a routerLink="/workspace">Đổi workspace</a>
+    </nav>
+  }
+  <main>
+    <div class="breadcrumb">
+      <span>{{ context()?.name }}</span
+      ><span>{{ auth.user()?.displayName }}</span>
+    </div>
+    @if (agentId) {
+      <h1>
+        {{
+          saved()?.status === 'DRAFT' ? 'Agent draft created' : 'Agent details'
+        }}
+      </h1>
+      @if (saved(); as agent) {
+        <section
+          class="panel review"
+          data-testid="saved-agent"
+          aria-label="Saved agent"
+        >
+          <h2>{{ agent.name }}</h2>
+          <dl>
+            @for (field of fields; track field.key) {
+              <dt>{{ field.label }}</dt>
+              <dd class="exact-text">{{ savedValue(field.key) }}</dd>
+            }
+            <dt>Team</dt>
+            <dd>{{ agent.teamId || 'Thiết lập sau' }}</dd>
+            <dt>Status</dt>
+            <dd>{{ agent.status }}</dd>
+            <dt>Level</dt>
+            <dd>{{ agent.level }}</dd>
+            <dt>Autonomy</dt>
+            <dd>{{ agent.autonomyLevel }}</dd>
+          </dl>
+          <p>
+            Requested configuration only. Permissions not granted; limits not
+            enforced. No test has run.
+          </p>
+        </section>
+      }
+    } @else {
+      <header class="heading">
+        <h1>Create Agent / {{ steps[step - 1] }}</h1>
+        <p>Bước {{ step }}/4 · Tạo agent draft</p>
+      </header>
+    }
+    @if (loading()) {
+      <p role="status">Đang tải…</p>
+    }
+    @if (denied()) {
+      <p class="auth-error" role="alert">
+        Bạn không có quyền truy cập. Chỉ quản trị viên tổ chức (ADMIN) có thể
+        tạo agent.
+      </p>
+    }
+    @if (error()) {
+      <p class="auth-error" role="alert">{{ error() }}</p>
+      @if (agentId && !denied()) {
+        <button
+          class="button"
+          type="button"
+          (click)="context() ? loadDetail() : load()"
+        >
+          Thử lại
+        </button>
+      } @else if (!context() && !denied()) {
+        <button class="button" type="button" (click)="load()">Thử lại</button>
+      }
+    }
+    @if (!loading() && !denied() && context() && !agentId) {
+      <section class="wizard" data-testid="agent-step" [attr.data-step]="step">
+        <div class="steps">
+          <h2>Các bước</h2>
+          <ol>
+            @for (label of steps; track label; let i = $index) {
+              <li [attr.aria-current]="step === i + 1 ? 'step' : null">
+                {{ step === i + 1 ? '● ' : '' }}{{ label }}
+              </li>
+            }
+          </ol>
+        </div>
+        <form
+          id="agent-form"
+          class="panel team-form"
+          novalidate
+          (ngSubmit)="step < 4 ? next() : create()"
+        >
+          <fieldset [disabled]="frozen() || busy()">
+            @if (step < 4) {
+              @for (field of fields; track field.key) {
+                @if (field.step === step) {
+                  @if (field.key === 'description') {
+                    <div class="field">
+                      <label for="team">Team</label>
+                      <select
+                        id="team"
+                        name="team"
+                        [ngModel]="team"
+                        (ngModelChange)="chooseTeam($event)"
+                        [attr.aria-invalid]="!!errors['team']"
+                        aria-describedby="team-error team-notice"
+                      >
+                        <option value="">Thiết lập sau</option>
+                        @for (candidate of teamOptions(); track candidate.id) {
+                          <option [value]="candidate.id">
+                            {{ candidate.name }} · {{ candidate.status }}
+                          </option>
+                        }
+                      </select>
+                      <p id="team-error" class="field-error">
+                        {{ errors['team'] }}
+                      </p>
+                      <p id="team-notice" class="caption">
+                        {{ prefillNotice() }}
+                      </p>
+                      <label for="team-search">Tìm team</label>
+                      <input
+                        id="team-search"
+                        type="search"
+                        name="query"
+                        maxlength="100"
+                        [(ngModel)]="query"
+                        (ngModelChange)="loadEligibleTeams()"
+                      />
+                      @if (candidateLoading()) {
+                        <p role="status">Đang tải team…</p>
+                      }
+                      @if (candidateError()) {
+                        <p role="alert">{{ candidateError() }}</p>
+                        <button
+                          class="button secondary"
+                          type="button"
+                          (click)="loadEligibleTeams()"
+                        >
+                          Thử lại team
+                        </button>
+                      }
+                      @if (candidates(); as page) {
+                        @if (!page.items.length) {
+                          <p>Không có team phù hợp.</p>
+                        }
+                        <div class="pagination" aria-label="Phân trang teams">
+                          <button
+                            class="button secondary"
+                            type="button"
+                            [disabled]="page.page === 0"
+                            (click)="loadEligibleTeams(page.page - 1)"
+                          >
+                            Teams trước
+                          </button>
+                          <span
+                            >Trang {{ page.page + 1 }} ·
+                            {{ page.total }} teams</span
+                          >
+                          <button
+                            class="button secondary"
+                            type="button"
+                            [disabled]="
+                              page.page >= 100000 ||
+                              (page.page + 1) * page.size >= page.total
+                            "
+                            (click)="loadEligibleTeams(page.page + 1)"
+                          >
+                            Teams sau
+                          </button>
+                        </div>
+                      }
+                    </div>
+                  }
+                  <div class="field">
+                    <label [for]="field.key">{{ field.label }}</label>
+                    @if (
+                      field.key === 'name' ||
+                      field.key === 'role' ||
+                      field.key === 'model'
+                    ) {
+                      <input
+                        [id]="field.key"
+                        [name]="field.key"
+                        [(ngModel)]="values[field.key]"
+                        [required]="field.required"
+                        [attr.aria-invalid]="!!errors[field.key]"
+                        [attr.aria-describedby]="field.key + '-error'"
+                      />
+                    } @else {
+                      <textarea
+                        [id]="field.key"
+                        [name]="field.key"
+                        [(ngModel)]="values[field.key]"
+                        rows="1"
+                        [required]="field.required"
+                        [attr.aria-invalid]="!!errors[field.key]"
+                        [attr.aria-describedby]="field.key + '-error'"
+                      ></textarea>
+                    }
+                    <p [id]="field.key + '-error'" class="field-error">
+                      {{ errors[field.key] }}
+                    </p>
+                  </div>
+                }
+              }
+              @if (step === 3) {
+                <p class="caption">
+                  Leave blank when undecided. Requested configuration only;
+                  permissions not granted and limits not enforced.
+                </p>
+              }
+            } @else {
+              <div class="field">
+                <h3>Configuration</h3>
+                <div class="review-value">DRAFT · MID · SUGGEST</div>
+                <small>Agent draft không nhận task.</small>
+              </div>
+              @for (field of fields; track field.key) {
+                <div class="field">
+                  <h3>{{ field.label }}</h3>
+                  <div class="review-value exact-text">
+                    {{ reviewValue(field.key) }}
+                  </div>
+                </div>
+              }
+              <div class="field">
+                <h3>Team</h3>
+                <div class="review-value">{{ teamName() }}</div>
+              </div>
+              <div class="field">
+                <h3>Permission validation</h3>
+                <div class="review-value">
+                  Requested configuration only. Permissions not granted; limits
+                  not enforced.
+                </div>
+              </div>
+              <div class="field">
+                <h3>Test</h3>
+                <div id="test-unavailable" class="review-value">
+                  Sandbox test unavailable. No test has run; no provider or
+                  runtime is connected.
+                </div>
+              </div>
+            }
+          </fieldset>
+        </form>
+        <div class="actions">
+          <button
+            class="button"
+            type="submit"
+            form="agent-form"
+            [disabled]="busy() || keyConflict()"
+          >
+            {{ step < 4 ? 'Continue' : 'Create draft' }}
+          </button>
+          <button
+            class="button secondary"
+            type="button"
+            [disabled]="step === 1 || frozen() || busy()"
+            (click)="back()"
+          >
+            Back
+          </button>
+          <button
+            class="button secondary"
+            type="button"
+            [disabled]="busy()"
+            (click)="cancel()"
+          >
+            Cancel
+          </button>
+          @if (step === 4) {
+            <button
+              class="button secondary"
+              type="button"
+              disabled
+              aria-describedby="test-unavailable"
+            >
+              Run optional sandbox test
+            </button>
+          }
+        </div>
+        @if (busy()) {
+          <p role="status">Đang tạo draft…</p>
+        }
+        <aside class="guidance">
+          <h2>Điều kiện / hướng xử lý</h2>
+          <p>
+            Validate trường bắt buộc; lỗi giữ dữ liệu. Chỉ tạo khi xác nhận bước
+            cuối.
+          </p>
+          @if (frozen()) {
+            <p>
+              Yêu cầu đã được khóa để xác nhận kết quả an toàn. Thử lại dùng
+              cùng dữ liệu và khóa.
+            </p>
+          }
+        </aside>
+      </section>
+    }
+    @if (agentId || denied()) {
+      <div class="actions">
+        <a
+          class="button secondary"
+          [routerLink]="['/workspace', id, 'dashboard']"
+          >Overview</a
+        >
+      </div>
+    }
+  </main>
+</div>
