@@ -1,0 +1,41 @@
+.checklist {
+  display: grid;
+  gap: 12px;
+}
+.checklist ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.checklist li {
+  display: grid;
+  gap: 8px;
+  padding: 16px 0;
+  border-top: 1px solid var(--line);
+}
+.check-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.check-status {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--warning);
+}
+.check-status.pass {
+  color: var(--primary);
+}
+.studio-link {
+  justify-self: start;
+}
+.compact-menu {
+  margin-top: 0;
+}
+@media (min-width: 768px) and (max-width: 1023px) {
+  .panel {
+    padding: 20px 24px;
+  }
+}

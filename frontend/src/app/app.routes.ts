@@ -47,6 +47,15 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'workspace/:id/agents/:agentId/activation-review',
+    canActivate: [authGuard],
+    runGuardsAndResolvers: 'always',
+    loadComponent: () =>
+      import('./features/agents/activation-review-page.component').then(
+        module => module.ActivationReviewPageComponent,
+      ),
+  },
+  {
     path: 'workspace/:id/agents/:agentId/studio',
     canActivate: [authGuard],
     canDeactivate: [

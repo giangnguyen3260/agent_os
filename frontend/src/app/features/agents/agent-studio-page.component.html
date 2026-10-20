@@ -76,14 +76,32 @@
         </header>
         @if (stage() === 'view') {
           <div class="actions">
-            <button
-              class="button"
-              type="button"
-              disabled
-              aria-describedby="activation-unavailable"
-            >
-              Validate &amp; Activate
-            </button>
+            @if (
+              context()?.role === 'ADMIN' && config.agent.status === 'DRAFT'
+            ) {
+              <button
+                type="button"
+                class="button"
+                [routerLink]="[
+                  '/workspace',
+                  id,
+                  'agents',
+                  agentId,
+                  'activation-review',
+                ]"
+              >
+                Validate &amp; Activate
+              </button>
+            } @else {
+              <button
+                class="button"
+                type="button"
+                disabled
+                aria-describedby="activation-unavailable"
+              >
+                Validate &amp; Activate
+              </button>
+            }
             @if (editable()) {
               <button class="button secondary" type="button" (click)="edit()">
                 Edit
