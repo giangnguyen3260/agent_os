@@ -4,7 +4,7 @@
     <nav aria-label="Điều hướng workspace">
       <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a
       ><button disabled>Organization map</button><button disabled>Teams</button
-      ><span class="selected" aria-current="page">Agents</span
+      ><a class="selected" [routerLink]="['/workspace', id, 'agents']">Agents</a
       ><button disabled>Missions</button><button disabled>Approvals</button
       ><button disabled>Trace</button>
     </nav>
