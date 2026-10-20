@@ -172,6 +172,72 @@ async function saved(page, data) {
 test.describe('Agent Draft independent QC', () => {
   test.describe.configure({mode: 'serial'});
 
+  test('delayed URL team prefill cannot change the reviewed unassigned team', async ({
+    page,
+  }) => {
+    await login(page);
+    const writes = posts(page);
+    const data = config(`Delayed prefill ${randomUUID()}`);
+    let release;
+    const held = new Promise(resolve => {
+      release = resolve;
+    });
+    let fetched;
+    const candidateFetched = new Promise(resolve => {
+      fetched = resolve;
+    });
+    await page.route(`**${api}/eligible-teams?*`, async route => {
+      const response = await route.fetch({maxRetries: 0});
+      const body = await response.json();
+      expect(response.status()).toBe(200);
+      expect(body.data.items).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({id: team, status: 'ACTIVE'}),
+        ]),
+      );
+      fetched();
+      await held;
+      await route.fulfill({response});
+    });
+    try {
+      await page.goto(`/workspace/${org}/agents/new?teamId=${team}`);
+      await step(page, 'Identity');
+      await candidateFetched;
+      await expect(page.getByLabel('Team', {exact: true})).toHaveValue('');
+      await identity(page, data);
+      await contract(page, data);
+      await review(page, data);
+      const reviewedTeam = page
+        .locator('.field')
+        .filter({
+          has: page.getByRole('heading', {name: 'Team', exact: true}),
+        })
+        .locator('.review-value');
+      await expect(reviewedTeam).toHaveText('Thiết lập sau');
+      const delivered = page.waitForResponse(
+        response =>
+          response.request().method() === 'GET' &&
+          new URL(response.url()).pathname === `${api}/eligible-teams`,
+      );
+      release();
+      const response = await delivered;
+      await response.finished();
+      await page.evaluate(
+        () =>
+          new Promise(resolve =>
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+          ),
+      );
+      await expect(reviewedTeam).toHaveText('Thiết lập sau');
+      for (let i = 0; i < 3; i++) await button(page, 'Back').click();
+      await step(page, 'Identity');
+      await expect(page.getByLabel('Team', {exact: true})).toHaveValue('');
+      expect(writes).toHaveLength(0);
+    } finally {
+      release();
+    }
+  });
+
   test('required validation, Back and Cancel never POST prematurely', async ({
     page,
   }, info) => {

@@ -299,7 +299,12 @@ export class AgentPageComponent implements OnInit {
             ...known,
             ...Object.fromEntries(items.map(item => [item.id, item])),
           }));
-          if (this.prefill) {
+          if (
+            this.prefill &&
+            this.step === 1 &&
+            !this.frozen() &&
+            !this.busy()
+          ) {
             const match = items.find(item => item.id === this.prefill);
             if (match) {
               this.team = match.id;
