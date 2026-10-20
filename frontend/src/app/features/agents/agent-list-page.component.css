@@ -31,7 +31,7 @@
 .row-actions a {
   min-height: 32px;
 }
-a {
+a:not(.button) {
   color: var(--primary);
 }
 .mobile-label {

@@ -73,7 +73,9 @@ test.describe('real Agent directory', () => {
       await expect(p.getByRole('dialog',{name:'Workspace navigation'})).toBeVisible();
       await p.keyboard.press('Escape'); await expect(menu).toBeFocused();
     }
-    await p.getByRole('link',{name:'Create Agent',exact:true}).click();
+    const create = p.getByRole('link',{name:'Create Agent',exact:true});
+    expect(await create.evaluate(e => getComputedStyle(e).color !== getComputedStyle(e).backgroundColor)).toBeTruthy();
+    await create.click();
     await expect(p).toHaveURL(/\/agents\/new$/);
   });
   test('member read access and revoked membership clear current rows', async ({page:p}) => {
