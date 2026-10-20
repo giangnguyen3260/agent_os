@@ -2,6 +2,8 @@
 
 ## Current branch outcome
 
+On `feature/agent-activation-review`, the ADMIN preflight reads saved configuration and same-organization Team limits. Current model authorization, tool authorization and execution runtime remain unavailable; UI activation is disabled and the server rejects direct requests without business mutations. This is a preflight delivery, not positive activation. Draft PR9 is stacked on unmerged Studio PR8. See [activation QC](docs/qc/AGENT_ACTIVATION_QC_REPORT.md) and [acceptance cases](docs/qc/AGENT_ACTIVATION_TEST_CASES.md) for final execution evidence. No migration or production seed data is introduced.
+
 On `feature/agent-studio`, Draft configuration can be viewed, edited, compared before/after and saved as a new version. New structured nullable concurrency/token/budget settings are persisted alongside existing requested capability text. Immutable snapshots, current-revision checks and durable receipts prevent silent overwrites and duplicate saves. Application `218598e873b35f7fa669b34fd58bec1a87f3a960` with final test/fixture head `b8746e90` passed 66 backend tests and 117 browser instances, plus native PostgreSQL optimistic-concurrency/replay and auth/restart probes. Independent source review is closed; see final QC for bounded scope and evidence. See [Studio QC](docs/qc/AGENT_STUDIO_QC_REPORT.md), [acceptance cases](docs/qc/AGENT_STUDIO_TEST_CASES.md) and [V007 rollout](backend/AGENT_STUDIO_MIGRATION.md). Draft PR8 remains stacked on unmerged Agent creation PR7. Activation, provider grants and runtime enforcement are not included.
 
 
@@ -19,6 +21,7 @@ Prior workspace application revision `4f3e795` passed 33 backend tests and 33 br
 | Organization overview and pending-task read drilldown | Bounded development read gate verified; actual PostgreSQL rows, no sample business data |
 | Capacity/performance/cost | Explicitly unavailable; no allocator, execution-run history or billing ledger implemented |
 | Team Draft creation | Development gate verified; atomic assignments, scoped authorization and duplicate-safe retries |
+| Agent activation review | Saved configuration/Team preflight and fail-closed activation boundary; actual activation unavailable |
 | Agent Studio Draft edits | Development gate verified; 66 backend tests, 117 browser instances and native PostgreSQL version/replay probe |
 | Agent Draft creation | Development gate verified; 57 backend tests and 96 browser instances, plus native PostgreSQL retry probe |
 | Task mutation/execution, team/agent activation, effective grants, approvals and administration | Full designed flows incomplete; older static previews remain blocked |

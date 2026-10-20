@@ -1,0 +1,142 @@
+<div class="forest-shell">
+  <aside class="desktop-sidebar">
+    <div class="brand">agentos</div>
+    <nav aria-label="Điều hướng workspace">
+      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a
+      ><button disabled>Organization map</button><button disabled>Teams</button
+      ><span class="selected" aria-current="page">Agents</span
+      ><button disabled>Missions</button><button disabled>Approvals</button
+      ><button disabled>Trace</button>
+    </nav>
+  </aside>
+  <header class="compact-header">
+    <span class="brand">agentos</span
+    ><button
+      type="button"
+      class="button secondary"
+      [attr.aria-expanded]="menuOpen()"
+      aria-controls="activation-menu"
+      (click)="toggleMenu()"
+    >
+      Menu
+    </button>
+  </header>
+  <dialog
+    id="activation-menu"
+    aria-label="Workspace navigation"
+    (cancel)="closeMenu()"
+  >
+    <button class="button secondary" type="button" (click)="closeMenu()">
+      Close menu
+    </button>
+    <nav aria-label="Điều hướng workspace">
+      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a>
+      <a routerLink="/workspace">Đổi workspace</a>
+    </nav>
+  </dialog>
+  <main data-testid="activation-review" [attr.aria-busy]="loading()">
+    <div class="breadcrumb">
+      <span>{{ context()?.name }}</span
+      ><span>{{ auth.user()?.displayName }}</span>
+    </div>
+    <header class="heading">
+      <h1>
+        {{
+          review()
+            ? review()!.name + ' / Activation review'
+            : 'Activation review'
+        }}
+      </h1>
+      @if (review(); as current) {
+        <p>
+          {{ current.status }} · Revision {{ current.revision }} · Checked
+          <time [attr.datetime]="current.checkedAt">{{
+            current.checkedAt
+          }}</time>
+        </p>
+      }
+    </header>
+    @if (!denied()) {
+      <div class="actions">
+        <button
+          class="button"
+          type="button"
+          disabled
+          aria-describedby="activation-explanation"
+        >
+          Activate
+        </button>
+        <button
+          type="button"
+          class="button secondary"
+          [routerLink]="['/workspace', id, 'agents', agentId, 'studio']"
+        >
+          {{ review()?.status === 'DRAFT' ? 'Keep draft' : 'Back to studio' }}
+        </button>
+        <button
+          class="button secondary"
+          type="button"
+          [disabled]="loading()"
+          (click)="load()"
+        >
+          Check again
+        </button>
+      </div>
+    }
+    <p id="activation-explanation" class="caption">
+      Activation is unavailable. Model access, tool permissions and the
+      execution service are not connected. This review does not grant
+      permissions or run the agent.
+    </p>
+    @if (loading()) {
+      <p role="status">Đang tải…</p>
+    }
+    @if (denied()) {
+      <p role="alert" class="auth-error">
+        Activation review access unavailable. Workspace administrator access is
+        required.
+      </p>
+    }
+    @if (error()) {
+      <p role="alert" class="auth-error">{{ error() }}</p>
+      <button class="button secondary" type="button" (click)="load()">
+        Thử lại
+      </button>
+    }
+    @if (review(); as current) {
+      <section class="panel checklist" aria-labelledby="activation-result">
+        <h2 id="activation-result">
+          {{
+            current.activationAllowed
+              ? 'Configuration checks complete'
+              : 'Activation blocked'
+          }}
+        </h2>
+        <p>
+          PASS validates saved configuration only. Requested models and tools do
+          not grant access; configured limits are not enforced runtime limits.
+        </p>
+        <ol>
+          @for (check of current.checks; track check.code) {
+            <li [attr.data-testid]="'activation-check-' + check.code">
+              <div class="check-heading">
+                <h3>{{ check.label }}</h3>
+                <span
+                  class="check-status"
+                  [class.pass]="check.status === 'PASS'"
+                  >{{ check.status }}</span
+                >
+              </div>
+              <p>{{ check.message }}</p>
+            </li>
+          }
+        </ol>
+        <a
+          class="button secondary studio-link"
+          [routerLink]="['/workspace', id, 'agents', agentId, 'studio']"
+          >Open Agent Studio</a
+        >
+      </section>
+    }
+  </main>
+</div>
