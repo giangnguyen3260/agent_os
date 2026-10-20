@@ -103,12 +103,20 @@ test.describe('real Agent directory', () => {
       return route.fulfill({json:body});
     });
     for(mode of ['error','null','scope']) {
-      await button(p, mode==='error' ? 'Refresh' : 'Thử lại').click();
+      await Promise.all([
+        p.waitForResponse(r => r.url().includes(api) && r.request().method() === 'GET'),
+        button(p, mode==='error' ? 'Refresh' : 'Thử lại').click(),
+      ]);
+      await expect(p.getByTestId('agent-directory')).toHaveAttribute('aria-busy','false');
       await expect(p.getByRole('alert')).toBeVisible();
       await expect(rows(p)).toHaveCount(0);
     }
     await p.unroute(`**${api}*`);
-    await button(p,'Thử lại').click(); await expect(rows(p)).toHaveCount(20);
+    await Promise.all([
+      p.waitForResponse(r => r.url().includes(api) && r.request().method() === 'GET'),
+      button(p,'Thử lại').click(),
+    ]);
+    await expect(rows(p)).toHaveCount(20);
   });
   test('foreign Team/workspace and invalid filters reject without leaking names', async ({page:p}) => {
     await login(p);

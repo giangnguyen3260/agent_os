@@ -68,7 +68,11 @@
             [(ngModel)]="search"
             placeholder="Name or role" /></label
         ><label
-          >Status<select name="status" [(ngModel)]="selectedStatus">
+          >Status<select
+            aria-label="Status"
+            name="status"
+            [(ngModel)]="selectedStatus"
+          >
             <option value="">All statuses</option>
             @for (state of statuses; track state) {
               <option [value]="state">{{ state }}</option>
