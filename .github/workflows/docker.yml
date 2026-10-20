@@ -82,6 +82,9 @@ jobs:
       - name: Provision isolated team creation fixtures
         run: |
           docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < scripts/team-create-ci-fixture.sql
+      - name: Provision isolated Agent Studio fixtures
+        run: |
+          docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < scripts/agent-studio-ci-fixture.sql
       - name: Install browser test dependencies
         working-directory: frontend
         run: |
@@ -98,6 +101,11 @@ jobs:
         env:
           E2E_BASE_URL: http://127.0.0.1:18080
         run: python3 scripts/agent-create-race-probe.py
+      - name: PostgreSQL Agent Studio optimistic concurrency and replay
+        timeout-minutes: 2
+        env:
+          E2E_BASE_URL: http://127.0.0.1:18080
+        run: python3 scripts/agent-studio-race-probe.py
       - name: PostgreSQL barrier for concurrent login and password reset
         timeout-minutes: 2
         env:
