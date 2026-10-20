@@ -55,6 +55,14 @@
         class="button"
         type="button"
         [disabled]="context()?.role !== 'ADMIN' || loading() || accessLost()"
+        (click)="createAgent()"
+      >
+        Create Agent
+      </button>
+      <button
+        class="button"
+        type="button"
+        [disabled]="context()?.role !== 'ADMIN' || loading() || accessLost()"
         aria-describedby="create-team-access"
         (click)="createTeam()"
       >

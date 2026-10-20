@@ -45,6 +45,17 @@
           aria-label="Saved team"
         >
           <h2>{{ team.name }}</h2>
+          @if (
+            context()?.role === 'ADMIN' &&
+            (team.status === 'DRAFT' || team.status === 'ACTIVE')
+          ) {
+            <a
+              class="button"
+              [routerLink]="['/workspace', id, 'agents', 'new']"
+              [queryParams]="{teamId: team.id}"
+              >Add Agent</a
+            >
+          }
           <dl>
             <dt>Purpose</dt>
             <dd>{{ team.purpose }}</dd>

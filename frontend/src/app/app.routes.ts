@@ -33,6 +33,34 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'workspace/:id/agents/new',
+    canDeactivate: [
+      (
+        component: import('./features/agents/agent-page.component').AgentPageComponent,
+      ) => component.canLeave(),
+    ],
+    canActivate: [authGuard],
+    runGuardsAndResolvers: 'always',
+    loadComponent: () =>
+      import('./features/agents/agent-page.component').then(
+        module => module.AgentPageComponent,
+      ),
+  },
+  {
+    path: 'workspace/:id/agents/:agentId',
+    canDeactivate: [
+      (
+        component: import('./features/agents/agent-page.component').AgentPageComponent,
+      ) => component.canLeave(),
+    ],
+    canActivate: [authGuard],
+    runGuardsAndResolvers: 'always',
+    loadComponent: () =>
+      import('./features/agents/agent-page.component').then(
+        module => module.AgentPageComponent,
+      ),
+  },
+  {
     path: 'workspace/:id/teams/new',
     canDeactivate: [
       (

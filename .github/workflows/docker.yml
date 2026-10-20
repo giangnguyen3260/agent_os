@@ -93,6 +93,11 @@ jobs:
           E2E_BASE_URL: http://127.0.0.1:18080
           E2E_MAILPIT_URL: http://127.0.0.1:18025
         run: npm run test:e2e
+      - name: PostgreSQL concurrent Agent Draft creation and replay
+        timeout-minutes: 2
+        env:
+          E2E_BASE_URL: http://127.0.0.1:18080
+        run: python3 scripts/agent-create-race-probe.py
       - name: PostgreSQL barrier for concurrent login and password reset
         timeout-minutes: 2
         env:

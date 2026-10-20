@@ -1,0 +1,28 @@
+.team-form {
+  padding: 20px 24px;
+}
+.review {
+  display: grid;
+  gap: 16px;
+}
+.field select {
+  max-width: 100%;
+}
+.steps ol {
+  column-gap: 24px;
+  row-gap: 0;
+}
+.breadcrumb {
+  line-height: 18px;
+}
+@media (max-width: 767px) {
+  .team-form {
+    padding: 20px 16px;
+  }
+  .steps ol {
+    column-gap: 16px;
+  }
+}
+.field:has([required]) > label::after {
+  content: ' *';
+}

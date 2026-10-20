@@ -209,6 +209,10 @@ export class DashboardPageComponent implements OnInit {
     this.cancelTasks();
     this.state.set(null);
   }
+  createAgent(): void {
+    if (this.context()?.role === 'ADMIN')
+      void this.router.navigate(['/workspace', this.id, 'agents', 'new']);
+  }
   createTeam(): void {
     if (this.context()?.role === 'ADMIN')
       void this.router.navigate(['/workspace', this.id, 'teams', 'new']);
