@@ -1,0 +1,213 @@
+<div class="forest-shell">
+  <aside class="desktop-sidebar">
+    <div class="brand">agentos</div>
+    <nav aria-label="Điều hướng workspace">
+      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a
+      ><button disabled>Organization map</button><button disabled>Teams</button
+      ><span class="selected" aria-current="page">Agents</span
+      ><button disabled>Missions</button><button disabled>Approvals</button
+      ><button disabled>Trace</button
+      ><a routerLink="/workspace">Đổi workspace</a>
+    </nav>
+  </aside>
+  <header class="compact-header">
+    <span class="brand">agentos</span
+    ><button
+      class="button secondary"
+      type="button"
+      aria-controls="directory-menu"
+      [attr.aria-expanded]="menuOpen()"
+      (click)="toggleMenu()"
+    >
+      Menu
+    </button>
+  </header>
+  <dialog
+    id="directory-menu"
+    aria-label="Workspace navigation"
+    (cancel)="closeMenu()"
+  >
+    <button type="button" class="button secondary" (click)="closeMenu()">
+      Close menu
+    </button>
+    <nav>
+      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a
+      ><a routerLink="/workspace">Đổi workspace</a>
+    </nav>
+  </dialog>
+  <main data-testid="agent-directory" [attr.aria-busy]="loading()">
+    <div class="breadcrumb">
+      <span>{{ context()?.name }}</span
+      ><span>{{ auth.user()?.displayName }}</span>
+    </div>
+    <header class="heading">
+      <h1>Agents</h1>
+      <p>Quản lý công việc, trạng thái và các bước cần xử lý.</p>
+    </header>
+    @if (context() && !denied()) {
+      <div class="actions">
+        @if (context()?.role === 'ADMIN') {
+          <a class="button" [routerLink]="['/workspace', id, 'agents', 'new']"
+            >Create Agent</a
+          >
+        }
+        <button
+          type="button"
+          class="button secondary"
+          [disabled]="loading()"
+          (click)="load()"
+        >
+          Refresh
+        </button>
+      </div>
+      <form class="filters" (ngSubmit)="apply()">
+        <label
+          >Search agents<input
+            name="search"
+            maxlength="200"
+            [(ngModel)]="search"
+            placeholder="Name or role" /></label
+        ><label
+          >Status<select name="status" [(ngModel)]="selectedStatus">
+            <option value="">All statuses</option>
+            @for (state of statuses; track state) {
+              <option [value]="state">{{ state }}</option>
+            }
+          </select></label
+        ><button class="button secondary" type="submit" [disabled]="loading()">
+          Apply filters
+        </button>
+      </form>
+    }
+    @if (!denied()) {
+      <div class="actions">
+        <button class="text-action" type="button" (click)="clearFilters()">
+          Clear filters
+        </button>
+      </div>
+    }
+    @if (loading()) {
+      <p role="status">Đang tải danh sách Agent…</p>
+    }
+    @if (denied()) {
+      <p class="auth-error" role="alert">Không còn quyền truy cập workspace.</p>
+      <a routerLink="/workspace">Chọn workspace khác</a>
+    }
+    @if (error()) {
+      <p class="auth-error" role="alert">{{ error() }}</p>
+      <div>
+        <button type="button" class="button secondary" (click)="load()">
+          Thử lại
+        </button>
+      </div>
+    }
+    @if (result(); as directory) {
+      <p class="caption" role="status">
+        {{ directory.total }} agents · Page {{ directory.page + 1 }}
+      </p>
+      @if (!directory.items.length) {
+        <section class="empty">
+          <h2>
+            {{
+              query || status || teamId ? 'No matching agents' : 'No agents yet'
+            }}
+          </h2>
+          <p>
+            {{
+              query || status || teamId
+                ? 'Try a different name, role or status.'
+                : 'Create an Agent to start configuring your team.'
+            }}
+          </p>
+        </section>
+      } @else {
+        <section class="directory" aria-label="Agent directory">
+          <div class="directory-head" aria-hidden="true">
+            <span>Agent / Role</span><span>Team</span
+            ><span>Config / Runtime</span><span>Workload</span
+            ><span>Action</span>
+          </div>
+          @for (agent of directory.items; track agent.id) {
+            <article class="directory-row" data-testid="directory-row">
+              <div>
+                <a
+                  class="agent-name"
+                  [routerLink]="['/workspace', id, 'agents', agent.id]"
+                  >{{ agent.name }}</a
+                >
+                <p>{{ agent.role }}</p>
+              </div>
+              <div>
+                <span class="mobile-label">Team</span
+                >{{ agent.teamName || 'Unassigned' }}
+              </div>
+              <div>
+                <span class="mobile-label">Config / Runtime</span
+                >{{ agent.status }} / Unavailable<small
+                  >Revision {{ agent.configurationRevision }}</small
+                >
+              </div>
+              <div>
+                <span class="mobile-label">Workload</span
+                >{{ agent.status === 'DRAFT' ? 'Not eligible' : 'Unavailable'
+                }}<small
+                  >Configured concurrency:
+                  {{ agent.concurrencyLimit ?? 'Not set' }}</small
+                >
+              </div>
+              <div class="row-actions">
+                <a
+                  [routerLink]="[
+                    '/workspace',
+                    id,
+                    'agents',
+                    agent.id,
+                    'studio',
+                  ]"
+                  >Open Studio</a
+                >
+                @if (context()?.role === 'ADMIN' && agent.status === 'DRAFT') {
+                  <a
+                    [routerLink]="[
+                      '/workspace',
+                      id,
+                      'agents',
+                      agent.id,
+                      'activation-review',
+                    ]"
+                    >Review activation</a
+                  >
+                }
+              </div>
+            </article>
+          }
+        </section>
+      }
+      <div class="pagination" aria-label="Directory pagination">
+        <button
+          class="button secondary"
+          type="button"
+          [disabled]="directory.page === 0 || loading()"
+          (click)="changePage(directory.page - 1)"
+        >
+          Previous</button
+        ><button
+          class="button secondary"
+          type="button"
+          [disabled]="
+            (directory.page + 1) * directory.size >= directory.total ||
+            loading() ||
+            directory.page >= 100000
+          "
+          (click)="changePage(directory.page + 1)"
+        >
+          Next
+        </button>
+      </div>
+      <p class="caption">
+        Runtime and live workload are unavailable. Configured concurrency is a
+        request, not allocated capacity. This page does not activate agents.
+      </p>
+    }
+  </main>
+</div>

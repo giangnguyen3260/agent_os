@@ -1,225 +1,216 @@
-import {Component} from '@angular/core';
+import {HttpErrorResponse} from '@angular/common/http';
+import {
+  Component,
+  DestroyRef,
+  ElementRef,
+  effect,
+  inject,
+  signal,
+} from '@angular/core';
+import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
+import {FormsModule} from '@angular/forms';
+import {ActivatedRoute, Router, RouterLink} from '@angular/router';
+import {combineLatest, Subscription} from 'rxjs';
+import {
+  AuthFailure,
+  AuthService,
+  Workspace,
+} from '../../core/auth/auth.service';
+import {uuid} from '../teams/team.service';
+import {
+  AgentDirectoryService,
+  agentStatuses,
+  DirectoryPage,
+  validDirectory,
+} from './agent-directory.service';
 
 @Component({
   selector: 'app-agent-list-page',
   standalone: true,
-  template: `
-    <div class="page">
-      <section class="page-heading">
-        <div>
-          <span class="eyebrow">Agent Studio</span>
-          <h1>Agents</h1>
-          <p class="muted">
-            Configure role, model, skills, tools, autonomy, permissions, and
-            budgets.
-          </p>
-        </div>
-        <button type="button" class="button">Create Agent</button>
-      </section>
-
-      <section class="agent-grid">
-        <article class="panel agent-card lead">
-          <div class="agent-avatar">M</div>
-          <div>
-            <h2>Maya</h2>
-            <p>Engineering Manager</p>
-          </div>
-          <span class="pill">GPT · Managed</span>
-          <dl>
-            <div>
-              <dt>Success</dt>
-              <dd>96%</dd>
-            </div>
-            <div>
-              <dt>Cost</dt>
-              <dd>$18.20</dd>
-            </div>
-            <div>
-              <dt>Status</dt>
-              <dd>Active</dd>
-            </div>
-          </dl>
-        </article>
-
-        <article class="panel agent-card">
-          <div class="agent-avatar">E</div>
-          <div>
-            <h2>Emma</h2>
-            <p>Solution Architect</p>
-          </div>
-          <span class="pill">Claude · Conditional</span>
-          <dl>
-            <div>
-              <dt>Success</dt>
-              <dd>92%</dd>
-            </div>
-            <div>
-              <dt>Cost</dt>
-              <dd>$24.80</dd>
-            </div>
-            <div>
-              <dt>Status</dt>
-              <dd>Active</dd>
-            </div>
-          </dl>
-        </article>
-
-        <article class="panel agent-card">
-          <div class="agent-avatar">A</div>
-          <div>
-            <h2>Alex</h2>
-            <p>Backend Developer</p>
-          </div>
-          <span class="pill">Claude · Execute</span>
-          <dl>
-            <div>
-              <dt>Success</dt>
-              <dd>89%</dd>
-            </div>
-            <div>
-              <dt>Cost</dt>
-              <dd>$21.00</dd>
-            </div>
-            <div>
-              <dt>Status</dt>
-              <dd>Active</dd>
-            </div>
-          </dl>
-        </article>
-      </section>
-
-      <section class="panel">
-        <h2>Permission Matrix</h2>
-        <div class="permission-table">
-          <div class="row header">
-            <span>Capability</span>
-            <span>Maya</span>
-            <span>Emma</span>
-            <span>Alex</span>
-          </div>
-          <div class="row">
-            <span>Repository read</span>
-            <strong>Allow</strong>
-            <strong>Allow</strong>
-            <strong>Allow</strong>
-          </div>
-          <div class="row">
-            <span>Repository write</span>
-            <strong>Approval</strong>
-            <strong>Approval</strong>
-            <strong>Allow</strong>
-          </div>
-          <div class="row">
-            <span>Production deploy</span>
-            <strong>Approval</strong>
-            <strong>Block</strong>
-            <strong>Block</strong>
-          </div>
-        </div>
-      </section>
-    </div>
-  `,
-  styles: [
-    `
-      h1,
-      h2 {
-        margin: 0 0 8px;
-      }
-
-      .page-heading {
-        align-items: center;
-        display: flex;
-        justify-content: space-between;
-        gap: 16px;
-      }
-
-      .agent-grid {
-        display: grid;
-        gap: 16px;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-      }
-
-      .agent-card {
-        display: grid;
-        gap: 14px;
-      }
-
-      .agent-card.lead {
-        border-color: #c7d7fe;
-        background: #fbfdff;
-      }
-
-      .agent-avatar {
-        align-items: center;
-        background: #edf2ff;
-        border-radius: 8px;
-        color: #174ea6;
-        display: grid;
-        font-weight: 800;
-        height: 44px;
-        place-items: center;
-        width: 44px;
-      }
-
-      .agent-card p {
-        color: var(--muted);
-        margin: 0;
-      }
-
-      dl {
-        display: grid;
-        gap: 10px;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        margin: 0;
-      }
-
-      dt {
-        color: var(--muted);
-        font-size: 12px;
-      }
-
-      dd {
-        font-weight: 800;
-        margin: 4px 0 0;
-      }
-
-      .permission-table {
-        border: 1px solid var(--line);
-        border-radius: 8px;
-        overflow: hidden;
-      }
-
-      .row {
-        display: grid;
-        grid-template-columns: 1.5fr repeat(3, 1fr);
-      }
-
-      .row + .row {
-        border-top: 1px solid var(--line);
-      }
-
-      .row span,
-      .row strong {
-        padding: 12px;
-      }
-
-      .header {
-        background: var(--surface-soft);
-        color: var(--muted);
-        font-size: 13px;
-        font-weight: 800;
-      }
-
-      .row strong {
-        font-size: 14px;
-      }
-
-      @media (max-width: 960px) {
-        .agent-grid {
-          grid-template-columns: 1fr;
-        }
-      }
-    `,
+  imports: [FormsModule, RouterLink],
+  templateUrl: './agent-list-page.component.html',
+  styleUrls: [
+    '../dashboard/dashboard-page.component.css',
+    './agent-list-page.component.css',
   ],
 })
-export class AgentListPageComponent {}
+export class AgentListPageComponent {
+  readonly auth = inject(AuthService);
+  private readonly api = inject(AgentDirectoryService);
+  private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
+  private readonly destroy = inject(DestroyRef);
+  private readonly element: ElementRef<HTMLElement> = inject(ElementRef);
+  private requests = new Subscription();
+  private epoch = 0;
+  private account = this.auth.user()?.id;
+  id = '';
+  page = 0;
+  query = '';
+  status = '';
+  teamId = '';
+  search = '';
+  selectedStatus = '';
+  readonly statuses = agentStatuses;
+  readonly context = signal<Workspace | null>(null);
+  readonly result = signal<DirectoryPage | null>(null);
+  readonly loading = signal(false);
+  readonly denied = signal(false);
+  readonly error = signal('');
+  readonly menuOpen = signal(false);
+  constructor() {
+    effect(() => {
+      const account = this.auth.user()?.id;
+      if (account !== this.account) {
+        this.account = account;
+        this.clear();
+        this.denied.set(true);
+      }
+    });
+    this.destroy.onDestroy(() => this.clear());
+    combineLatest([this.route.paramMap, this.route.queryParamMap])
+      .pipe(takeUntilDestroyed())
+      .subscribe(([params, query]) => {
+        this.id = params.get('id') || '';
+        const raw = query.get('page') || '0';
+        this.page = /^\d+$/.test(raw) ? Number(raw) : -1;
+        this.query = query.get('query') || '';
+        this.status = query.get('status') || '';
+        this.teamId = query.get('teamId') || '';
+        this.search = this.query;
+        this.selectedStatus = this.status;
+        void this.load();
+      });
+  }
+  private clear(): void {
+    this.epoch++;
+    this.requests.unsubscribe();
+    this.requests = new Subscription();
+    this.result.set(null);
+    this.context.set(null);
+    this.loading.set(false);
+    this.error.set('');
+    this.closeMenu();
+  }
+  async load(): Promise<void> {
+    this.clear();
+    this.denied.set(false);
+    if (
+      !uuid(this.id) ||
+      !Number.isInteger(this.page) ||
+      this.page < 0 ||
+      this.page > 100000 ||
+      this.query.length > 200 ||
+      (this.status && !this.statuses.some(status => status === this.status)) ||
+      (this.teamId && !uuid(this.teamId))
+    ) {
+      this.error.set('Invalid directory filters. Clear filters to continue.');
+      return;
+    }
+    const epoch = this.epoch;
+    const account = this.auth.user()?.id;
+    const active = () =>
+      epoch === this.epoch &&
+      !this.destroy.destroyed &&
+      account === this.auth.user()?.id;
+    this.loading.set(true);
+    try {
+      const context = await this.auth.getWorkspace(this.id);
+      if (!active()) return;
+      if (
+        !account ||
+        context.id !== this.id ||
+        !['ADMIN', 'MEMBER'].includes(context.role)
+      ) {
+        this.clear();
+        this.denied.set(true);
+        return;
+      }
+      this.context.set(context);
+      this.requests.add(
+        this.api
+          .list(this.id, this.page, this.query, this.status, this.teamId)
+          .subscribe({
+            next: response => {
+              if (!active()) return;
+              this.loading.set(false);
+              if (!validDirectory(response?.data, this.id, this.page)) {
+                this.error.set(
+                  'Invalid directory response. Try again to load current data.',
+                );
+                return;
+              }
+              this.result.set(response.data);
+            },
+            error: error => {
+              if (active()) this.failure(error);
+            },
+          }),
+      );
+    } catch (error) {
+      if (active()) this.failure(error);
+    }
+  }
+  private failure(error: unknown): void {
+    this.result.set(null);
+    this.context.set(null);
+    this.loading.set(false);
+    if (
+      (error instanceof HttpErrorResponse &&
+        [401, 403, 404].includes(error.status)) ||
+      (error instanceof AuthFailure &&
+        ['unauthorized', 'not-found'].includes(error.kind))
+    ) {
+      this.denied.set(true);
+    } else this.error.set('Không thể tải danh sách Agent. Vui lòng thử lại.');
+  }
+  apply(): void {
+    this.navigate(0, this.search.trim(), this.selectedStatus, this.teamId);
+  }
+  clearFilters(): void {
+    this.navigate(0, '', '', '');
+  }
+  changePage(page: number): void {
+    this.navigate(page, this.query, this.status, this.teamId);
+  }
+  private navigate(
+    page: number,
+    query: string,
+    status: string,
+    teamId: string,
+  ): void {
+    const target = this.router.createUrlTree(
+      ['/workspace', this.id, 'agents'],
+      {
+        queryParams: {
+          ...(page ? {page} : {}),
+          ...(query ? {query} : {}),
+          ...(status ? {status} : {}),
+          ...(teamId ? {teamId} : {}),
+        },
+      },
+    );
+    if (this.router.serializeUrl(target) === this.router.url) void this.load();
+    else void this.router.navigateByUrl(target);
+  }
+  toggleMenu(): void {
+    if (this.menuOpen()) {
+      this.closeMenu();
+      return;
+    }
+    this.menuOpen.set(true);
+    this.element.nativeElement
+      .querySelector<HTMLDialogElement>('#directory-menu')
+      ?.showModal();
+  }
+  closeMenu(): void {
+    if (!this.menuOpen()) return;
+    this.menuOpen.set(false);
+    this.element.nativeElement
+      .querySelector<HTMLDialogElement>('#directory-menu')
+      ?.close();
+    this.element.nativeElement
+      .querySelector<HTMLElement>('[aria-controls="directory-menu"]')
+      ?.focus();
+  }
+}

@@ -1,0 +1,11 @@
+# Agent directory delivery contract
+
+Branch feature/agent-directory stacks on Activation Review PR9. Implements Forest S07 (Figma5wUjDKXg8vtRaJcO9XHfml: desktop46:2065, mobile60:4895, tablet60:11511) using existing Forest tokens, Inter and native controls. No static image assets occur in these references. Desktop rows become compact cards; labels replace the redundant header card. Added search/status/pagination controls support real persisted collections. Design examples of Busy/Idle and workload are replaced with explicit unavailable states because no authoritative runtime exists.
+
+Current enabled ADMIN/MEMBER can read their organization's directory. ADMIN can create and review Draft activation; both can open detail/Studio under existing scoped access rules. Requested concurrency is labeled configuration, never allocated capacity. Positive activation remains unavailable.
+
+GET /api/v1/organizations/{organizationId}/agents/directory is a separate projection preserving the existing list API. Parameters: page0..100000 default0, query<=200 characters stripped case-insensitive literal contains name or role, optional lifecycle status, optional same-organization teamId. Invalid recognized parameters400; denied scope403; missing/foreign Team404. Fixed20 rows ordered created_at descending,id; count and rows share a read snapshot. All values bound and LIKE wildcard characters escaped. No business writes, grants, contracts or secrets in the projection.
+
+Data: {items,page,size,total}; items contain id,organizationId,name,role,status,teamId,teamName,configurationRevision,concurrencyLimit. Legacy configuration can have revision0/null limit. URL filters/page survive reload/back. Retry refreshes workspace authorization and data, clears old rows, cancels prior requests and rejects null/malformed/foreign-scope envelopes. Account changes invalidate pending requests. Native modal navigation supports Escape/focus restoration.
+
+Acceptance: focused backend integration tests, six browser cases per viewport and a native PostgreSQL projection/read-only probe. Disposable fixture25 Agents spans every lifecycle state, assigned/unassigned Teams and literal special-character names. Fixtures are CI-only, no production seed or migration. Sonar remains paused. Production scale/security and broad accessibility acceptance remain open.

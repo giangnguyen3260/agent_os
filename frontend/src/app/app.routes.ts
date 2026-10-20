@@ -33,6 +33,15 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'workspace/:id/agents',
+    canActivate: [authGuard],
+    runGuardsAndResolvers: 'always',
+    loadComponent: () =>
+      import('./features/agents/agent-list-page.component').then(
+        module => module.AgentListPageComponent,
+      ),
+  },
+  {
     path: 'workspace/:id/agents/new',
     canDeactivate: [
       (
