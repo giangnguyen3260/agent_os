@@ -10,7 +10,7 @@ import urllib.request
 import uuid
 
 BASE = os.environ.get('E2E_BASE_URL', 'http://127.0.0.1:18080')
-ORG = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'
+ORG = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
 AGENT = 'd4000000-0000-4000-8000-000000000001'
 PATH = f'/api/v1/organizations/{ORG}/agents/{AGENT}/configuration'
 jar = http.cookiejar.CookieJar()

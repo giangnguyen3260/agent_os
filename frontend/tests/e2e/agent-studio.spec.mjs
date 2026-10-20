@@ -1,7 +1,7 @@
 import {test, expect} from '@playwright/test';
 import {randomUUID} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
-const org = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+const org = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
 const active = 'd3000000-0000-4000-8000-000000000001';
 const api = id => `/api/v1/organizations/${org}/agents/${id}/configuration`;
 const url = id => `/workspace/${org}/agents/${id}/studio`;
