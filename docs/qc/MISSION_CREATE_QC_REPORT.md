@@ -1,41 +1,36 @@
 # Mission creation QC report
 
-Decision: **PENDING runtime and CI evidence**. Working branch `feature/mission-create`; independent source review on 21 October 2026. Shared working tree is still changing; no reviewed commit SHA or CI run is claimed. No commits, push, deployment or automations performed by this QC worker.
+Decision: **PASS for bounded Mission creation/read delivery**. Draft PR13 remains stacked on unmerged PR12. This is not production acceptance or planning/execution delivery.
 
-## Delivered coverage
+## Exact candidate and execution
 
-`frontend/tests/e2e/mission-create.spec.mjs` contains 11 real-backend scenarios for the existing desktop/tablet/mobile projects (33 instances). It covers validation, no premature writes, Back/Cancel, accessible fixed Team, manager paging and DRAFT labelling, actual creation and reload, ambiguous POST replay, GET-only detail retry, canonical/concurrent replay, input bounds, manager/tenant/role/CSRF denial, legacy fail-closed POST, fresh-role revocation, editable setup rejection and locked idempotency conflict. Successful data is never synthesized. See `MISSION_CREATE_TEST_CASES.md` for prerequisites and limitations.
+Application `91fac7ef98e272e7be553ac52ebae098613f1c0e`; tested PR merge `8f418491e7b8a2f7072e41a65fa59f20069ae461` onto `4a8d335530c75094d2e592881d201729803b98f0`. Evidence timestamps below are UTC on21October2026. Final evidence-only documentation commit is separate from this tested application revision.
 
-`frontend/tests/e2e/team-workspace.spec.mjs` now checks the scoped Create Mission link for ADMIN and its absence for MEMBER. Existing E2E files contained no old legacy POST expectation or assertion that ADMIN's action must remain disabled.
-
-## Executed evidence
-
-| Check | Evidence and result |
+| Gate | Actual completed evidence |
 |---|---|
-| Contract, fixture, existing E2E and implementation inspection | Performed locally against shared sources |
-| Playwright collection | Passed: `npx playwright test mission-create.spec.mjs --list` collected 33 instances; workspace baseline collection found 18 instances |
-| JavaScript syntax and formatting | Passed: `node --check tests/e2e/mission-create.spec.mjs`; Prettier check passed for both changed specs; scoped `git diff --check` passed |
-| Local stack availability | Port 8080 API preflight returned curl HTTP code 000; Docker executable not found. Real browser/SQL tests cannot execute here against the required stack |
-| Backend test artifacts | Inspected completed local Surefire text and XML: MissionCreateIntegrationTest, 7 tests, 0 failures, 0 errors, 0 skipped, 9.303 seconds. Produced by backend worker; not independently rerun by QC and not CI. Earlier Mockito self-attach errors were superseded by this passing result |
-| Frontend application checks | FE worker reports final format, lint and build passed; coordinator Google import check and diff check passed; full local backend suite95passed,7new |
-| Coordinator rendered mock UI | 26 checks passed across1440/768/390: validation/Back, frozen retry, saved read, error/null/scope clearing, GET-only recovery and compact-menu Escape/focus. Rechecked after final Forest input-style refinement; screenshots inspected at all three widths. Mock API results are not persistence evidence |
-| CI/PostgreSQL/browser execution | Pending; no run URL, completed browser result or native PostgreSQL probe output supplied |
+| Code quality | [Run39598891981](https://github.com/giangnguyen3260/agent_os/actions/runs/39598891981), job119218028546, success12:22:17Z;96backend tests,0failures/errors/skipped; Java imports/format, FE lint/format/tooling/build passed |
+| Docker/PostgreSQL/browser | [Run39598891905](https://github.com/giangnguyen3260/agent_os/actions/runs/39598891905), job119218027730, success12:28:25Z; healthy root Compose, V008 schema history success, fixtures, frontend/API/proxy isolation passed |
+| Browser regression | Completed12:27:39Z:222passed across1440/768/390, including33Mission instances and all189baseline instances; no retries |
+| Native Mission probe | PASS12:23:51Z: PostgreSQL persistence/readback, no planning/tasks, canonical/concurrent replay, conflict rollback, manager/tenant scope, validation and fresh authorization; also malformed JSON/header/redaction and400/410 assertions |
+| Existing native regressions | Agent creation concurrency, Studio replay/stale revision, activation no-mutation, Agent/Team directory projections, Workspace snapshot/pagination/safe events and auth account barrier passed |
+| Restart/logout | PASS12:28:12Z: exact issued session survives backend restart; logout rejects replay |
+| Local rendered UI |26mock API checks passed across1440/768/390 after final Forest input styling; screenshots inspected, validation/Back/retry/private clearing/GET-only recovery and compact-menu Escape/focus checked. These are visual/interaction evidence, separate from persistence |
+| Independent QC | Source review and corrected HTTP handler/embedded-server test review completed; no open blocking finding. Coordinator inspected completed CI logs; independent reviewer did not rerun the entire CI suite |
 
-## Independent findings
+## Covered behavior
 
-1. **Resolved during review — legacy status mismatch.** `validMission()` initially accepted PLANNED/PAUSED but rejected backend READY/WAITING_APPROVAL/REVIEW, preventing legitimate legacy detail display. Reinspection found the backend enum values added to the validator. Source resolution only; runtime regression evidence remains pending.
-2. **Resolved baseline observations.** Before implementation arrived, legacy POST remained enabled and old service audit included title. Current controller returns 410 and the new create transaction writes only safe status audit metadata. These were baseline observations, not outstanding findings against the new implementation.
+Three steps Goal & context → Execution → Review save a real CREATED Mission. Required title/goal/output, fixed scoped Team, optional same-Team DRAFT/ACTIVE manager, priority, optional deadline/budget/context and HUMAN_REQUIRED configuration persist and reload. DRAFT manager and configured limits are not runtime authorization or enforcement.
 
-No further concrete defect established by source inspection at this checkpoint. This is not a claim of exhaustive correctness.
+Eleven real-backend Mission scenarios cover validation, no early writes, Back/Cancel, fixed Team accessibility, manager paging/literal search, DRAFT labels, actual creation/reload, ambiguous POST replay, GET-only recovery, canonical/concurrent replay, invalid input, manager/tenant/role/CSRF denial, legacy POST closure, fresh-role revocation, editable setup rejection and locked idempotency conflict. Workspace baseline tests check ADMIN Create Mission link and MEMBER absence. See [cases](MISSION_CREATE_TEST_CASES.md).
 
-## Reviewed invariants and outstanding gates
+Every request/replay checks enabled identity, credential version and membership. Creation locks org/account/membership then Team/manager. Team is part of canonical request hash. Durable original receipts precede current eligibility checks after fresh authorization. Mission, receipt and safe status-only audit are atomic. Detail manager-name join constrains current Team. Private goal/context/title do not enter audit payloads or malformed-input errors.
 
-Create locks organization, account and membership before Team/manager, checks fresh enabled identity and credential version, and authorizes before original-key replay. Canonical payload hashes include Team. Receipt replay precedes current Team/manager eligibility checks. Mission, receipt and safe audit insert share the transaction. Manager candidate queries constrain organization, Team, level and status and escape literal search. Detail manager-name join also constrains current Team. Strict deserializers reject scalar coercion. POST response validation checks scope, identity, CREATED status and request field equality; unknown outcomes keep the request frozen. Setup/400 rejection clears the attempt and permits a fresh key. Planning remains unavailable.
+## Findings and retest
 
-Require completed backend results, native PostgreSQL probe and all browser projects before acceptance. Source inspection of test code does not prove it passed. Browser viewport execution and visual/keyboard interaction are pending; no Figma pixel comparison, screenshot evidence, production load/failover test or production deployment is claimed. Sonar is paused, not passed. Integration rollback evidence must remain distinct from real PostgreSQL evidence. Main owns workflow/probe/fixture execution and CI evidence updates.
+The initial application74b1784 run39597243912 reported219passed/3failed: numeric-string input returned403 instead of400 at all widths. Framework sendError redispatched to the denied /error route; MockMvc alone did not reproduce this. Direct sanitized conversion/binding/status envelopes fix the boundary without relaxing security. A real embedded-servlet regression covers invalid JSON/numbers/keys, redaction, legacy410/planning501 and zero writes. Corrected full gate above passed; failed-run native probes after the browser step were skipped, not accepted as evidence.
 
-## First CI execution and correction
+An early source review found nonexistent PLANNED/PAUSED statuses in the frontend validator; actual READY/WAITING_APPROVAL/REVIEW enum values now match the backend. Rendered QA corrected native input styling and exact accessible field labels. No open blocker remains for the bounded scope.
 
-Application74b1784b4597ce0587aeadabd0c073fc9ebed9c0, merge3dccd9a15346cf04dd71d7a06d91aa809989a145 onto4a8d335. Quality run39597243960/job119212492701 completed2026-10-21T12:10:18Z:95backend tests, Java import/format, FE lint/format/tooling/build passed. Docker run39597243912/job119212492186 built healthy stack and applied migrations/fixtures, but browser execution reported219passed/3failed, one identical invalid-budget case per viewport. Native probes after browsers were skipped, not passed.
+## Limits
 
-Root cause: Jackson body conversion and framework binding/status errors used servlet sendError; the default /error redispatch was denied by security and masked400/410 as403. Added direct sanitized error envelopes for body/header/type conversion and explicit status responses, without relaxing security or exposing private request values. A real embedded-servlet HTTP regression exercises malformed JSON, numeric-string rejection, missing/malformed key, legacy410/planning501 and zero business mutations. Mission native probe now runs before browser tests and checks these boundaries. New gate pending.
+Planning, task creation/execution, effective grants, provider integration and activation remain unavailable. Manager is optional for saving and must be ACTIVE for future planning. No generated plan, task or model call is fabricated. Sonar remains paused, not passed. Field encryption/KMS, production scale/failover and comprehensive accessibility/security acceptance remain open; see [V008 rollout](../../backend/MISSION_CREATE_MIGRATION.md). No Mac deployment or image publication is claimed. All PRs remain draft/unmerged.
