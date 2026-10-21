@@ -2,6 +2,8 @@
 
 ## Current branch outcome
 
+On `feature/team-workspace`, Forest S05 reads a scoped Team board, paginated Pending details, assigned Agents and safe recorded mission/task activity. Preview lanes are bounded to5rows and detailed pages20; every non-null activity reference must resolve inside the Team. Draft PR12 stacks on unmerged PR11. Candidate4919e241 passed88 backend tests,189 browser instances and native PostgreSQL Workspace snapshot/page/safe-activity/no-write checks. See [Team Workspace QC](docs/qc/TEAM_WORKSPACE_QC_REPORT.md) for exact execution evidence. No migration is added; mission/task writes and runtime/activation remain unavailable.
+
 On `feature/team-directory`, Forest S03 lists scoped persisted Teams with name/purpose search, lifecycle filters and pagination. Manager/Agent/task counts are aggregated independently; Running/Pending/Review links use the actual filtered task read and resolve Teams outside the current dashboard page. Draft PR11 stacks on unmerged PR10. Application3ab36f4 passed83 backend tests,171 browser instances and native PostgreSQL projection/count/no-write checks. See [Team directory QC](docs/qc/TEAM_DIRECTORY_QC_REPORT.md) for exact gate evidence. No schema migration is added; health/runtime/cost remain unavailable.
 
 On `feature/agent-directory`, Forest S07 is implemented as a real scoped directory with fixed pagination, literal name/role search, lifecycle/Team query filters and responsive navigation. ADMIN create/activation-review links and member read access use current workspace authorization. Runtime/workload remain unavailable. Draft PR10 stacks on unmerged PR9. Application3ded5dab passed78 backend tests,153 browser instances and native PostgreSQL projection/no-write checks. See [directory QC](docs/qc/AGENT_DIRECTORY_QC_REPORT.md) for exact gate evidence; no schema migration is added.
@@ -24,6 +26,7 @@ Prior workspace application revision `4f3e795` passed 33 backend tests and 33 br
 | Human login/session, recovery, workspace selection | Development gates verified; see the respective reports under docs/qc |
 | Organization overview and pending-task read drilldown | Bounded development read gate verified; actual PostgreSQL rows, no sample business data |
 | Capacity/performance/cost | Explicitly unavailable; no allocator, execution-run history or billing ledger implemented |
+| Team Workspace | Stored overview/Pending/Agents/activity reads; bounded lanes and safe event metadata; see Workspace QC |
 | Team directory | Persisted scoped aggregates, search/status pages and task drilldowns; see Team directory QC |
 | Team Draft creation | Development gate verified; atomic assignments, scoped authorization and duplicate-safe retries |
 | Agent directory | Scoped persisted reads, filters and responsive navigation; see directory QC |
