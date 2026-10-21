@@ -191,7 +191,9 @@
                     {{ task.status }} · Assignee unavailable
                   </p>
                   <p class="caption">
-                    {{ task.missionId ? 'Linked mission' : 'Mission unavailable' }}
+                    {{
+                      task.missionId ? 'Linked mission' : 'Mission unavailable'
+                    }}
                   </p>
                   @if (group.lane === 'PENDING') {
                     <p>{{ task.pendingReason ?? 'Reason unavailable' }}</p>
