@@ -86,6 +86,11 @@ before = sql(f"SELECT count(*) FROM missions WHERE organization_id='{ORG}';")
 for change in ({'title': ' '}, {'budgetLimit': -1}, {'budgetLimit': 1.001},
                {'budgetLimit': '12'}, {'approvalMode': 'AUTO'}, {'deadline': '2030-02-30'}):
     assert admin.create(str(uuid.uuid4()), dict(body, **change))[0] == 400, change
+status, rejected = admin.create(str(uuid.uuid4()), dict(body, budgetLimit='private-invalid-amount'))
+assert status == 400 and 'private-invalid-amount' not in json.dumps(rejected)
+assert admin.request(ROOT, b'{invalid-json', dict(admin.headers, **{'Idempotency-Key': str(uuid.uuid4())}))[0] == 400
+assert admin.request(ROOT, json.dumps(body).encode(), admin.headers)[0] == 400
+assert admin.request(f'/api/v1/organizations/{ORG}/missions', json.dumps(body).encode(), admin.headers)[0] == 410
 for manager in (24, 25, 26):
     bad = f'16200000-0000-4000-8000-{manager:012d}'
     assert admin.create(str(uuid.uuid4()), dict(body, managerAgentId=bad))[0] == 409
