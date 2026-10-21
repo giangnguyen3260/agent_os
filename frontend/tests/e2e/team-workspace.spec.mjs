@@ -106,6 +106,9 @@ test.describe('real Team workspace', () => {
     await expect(
       p.getByRole('heading', {name: 'Workspace Delivery', exact: true}),
     ).toBeVisible();
+    await expect(
+      p.getByRole('link', {name: 'Create Mission', exact: true}),
+    ).toHaveAttribute('href', `/workspace/${org}/teams/${team}/missions/new`);
     for (const [name, lane] of [
       ['Running tasks', 'RUNNING'],
       ['Review tasks', 'REVIEW'],
@@ -236,6 +239,9 @@ test.describe('real Team workspace', () => {
     page: p,
   }) => {
     await login(p, true);
+    await expect(
+      p.getByRole('link', {name: 'Create Mission', exact: true}),
+    ).toHaveCount(0);
     await expect(
       p.getByRole('link', {name: 'Add Agent', exact: true}),
     ).toHaveCount(0);

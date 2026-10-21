@@ -82,14 +82,20 @@
         </p>
       </header>
       <div class="actions">
-        <button
-          class="button"
-          type="button"
-          disabled
-          aria-describedby="creation-unavailable"
-        >
-          Create Mission
-        </button>
+        @if (context()?.role === 'ADMIN' && data.team.status !== 'ARCHIVED') {
+          <a
+            class="button"
+            [routerLink]="[
+              '/workspace',
+              id,
+              'teams',
+              teamId,
+              'missions',
+              'new',
+            ]"
+            >Create Mission</a
+          >
+        }
         @if (context()?.role === 'ADMIN' && data.team.status !== 'ARCHIVED') {
           <a
             class="button secondary"
@@ -120,7 +126,8 @@
         </button>
       </div>
       <p id="creation-unavailable" class="caption">
-        Mission and task creation are unavailable in this read-only workspace.
+        Task creation is unavailable. Mission creation requires an administrator
+        and a non-archived team.
       </p>
       @if (tab === 'overview') {
         <p class="caption">Task overview · Scroll down for all lanes</p>

@@ -1,0 +1,133 @@
+:host {
+  --primary: #17634b;
+  --line: #dde4dc;
+  --surface: #fff;
+  display: block;
+  background: #f7f8f5;
+}
+.mission-form {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 24px;
+}
+legend {
+  font-size: 18px;
+  line-height: 26px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  font-weight: 600;
+  padding: 0 8px;
+}
+form {
+  display: grid;
+  gap: 24px;
+}
+label {
+  font-weight: 500;
+  margin-top: 8px;
+}
+input,
+textarea,
+select {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+  padding: 12px;
+  color: var(--text);
+  background: var(--surface);
+}
+[aria-invalid='true'] {
+  border-color: var(--danger);
+}
+.field-error:empty {
+  display: none;
+}
+textarea {
+  resize: vertical;
+}
+.steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  list-style: none;
+  margin: 0;
+  padding: 16px 0;
+}
+.steps li {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--muted);
+}
+.steps li[aria-current] {
+  color: var(--primary);
+  font-weight: 600;
+}
+.steps span {
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  text-align: center;
+  line-height: 28px;
+}
+.panel {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.notice {
+  display: grid;
+  gap: 8px;
+}
+.review dl,
+dl.review {
+  display: grid;
+  grid-template-columns: minmax(100px, 1fr) minmax(0, 3fr);
+  gap: 16px;
+  margin: 0;
+}
+dd {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.field-error,
+[aria-invalid='true'] + small {
+  color: #a32b25;
+}
+.footer {
+  justify-content: flex-end;
+}
+@media (max-width: 1023px) {
+  main {
+    padding: 24px;
+  }
+}
+@media (max-width: 767px) {
+  main {
+    padding: 16px;
+  }
+  .mission-form {
+    padding: 16px;
+  }
+  .steps {
+    gap: 16px;
+  }
+  .review dl,
+  dl.review {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+}
+
+.compact-header {
+  min-height: 68px;
+}
