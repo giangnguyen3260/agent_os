@@ -360,15 +360,29 @@ async function createAndCompactNavigation(p, info) {
     )
       writes.push(r.url());
   });
-  await button(p, 'Create Mission').click();
+  const chooserApi = `/api/v1/organizations/${org}/teams/directory`;
+  const chooserResponse = query =>
+    p.waitForResponse(response => {
+      const target = new URL(response.url());
+      return (
+        response.request().method() === 'GET' &&
+        target.pathname === chooserApi &&
+        target.searchParams.get('query') === query &&
+        target.searchParams.get('page') === '0'
+      );
+    });
+  const [initial] = await Promise.all([
+    chooserResponse(''),
+    button(p, 'Create Mission').click(),
+  ]);
+  expect(initial.status()).toBe(200);
   const dialog = p.getByRole('dialog');
   await expect(dialog).toBeVisible();
-  const chooserApi = `/api/v1/organizations/${org}/teams/directory`;
   await dialog
     .getByLabel('Search teams', {exact: true})
     .fill('Directory Archived');
   const [searched] = await Promise.all([
-    responseFor(p, chooserApi),
+    chooserResponse('Directory Archived'),
     dialog.getByLabel('Search teams', {exact: true}).press('Enter'),
   ]);
   expect(searched.status()).toBe(200);
