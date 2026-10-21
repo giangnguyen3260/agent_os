@@ -4,7 +4,7 @@ Scope: read-only persisted Mission metadata, Tasks/Pending and safe Activity. Co
 
 ## Six browser cases, three widths
 
-Playwright projects: desktop 1440×1000, tablet 768×1024, mobile 390×844. One worker, six cases per project, 18 instances. Member revocation restores membership in `finally`.
+Playwright projects: desktop 1440×1000, tablet 768×1024, mobile 390×844. One worker, six cases per project, 18 instances. All18passed within258total on candidate1488f16; exact run/merge/timestamps in MISSION_WORKSPACE_QC_REPORT.md. Member revocation restores membership in `finally`.
 
 | Case | Required evidence |
 |---|---|
