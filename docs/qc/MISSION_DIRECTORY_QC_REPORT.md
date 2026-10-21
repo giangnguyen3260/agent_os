@@ -1,37 +1,35 @@
-# Mission directory QC — acceptance pending
+# Mission directory QC report
 
-The six-scenario browser specification is prepared for 18 instances across 1440/768/390 widths. No real-backend browser instance has executed in this workspace. No acceptance PASS is claimed.
+Decision: **PASS for bounded Mission directory delivery**. Draft PR14 stacks on unmerged PR13. This is a read-only directory delivery, not production or runtime execution acceptance.
 
-## Actual checks on 21 October 2026 UTC
+## Candidate and evidence
 
-| Check | Actual result |
+Application `6568c94f98985bb807a6a6fce8582dbe0016027e`; tested PR merge `bbc298dc9d7a0d324848312972d5251a71b1c70a` onto `0bd4b1591071ed988c9777007d33ffea246416b8`. All evidence times below are UTC on21October2026. Final evidence documentation is separate from the tested application commit.
+
+| Gate | Actual evidence |
 |---|---|
-| Read contract and disposable SQL fixture | Completed; 27 missions, 25 Teams, mission 25 has 7 tasks / 2 completed / 2 pending. This is source evidence, not database execution. |
-| `node --check frontend/tests/e2e/mission-directory.spec.mjs` | PASS: JavaScript syntax only. |
-| `npx --prefix frontend playwright test --config frontend/playwright.config.mjs mission-directory.spec.mjs --list` | PASS: discovers 18 instances, six per width. Discovery does not execute browser tests. |
-| Local app readiness | BLOCKED: localhost:8080 refused connection; no E2E base URL/password supplied; `docker` executable unavailable. No attempt to bootstrap or modify Main's runtime/fixture/workflow. |
-| FE selector reconciliation | Completed against newly delivered component/template/service: test IDs and contract labels match; chooser search uses form submission (Enter), not input debounce. |
-| Independent source QC | Backend and new directory component/template/service read. Full navigation/unsaved-guard review remains pending; sidebar finding below. |
-| Native PostgreSQL probe, backend tests, CI workflow | NOT RUN by QC; Main owns these gates. No external CI result has been independently inspected. |
+| Code quality | [Run39637173286](https://github.com/giangnguyen3260/agent_os/actions/runs/39637173286), job119350733516, success16:44:31Z:103backend tests0failures/errors/skipped; Java import/format, FE lint/format/tooling/build passed |
+| Docker | [Run39637173305](https://github.com/giangnguyen3260/agent_os/actions/runs/39637173305), job119350733245: success16:53:05Z; build/healthy stack/schema, fixtures, all browser/native probes and cleanup passed |
+| Native directory probe | Step completed successfully16:45:31Z: exact PostgreSQL projection/order, bounded pagination, literal/status/Team filters, recorded task counts, safe unresolved-manager scope and business-state snapshot unchanged |
+| Browser | Completed16:52:20Z:240passed in6.3minutes across1440/768/390 (18new and222baseline), serial execution with no retries |
+| Native regressions and session | Existing Mission creation/replay, Agent creation, Studio concurrency, activation no-mutation, directory/Workspace projections and account barrier passed. Exact session survived backend restart and logout rejected replay16:52:56Z |
+| Local checks | Full103BEtests passed, FE format/lint/build/import/diff checks passed.35mock rendered/interactions across1440/768/390 passed; screenshots inspected, chooser paging/filter/direct-create/archived-disable/Escape focus, error/null/scope/count rejection, MEMBER visibility and zero business writes checked. Mock API checks are not persistence evidence |
+| Independent source QC | Final BE/FE read-only review found no blocking finding in response validation, chooser state, authorization clearing, task counts, manager scope or navigation guards. Reviewer did not independently rerun the full CI suite; coordinator inspects actual completed logs |
 
-## Limited read-only source findings
+## Bounded delivery and cases
 
-Read `MissionDirectoryController`, `MissionDirectoryResponse`, `MissionDirectoryService` and the authorization checks in `MissionCreateService`. The directory uses a read-only REPEATABLE_READ transaction, bound query parameters, explicit literal wildcard escaping, organization-constrained Team lookup, independently grouped task counts, and organization/Team-constrained manager joins. The response record excludes goal and task payloads. Authorization delegates to fresh enabled/credential-version/membership checks. These observations do not establish runtime correctness, query execution, snapshot isolation behavior or no-write evidence.
+Forest S10 lists real organization-scoped Missions in desktop rows and tablet/mobile cards. Literal title search, all nine persisted lifecycle statuses, optional same-org Team filters and fixed20-row pages use URL state. Native Team chooser searches/pages the existing directory; archived Teams can be filtered but cannot be selected for creation. ADMIN can navigate to the existing creation wizard, MEMBER can read. Assigned Mission details and Browse missions use existing scoped routes and unsaved guards. Legacy unassigned rows show no invalid detail link.
 
-Corrected the inherited test's unsupported positive backslash-fixture assumption: the fixture title contains `%_!`, while backslash should yield zero results. Tightened exact 27/20/7 paging, full safe projection, known mission 25 counts, 25-Team uniqueness, foreign-Team rejection and archived create selection. Successful business responses are never fabricated; only failure/malformed envelopes are intercepted, followed by recovery against the real backend. Membership revocation is real SQL with restoration in `finally`.
+Recorded counts independently constrain organization, Team and Mission; completed=COMPLETED and pending=WAITING/BLOCKED. Correlated task lookups apply only to the selected20Mission page. A zero-task Mission says No recorded tasks. No model calls, cost, live capacity or generated task graph is fabricated. Manager ID/name come only from the same-org/same-Team resolved agent join; invalid legacy references return both null. Goal/context/private payloads are excluded from this projection.
 
-## Remaining gate work
+Fresh enabled identity, credential version and ADMIN/MEMBER membership protect every request. Count, rows and optional scoped Team metadata share a read-only REPEATABLE_READ snapshot. Bound parameters and escaped wildcards protect literal filters. FE cancels superseded subscriptions and guards results by request/account identity; invalid/null/foreign/inconsistent envelopes clear old rows. Modal Escape/cancel restore focus. No migration or production seed is added.
 
-Execute all 18 browser instances against fresh fixtures after Main runs its native probe. Independently review final route/auth cancellation, malformed-envelope validation, navigation and guard sources. Main must supply native PostgreSQL projection/no-write evidence and workflow results for independent inspection. Also review the additional coverage limits listed in [test cases](MISSION_DIRECTORY_TEST_CASES.md); no delayed-response race, credential revocation, broad accessibility or production acceptance is certified here.
+Six real-backend scenarios, each at1440×1000/768×1024/390×844, cover exact27Mission paging/order/history, literal and lifecycle filters, tenant/parameter denial, exact safe counts/projection, legacy/read navigation,25Team chooser pages/permissions, real membership revocation/restoration, and failure/malformed refresh recovery. See [cases](MISSION_DIRECTORY_TEST_CASES.md).
 
-Only the E2E specification and the two Mission directory QC documents are in QC's edit scope. No automation, commit or push was performed.
+## Findings and fixes
 
-Delivered FE review: directory loads clear private rows before reauthorization; subscriptions are cancelled and guarded by epochs/account identity; malformed/foreign data fails validation; chooser cancellation and archived create disabling are implemented. Finding for FE: the directory sidebar also marks Teams as selected/current, rather than linking to Teams, while Missions is current. This source issue remains open at this inspection. No browser assertion or visual acceptance is inferred from this review.
+Source review found a copied Teams-current marker alongside Missions; final sidebar correctly links Teams and marks Missions alone current. Explicit Status labeling, manager pair and filtered-Team-name envelope consistency, private chooser selection clearing and dialog sizing were corrected before publication. The two recorded-count regex assertions were executed from actual test source against representative whitespace and pass. No open blocking source finding remains.
 
-Further route source review confirms both scoped wizard/detail routes retain `canDeactivate -> canLeave()`, whose unsaved branch asks for discard confirmation; Browse missions is a router link through that guard. Team Workspace exposes View missions with Team query scope. This is read-only guard wiring evidence, not executed discard-dialog coverage.
+## Remaining limits
 
-## Coordinator pre-publication checks
-
-Full local backend Maven verify completed successfully:103tests,0failures/errors/skipped, including7new Mission directory integration tests. FE format/lint/build and Google Java import checks passed. Coordinator rendered35mock API checks across1440/768/390 including bounded paging/literal search, empty/error/null/scope/count rejection, private clearing, MEMBER create visibility, chooser pagination/filter/direct-create/archive disabling, Escape/focus and zero business writes. Screenshots inspected. These checks do not substitute for native PostgreSQL or real-backend browser execution. Final Playwright collection240instances includes18new; execution pending.
-
-Sidebar Teams-current issue is corrected in final source; Teams is linked and Missions alone current. Whitespace assertions now match recorded counts using actual-source regex proof. No remaining blocker established by coordinator source/render checks; independent final review and actual CI evidence pending.
+Coordinator inspected both completed job logs for the exact application/merge revisions above. Broad accessibility, delayed-response race execution, production scale/failover/security and field encryption/KMS acceptance remain open. Planning, execution, provider grants and activation remain unavailable. Sonar is paused, not passed. No Mac deployment or image publication is claimed; all stacked PRs remain draft/unmerged.

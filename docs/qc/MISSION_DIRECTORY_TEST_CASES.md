@@ -17,7 +17,7 @@ Run the same six scenarios against the real application at desktop 1440×1000, t
 
 ## FE selector handoff — reconciled against delivered sources
 
-Read-only reconciliation against the delivered component/template/service confirmed the selectors below. Runtime acceptance remains pending.
+Read-only reconciliation against the delivered component/template/service confirmed the selectors below. All18Mission directory browser instances passed as part of240total on application6568c94; exact CI evidence is recorded in MISSION_DIRECTORY_QC_REPORT.md.
 
 | Surface | Exact selector contract |
 |---|---|
