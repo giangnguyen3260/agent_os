@@ -1,0 +1,361 @@
+<div class="forest-shell">
+  <aside class="desktop-sidebar">
+    <div class="brand">agentos</div>
+    <nav aria-label="Workspace navigation">
+      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a
+      ><button disabled>Organization map</button
+      ><a class="selected" [routerLink]="['/workspace', id, 'teams']">Teams</a
+      ><a [routerLink]="['/workspace', id, 'agents']">Agents</a
+      ><button disabled>Missions</button><button disabled>Approvals</button
+      ><button disabled>Trace</button>
+    </nav>
+  </aside>
+  <header class="compact-header">
+    <span class="brand">agentos</span
+    ><button
+      class="button secondary"
+      type="button"
+      aria-controls="team-workspace-menu"
+      [attr.aria-expanded]="menuOpen()"
+      (click)="toggleMenu()"
+    >
+      Menu
+    </button>
+  </header>
+  <dialog
+    id="team-workspace-menu"
+    aria-label="Workspace navigation"
+    (cancel)="closeMenu()"
+    (close)="closeMenu()"
+  >
+    <button class="button secondary" type="button" (click)="closeMenu()">
+      Close menu
+    </button>
+    <nav>
+      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a
+      ><a [routerLink]="['/workspace', id, 'teams']">Teams</a
+      ><a [routerLink]="['/workspace', id, 'agents']">Agents</a
+      ><a routerLink="/workspace">Change workspace</a>
+    </nav>
+  </dialog>
+  <main data-testid="team-workspace" [attr.aria-busy]="loading()">
+    <div class="breadcrumb">
+      <span
+        >{{ context()?.name }} /
+        {{ snapshot()?.team?.name || 'Team workspace' }}</span
+      ><span>{{ auth.user()?.displayName }}</span>
+    </div>
+    @if (loading()) {
+      <p role="status">Loading team workspace…</p>
+    }
+    @if (denied()) {
+      <p class="auth-error" role="alert">Workspace access is unavailable.</p>
+      <a routerLink="/workspace">Choose another workspace</a>
+    }
+    @if (error()) {
+      <p class="auth-error" role="alert">{{ error() }}</p>
+      <div class="actions">
+        <button class="button secondary" type="button" (click)="load()">
+          Try again</button
+        ><button
+          class="button secondary"
+          type="button"
+          (click)="navigate('overview')"
+        >
+          Reset filters
+        </button>
+      </div>
+    }
+    @if (snapshot(); as data) {
+      <header class="heading">
+        <h1>
+          {{ data.team.name }}
+          @if (tab !== 'overview') {
+            / {{ label(tab) }}
+          }
+        </h1>
+        <p>
+          {{ data.team.purpose ?? 'Purpose unavailable' }} · Manager
+          {{ data.team.managerName ?? 'unavailable' }} ·
+          {{ data.team.status }} · Intake
+          {{ data.team.intake ?? 'unavailable' }}
+        </p>
+      </header>
+      <div class="actions">
+        <button
+          class="button"
+          type="button"
+          disabled
+          aria-describedby="creation-unavailable"
+        >
+          Create Mission
+        </button>
+        @if (context()?.role === 'ADMIN' && data.team.status !== 'ARCHIVED') {
+          <a
+            class="button secondary"
+            [routerLink]="['/workspace', id, 'agents', 'new']"
+            [queryParams]="{teamId: teamId}"
+            >Add Agent</a
+          >
+        }
+        <button
+          class="button secondary"
+          type="button"
+          disabled
+          aria-describedby="creation-unavailable"
+        >
+          Create Task</button
+        ><a
+          class="button secondary"
+          [routerLink]="['/workspace', id, 'teams', teamId]"
+          >Settings</a
+        >
+        <button
+          class="button secondary"
+          type="button"
+          [disabled]="loading()"
+          (click)="load()"
+        >
+          Refresh
+        </button>
+      </div>
+      <p id="creation-unavailable" class="caption">
+        Mission and task creation are unavailable in this read-only workspace.
+      </p>
+      @if (tab === 'overview') {
+        <p class="caption">Task overview · Scroll down for all lanes</p>
+      }
+      <div class="status-banner">
+        {{ data.summary.pendingTasks }} pending tasks · Updated
+        {{ data.generatedAt | date: 'medium' }}. Health, workload, cost and
+        runtime unavailable.
+      </div>
+      <section class="metrics" aria-label="Team task counts">
+        <button
+          class="metric"
+          type="button"
+          aria-label="Running tasks"
+          (click)="openLane('RUNNING')"
+        >
+          <span>Running</span><strong>{{ data.summary.runningTasks }}</strong
+          ><span>Stored tasks</span></button
+        ><button
+          class="metric"
+          type="button"
+          aria-label="Pending tasks"
+          (click)="openLane('PENDING')"
+        >
+          <span>Pending</span><strong>{{ data.summary.pendingTasks }}</strong
+          ><span>Waiting or blocked</span></button
+        ><button
+          class="metric"
+          type="button"
+          aria-label="Review tasks"
+          (click)="openLane('REVIEW')"
+        >
+          <span>Review</span><strong>{{ data.summary.reviewTasks }}</strong
+          ><span>Awaiting review</span>
+        </button>
+        <div class="metric">
+          <span>Agents</span><strong>{{ data.summary.agentCount }}</strong
+          ><span>Workload unavailable</span>
+        </div>
+      </section>
+      <div class="workspace-tabs" aria-label="Workspace views">
+        @for (t of tabs; track t) {
+          <button
+            type="button"
+            [attr.aria-current]="tab === t ? 'page' : null"
+            (click)="navigate(t)"
+          >
+            {{ label(t) }}
+          </button>
+        }
+      </div>
+      @if (tab === 'overview' && !lane) {
+        <section
+          class="workspace-board"
+          data-testid="workspace-board"
+          aria-label="Task board"
+        >
+          @for (group of data.lanes; track group.lane) {
+            <section
+              class="workspace-lane"
+              [attr.data-testid]="'lane-' + group.lane"
+            >
+              <h2>{{ label(group.lane) }} · {{ group.total }}</h2>
+              @for (task of group.items; track task.id) {
+                <article class="task-card task-record" data-testid="task-row">
+                  <h3>{{ task.title }}</h3>
+                  <p class="caption">
+                    {{ task.status }} · Assignee unavailable
+                  </p>
+                  <p class="caption">
+                    Mission {{ task.missionId ?? 'unavailable' }}
+                  </p>
+                  @if (group.lane === 'PENDING') {
+                    <p>{{ task.pendingReason ?? 'Reason unavailable' }}</p>
+                  }
+                </article>
+              }
+              @if (!group.items.length) {
+                <p class="caption">No tasks</p>
+              }
+              @if (group.total > group.items.length) {
+                <button
+                  class="text-action"
+                  type="button"
+                  [attr.aria-label]="'View ' + group.lane + ' tasks'"
+                  (click)="openLane(group.lane)"
+                >
+                  View all {{ group.total }}
+                </button>
+              }
+            </section>
+          }
+        </section>
+        <section class="panel configuration">
+          <h2>Team configuration</h2>
+          <p>
+            Configured concurrency: {{ data.team.concurrency ?? 'unavailable' }}
+          </p>
+          <p>
+            Configured monthly budget:
+            {{ data.team.monthlyBudget ?? 'unavailable' }}
+            {{ data.team.currency ?? '' }}
+          </p>
+          <p class="caption">
+            Configured limits do not describe runtime capacity or spending.
+          </p>
+        </section>
+      }
+      @if (tasks(); as result) {
+        <section
+          class="records"
+          data-testid="workspace-tasks"
+          aria-label="Selected lane tasks"
+        >
+          <h2>{{ label(lane ?? 'PENDING') }} · {{ result.total }}</h2>
+          @for (task of result.items; track task.id) {
+            <article
+              class="workspace-record task-record"
+              data-testid="task-row"
+            >
+              <div>
+                <h3>{{ task.title }}</h3>
+                <p>{{ task.status }}</p>
+                <small>Assignee unavailable</small>
+              </div>
+              <div>
+                <small>Pending reason</small>
+                <p>{{ task.pendingReason ?? 'Unavailable' }}</p>
+              </div>
+              <div>
+                <small>Waiting since</small>
+                <p>
+                  {{
+                    task.waitingSince
+                      ? (task.waitingSince | date: 'medium')
+                      : 'Unavailable'
+                  }}
+                </p>
+              </div>
+              <div>
+                <small>Resolver</small>
+                <p>{{ task.resolver ?? 'Unavailable' }}</p>
+              </div>
+            </article>
+          }
+          @if (!result.items.length) {
+            <p>No tasks in this lane.</p>
+          }
+        </section>
+      }
+      @if (agents(); as result) {
+        <section
+          class="records"
+          data-testid="workspace-agents"
+          aria-label="Team agents"
+        >
+          <h2>Agents · {{ result.total }}</h2>
+          <form
+            class="filters"
+            (ngSubmit)="navigate('agents', null, 0, search.trim())"
+          >
+            <label for="workspace-agent-search"
+              >Search team agents<input
+                id="workspace-agent-search"
+                name="query"
+                type="search"
+                maxlength="200"
+                [(ngModel)]="search" /></label
+            ><button class="button secondary" type="submit">Search</button>
+          </form>
+          @for (agent of result.items; track agent.id) {
+            <article
+              class="workspace-record agent-record"
+              data-testid="agent-row"
+            >
+              <a [routerLink]="['/workspace', id, 'agents', agent.id]">{{
+                agent.name
+              }}</a>
+              <p>{{ agent.role }} · {{ agent.status }}</p>
+              <p>Configuration revision {{ agent.configurationRevision }}</p>
+              <p>
+                Configured concurrency:
+                {{ agent.concurrencyLimit ?? 'unavailable' }}
+              </p>
+              <small>Runtime, workload and current task unavailable</small>
+            </article>
+          }
+          @if (!result.items.length) {
+            <p>No team agents match this search.</p>
+          }
+        </section>
+      }
+      @if (activity(); as result) {
+        <section
+          class="panel records"
+          data-testid="workspace-activity"
+          aria-label="Team activity"
+        >
+          <h2>Recent events · {{ result.total }}</h2>
+          @for (event of result.items; track event.id) {
+            <article class="activity-record" data-testid="activity-row">
+              <time>{{ event.createdAt | date: 'medium' }}</time>
+              <p>{{ event.eventType }} · {{ event.actorType }}</p>
+            </article>
+          }
+          @if (!result.items.length) {
+            <p>No activity recorded.</p>
+          }
+        </section>
+      }
+      @if (tasks() || agents() || activity()) {
+        <div class="pagination" aria-label="Workspace pagination">
+          <button
+            class="button secondary"
+            type="button"
+            [disabled]="page === 0 || loading()"
+            (click)="changePage(page - 1)"
+          >
+            Previous</button
+          ><span>Page {{ page + 1 }}</span
+          ><button
+            class="button secondary"
+            type="button"
+            [disabled]="
+              (page + 1) * 20 >=
+                (tasks()?.total ?? agents()?.total ?? activity()?.total ?? 0) ||
+              page >= 100000 ||
+              loading()
+            "
+            (click)="changePage(page + 1)"
+          >
+            Next
+          </button>
+        </div>
+      }
+    }
+  </main>
+</div>

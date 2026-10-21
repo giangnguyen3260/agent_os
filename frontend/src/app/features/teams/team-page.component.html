@@ -48,6 +48,12 @@
           aria-label="Saved team"
         >
           <h2>{{ team.name }}</h2>
+          <a
+            class="button secondary"
+            data-testid="open-team-workspace"
+            [routerLink]="['/workspace', id, 'teams', team.id, 'workspace']"
+            >Open workspace</a
+          >
           @if (
             context()?.role === 'ADMIN' &&
             (team.status === 'DRAFT' || team.status === 'ACTIVE')
