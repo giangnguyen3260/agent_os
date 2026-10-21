@@ -10,7 +10,7 @@ Explicit search matches literal case-insensitive name or purpose, with optional 
 
 ## API
 
-GET /api/v1/organizations/{organizationId}/teams/directory is a separate projection preserving the existing teams API. Enabled current account/credential/membership ADMIN/MEMBER required. Parameters: page0..100000 default0; query<=200 stripped literal contains; optional status DRAFT/ACTIVE/ARCHIVED. Invalid recognized parameters400; denied organization access403. Workspace-context lookup can return404 after membership revocation; directory API returns403.
+GET /api/v1/organizations/{organizationId}/teams/directory is a separate projection preserving the existing teams API. Enabled current account/credential/membership ADMIN/MEMBER required. Parameters: page0..100000 default0; query<=200 stripped literal contains; optional status DRAFT/ACTIVE/ARCHIVED. Invalid recognized parameters400; invalidated account/session401; authenticated denied organization access403. Workspace-context lookup can return404 after membership revocation; directory API returns403.
 
 Data {items,page,size,total}; each item has id,organizationId,name,purpose,status,managerAgentId,managerName,agentCount,totalTasks,runningTasks,pendingTasks,reviewTasks. Nullable legacy purpose/manager is supported. Sort created_at DESC,id. Count and rows use one read snapshot. Scoped manager/Agent/task joins and independent aggregates prevent cross-tenant leakage or join multiplication. Bind all inputs and escape search wildcard characters. Reads do not mutate business data or lock entire organizations.
 
