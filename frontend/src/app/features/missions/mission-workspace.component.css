@@ -1,0 +1,66 @@
+.mission-tasks {
+  display: grid;
+  gap: 16px;
+}
+.task-head,
+.mission-task {
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.4fr)
+    minmax(0, 1fr);
+  gap: 16px;
+  padding: 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  align-items: start;
+}
+.task-head {
+  color: var(--muted);
+}
+.mission-task > div {
+  min-width: 0;
+}
+.mobile-label {
+  display: none;
+}
+.metric strong.unavailable {
+  font-size: 20px;
+}
+summary {
+  cursor: pointer;
+  min-height: 44px;
+  color: var(--primary);
+}
+.mission-task dl {
+  display: block;
+  margin: 0;
+}
+.mission-task dd {
+  margin: 0 0 8px;
+}
+dialog {
+  box-sizing: border-box;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  width: min(420px, calc(100% - 32px));
+  padding: 24px;
+}
+dialog::backdrop {
+  background: var(--overlay);
+}
+@media (max-width: 1023px) {
+  .task-head {
+    display: none;
+  }
+  .mission-task {
+    grid-template-columns: minmax(0, 1fr);
+    border-radius: 8px;
+    gap: 12px;
+  }
+  .mobile-label {
+    display: block;
+    margin-bottom: 4px;
+  }
+}
