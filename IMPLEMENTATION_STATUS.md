@@ -2,6 +2,8 @@
 
 ## Current branch outcome
 
+On `feature/mission-create`, the three-step Forest S11 wizard and saved Mission read are being implemented on Team Workspace. V008 persists required output/context/deadline/approval configuration and durable creation receipts. Final UI saves CREATED only: planning/execution remain unavailable. Backend, browser and PostgreSQL gates are pending; see [Mission contract](docs/engineering/MISSION_CREATE_CONTRACT.md) and [QC](docs/qc/MISSION_CREATE_QC_REPORT.md).
+
 On `feature/team-workspace`, Forest S05 reads a scoped Team board, paginated Pending details, assigned Agents and safe recorded mission/task activity. Preview lanes are bounded to5rows and detailed pages20; every non-null activity reference must resolve inside the Team. Draft PR12 stacks on unmerged PR11. Candidate4919e241 passed88 backend tests,189 browser instances and native PostgreSQL Workspace snapshot/page/safe-activity/no-write checks. See [Team Workspace QC](docs/qc/TEAM_WORKSPACE_QC_REPORT.md) for exact execution evidence. No migration is added; mission/task writes and runtime/activation remain unavailable.
 
 On `feature/team-directory`, Forest S03 lists scoped persisted Teams with name/purpose search, lifecycle filters and pagination. Manager/Agent/task counts are aggregated independently; Running/Pending/Review links use the actual filtered task read and resolve Teams outside the current dashboard page. Draft PR11 stacks on unmerged PR10. Application3ab36f4 passed83 backend tests,171 browser instances and native PostgreSQL projection/count/no-write checks. See [Team directory QC](docs/qc/TEAM_DIRECTORY_QC_REPORT.md) for exact gate evidence. No schema migration is added; health/runtime/cost remain unavailable.

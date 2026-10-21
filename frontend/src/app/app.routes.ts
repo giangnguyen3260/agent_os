@@ -126,6 +126,34 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'workspace/:id/teams/:teamId/missions/new',
+    canActivate: [authGuard],
+    canDeactivate: [
+      (
+        component: import('./features/missions/mission-page.component').MissionPageComponent,
+      ) => component.canLeave(),
+    ],
+    runGuardsAndResolvers: 'always',
+    loadComponent: () =>
+      import('./features/missions/mission-page.component').then(
+        module => module.MissionPageComponent,
+      ),
+  },
+  {
+    path: 'workspace/:id/teams/:teamId/missions/:missionId',
+    canActivate: [authGuard],
+    canDeactivate: [
+      (
+        component: import('./features/missions/mission-page.component').MissionPageComponent,
+      ) => component.canLeave(),
+    ],
+    runGuardsAndResolvers: 'always',
+    loadComponent: () =>
+      import('./features/missions/mission-page.component').then(
+        module => module.MissionPageComponent,
+      ),
+  },
+  {
     path: 'workspace/:id/teams/:teamId',
     canDeactivate: [
       (

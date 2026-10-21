@@ -1,16 +1,13 @@
 package com.agentos.mission.api;
 
 import com.agentos.common.api.ApiResponse;
-import com.agentos.mission.api.dto.CreateMissionRequest;
 import com.agentos.mission.api.dto.MissionResponse;
 import com.agentos.mission.application.MissionService;
-import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -25,9 +22,9 @@ public class MissionController {
   }
 
   @PostMapping
-  public ApiResponse<MissionResponse> create(
-      @PathVariable UUID organizationId, @Valid @RequestBody CreateMissionRequest request) {
-    return ApiResponse.ok(missionService.create(organizationId, request));
+  public ApiResponse<MissionResponse> create(@PathVariable UUID organizationId) {
+    throw new org.springframework.web.server.ResponseStatusException(
+        org.springframework.http.HttpStatus.GONE, "Use scoped Team mission creation");
   }
 
   @GetMapping

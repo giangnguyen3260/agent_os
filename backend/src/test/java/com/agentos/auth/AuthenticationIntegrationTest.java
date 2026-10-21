@@ -382,7 +382,7 @@ class AuthenticationIntegrationTest {
                   .header(token.header(), token.token())
                   .contentType("application/json")
                   .content("{\"title\":\"Mission\",\"goal\":\"Goal\"," + reference + "}"))
-          .andExpect(status().isBadRequest());
+          .andExpect(status().isGone());
     }
     assertThat(
             jdbc.queryForObject(

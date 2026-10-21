@@ -18,6 +18,13 @@ public class GlobalExceptionHandler {
         .body(ApiErrorResponse.of(ex.code(), ex.getMessage()));
   }
 
+  @ExceptionHandler(com.agentos.mission.application.MissionCreateService.Conflict.class)
+  public ResponseEntity<ApiErrorResponse> handleMissionConflict(
+      com.agentos.mission.application.MissionCreateService.Conflict ex) {
+    return ResponseEntity.status(HttpStatus.CONFLICT)
+        .body(ApiErrorResponse.of(ex.code(), ex.getMessage()));
+  }
+
   @ExceptionHandler(Conflict.class)
   public ResponseEntity<ApiErrorResponse> handleTeamConflict(Conflict ex) {
     return ResponseEntity.status(HttpStatus.CONFLICT)
