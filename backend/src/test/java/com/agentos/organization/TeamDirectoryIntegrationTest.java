@@ -248,9 +248,9 @@ class TeamDirectoryIntegrationTest {
     mvc.perform(get("/api/v1/organizations/" + foreign + "/teams/directory").with(auth()))
         .andExpect(status().isForbidden());
     jdbc.update("update human_accounts set credential_version=1 where id=?", account);
-    mvc.perform(get(url()).with(auth())).andExpect(status().isForbidden());
+    mvc.perform(get(url()).with(auth())).andExpect(status().isUnauthorized());
     jdbc.update("update human_accounts set credential_version=0,enabled=false where id=?", account);
-    mvc.perform(get(url()).with(auth())).andExpect(status().isForbidden());
+    mvc.perform(get(url()).with(auth())).andExpect(status().isUnauthorized());
     jdbc.update("update human_accounts set enabled=true where id=?", account);
     read("");
     jdbc.update("delete from organization_memberships where account_id=?", account);
