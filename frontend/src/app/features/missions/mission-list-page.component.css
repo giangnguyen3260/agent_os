@@ -1,0 +1,150 @@
+.directory {
+  display: grid;
+  gap: 20px;
+}
+.directory-head,
+.directory-row {
+  display: grid;
+  grid-template-columns:
+    minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 1.3fr)
+    minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 16px;
+  padding: 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  overflow-wrap: anywhere;
+}
+.directory-row p,
+.directory-row small {
+  display: block;
+  color: var(--muted);
+  margin-top: 4px;
+}
+.team-name {
+  font-weight: 600;
+}
+.row-actions {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+.row-actions a {
+  min-height: 32px;
+}
+.directory-row a {
+  color: var(--primary);
+}
+.mobile-label {
+  display: none;
+  color: var(--muted);
+  font-size: 12px;
+}
+.empty {
+  padding: 32px 24px;
+  background: var(--surface);
+  display: grid;
+  gap: 8px;
+}
+input {
+  min-height: 44px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 8px 12px;
+  max-width: 100%;
+}
+.filters {
+  align-items: end;
+}
+@media (max-width: 1023px) {
+  .directory-head {
+    display: none;
+  }
+  .directory-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+    border-radius: 8px;
+  }
+  .directory-row > div:first-child,
+  .row-actions {
+    grid-column: 1 / -1;
+  }
+  .mobile-label {
+    display: block;
+  }
+  .row-actions {
+    display: flex;
+    flex-wrap: wrap;
+  }
+}
+@media (max-width: 767px) {
+  .directory-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+  input {
+    width: 100%;
+  }
+}
+
+.task-links {
+  display: grid;
+  gap: 8px;
+}
+.empty {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 20px 24px;
+}
+
+progress {
+  display: block;
+  width: 100%;
+  height: 8px;
+  margin-top: 8px;
+  accent-color: #17634b;
+}
+.team-filter,
+.team-options {
+  display: grid;
+  gap: 8px;
+}
+.team-options > div {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.team-options button {
+  flex: 1;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+dialog {
+  width: min(600px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 24px;
+}
+dialog > * + * {
+  margin-top: 16px;
+}
+
+input,
+select {
+  font: inherit;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  min-height: 44px;
+  padding: 8px 12px;
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+}
+dialog {
+  box-sizing: border-box;
+}
