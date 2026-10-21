@@ -5,6 +5,7 @@
       Organization map
     </button>
     <button type="button" (click)="viewTeams()">Teams</button>
+    <a [routerLink]="['/workspace', context()?.id, 'teams']">Browse teams</a>
     <a [routerLink]="['/workspace', context()?.id, 'agents']">Agents</a>
     @for (module of modules; track module) {
       <button type="button" disabled aria-describedby="unfinished">

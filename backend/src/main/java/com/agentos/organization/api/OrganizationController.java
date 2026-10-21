@@ -9,6 +9,8 @@ import com.agentos.organization.api.dto.TeamDetailResponse;
 import com.agentos.organization.api.dto.TeamResponse;
 import com.agentos.organization.application.NewTeamDraftService;
 import com.agentos.organization.application.OrganizationService;
+import com.agentos.organization.application.TeamDirectoryService;
+import com.agentos.organization.domain.TeamStatus;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
@@ -31,10 +33,15 @@ public class OrganizationController {
 
   private final NewTeamDraftService drafts;
 
+  private final TeamDirectoryService directory;
+
   public OrganizationController(
-      OrganizationService organizationService, NewTeamDraftService drafts) {
+      OrganizationService organizationService,
+      NewTeamDraftService drafts,
+      TeamDirectoryService directory) {
     this.organizationService = organizationService;
     this.drafts = drafts;
+    this.directory = directory;
   }
 
   @PostMapping
@@ -71,6 +78,16 @@ public class OrganizationController {
       @RequestParam(defaultValue = "0") int page,
       @RequestParam(defaultValue = "") String query) {
     return ApiResponse.ok(drafts.eligible(organizationId, human, page, query));
+  }
+
+  @GetMapping("/{organizationId}/teams/directory")
+  public ApiResponse<TeamDirectoryService.Page> directory(
+      @PathVariable UUID organizationId,
+      @AuthenticationPrincipal HumanIdentity human,
+      @RequestParam(defaultValue = "0") int page,
+      @RequestParam(defaultValue = "") String query,
+      @RequestParam(required = false) TeamStatus status) {
+    return ApiResponse.ok(directory.list(organizationId, human, page, query, status));
   }
 
   @GetMapping("/{organizationId}/teams/{teamId}")

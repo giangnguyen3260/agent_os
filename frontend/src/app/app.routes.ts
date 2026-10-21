@@ -93,6 +93,16 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'workspace/:id/teams',
+    pathMatch: 'full',
+    canActivate: [authGuard],
+    runGuardsAndResolvers: 'always',
+    loadComponent: () =>
+      import('./features/teams/team-directory.component').then(
+        module => module.TeamDirectoryComponent,
+      ),
+  },
+  {
     path: 'workspace/:id/teams/new',
     canDeactivate: [
       (

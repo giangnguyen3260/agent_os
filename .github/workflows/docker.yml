@@ -91,6 +91,9 @@ jobs:
       - name: Provision isolated Agent directory fixtures
         run: |
           docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < scripts/agent-directory-ci-fixture.sql
+      - name: Provision isolated Team directory fixtures
+        run: |
+          docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < scripts/team-directory-ci-fixture.sql
       - name: Install browser test dependencies
         working-directory: frontend
         run: |
@@ -122,6 +125,11 @@ jobs:
         env:
           E2E_BASE_URL: http://127.0.0.1:18080
         run: python3 scripts/agent-directory-probe.py
+      - name: PostgreSQL Team directory projection and read boundary
+        timeout-minutes: 2
+        env:
+          E2E_BASE_URL: http://127.0.0.1:18080
+        run: python3 scripts/team-directory-probe.py
       - name: PostgreSQL barrier for concurrent login and password reset
         timeout-minutes: 2
         env:

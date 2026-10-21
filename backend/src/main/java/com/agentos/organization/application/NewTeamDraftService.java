@@ -53,7 +53,7 @@ public class NewTeamDraftService {
 
   public record Candidates(List<Candidate> items, int page, int size, long total) {}
 
-  private void authorize(UUID organizationId, HumanIdentity human, boolean admin, boolean lock) {
+  void authorize(UUID organizationId, HumanIdentity human, boolean admin, boolean lock) {
     // Creation and receipt replay lock in organization/account/membership order.
     String locking = lock ? " for update" : "";
     if (jdbc.query(
@@ -78,7 +78,9 @@ public class NewTeamDraftService {
             (rs, n) -> rs.getString(1),
             organizationId,
             human.id());
-    if (roles.isEmpty() || (admin && !roles.getFirst().equals("ADMIN"))) {
+    if (roles.isEmpty()
+        || !List.of("ADMIN", "MEMBER").contains(roles.getFirst())
+        || (admin && !roles.getFirst().equals("ADMIN"))) {
       throw new AccessDeniedException("Request denied");
     }
   }

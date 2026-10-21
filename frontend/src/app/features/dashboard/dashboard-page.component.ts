@@ -4,6 +4,7 @@ import {
   Component,
   DestroyRef,
   ElementRef,
+  effect,
   inject,
   OnInit,
   signal,
@@ -12,7 +13,8 @@ import {
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {FormsModule} from '@angular/forms';
 import {ActivatedRoute, Router, RouterLink} from '@angular/router';
-import {Subscription} from 'rxjs';
+import {combineLatest, Subscription} from 'rxjs';
+import {TeamService, uuid} from '../teams/team.service';
 import {
   AuthFailure,
   AuthService,
@@ -36,9 +38,13 @@ import {
 export class DashboardPageComponent implements OnInit {
   readonly auth = inject(AuthService);
   private readonly api = inject(DashboardService);
+  private readonly teamApi = inject(TeamService);
+  private incoming: {state: TaskState; teamId: string} | null = null;
+  private invalidIncoming = false;
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly destroy = inject(DestroyRef);
+  private account = this.auth.user()?.id;
   private version = 0;
   private taskVersion = 0;
   private dashboardRequest?: Subscription;
@@ -64,15 +70,39 @@ export class DashboardPageComponent implements OnInit {
   readonly taskSection = viewChild<ElementRef<HTMLElement>>('taskSection');
   readonly states: TaskState[] = ['RUNNING', 'PENDING', 'REVIEW'];
   readonly modules = ['Missions', 'Approvals', 'Trace'];
+  constructor() {
+    effect(() => {
+      const account = this.auth.user()?.id;
+      if (account !== this.account) {
+        this.account = account;
+        this.incoming = null;
+        this.clearAccess();
+        this.loading.set(false);
+        this.accessLost.set(true);
+      }
+    });
+  }
   ngOnInit(): void {
     this.destroy.onDestroy(() => {
       this.version++;
       this.cancelTasks();
       this.dashboardRequest?.unsubscribe();
     });
-    this.route.paramMap
+    combineLatest([this.route.paramMap, this.route.queryParamMap])
       .pipe(takeUntilDestroyed(this.destroy))
-      .subscribe(params => {
+      .subscribe(([params, query]) => {
+        const state = query.get('state');
+        const teamId = query.get('teamId') ?? '';
+        this.invalidIncoming =
+          (state !== null || query.has('teamId')) &&
+          (!this.states.includes(state as TaskState) ||
+            (query.has('teamId') && !uuid(teamId)) ||
+            query.getAll('state').length > 1 ||
+            query.getAll('teamId').length > 1);
+        this.incoming =
+          state && !this.invalidIncoming
+            ? {state: state as TaskState, teamId}
+            : null;
         this.id = params.get('id') || '';
         this.context.set(null);
         this.data.set(null);
@@ -94,6 +124,7 @@ export class DashboardPageComponent implements OnInit {
   }
   async load(page = this.teamPage()): Promise<void> {
     const version = ++this.version;
+    const account = this.auth.user()?.id;
     this.dashboardRequest?.unsubscribe();
     this.cancelTasks();
     this.loading.set(true);
@@ -103,28 +134,110 @@ export class DashboardPageComponent implements OnInit {
     this.accessLost.set(false);
     try {
       const context = await this.auth.getWorkspace(this.id);
-      if (version !== this.version || this.destroy.destroyed) return;
+      if (
+        version !== this.version ||
+        this.destroy.destroyed ||
+        account !== this.auth.user()?.id
+      )
+        return;
+      if (
+        (this.incoming || this.invalidIncoming) &&
+        (context.id !== this.id || !['ADMIN', 'MEMBER'].includes(context.role))
+      ) {
+        this.clearAccess();
+        this.accessLost.set(true);
+        this.loading.set(false);
+        return;
+      }
       this.context.set(context);
       this.dashboardRequest = this.api.dashboard(this.id, page).subscribe({
         next: data => {
-          if (version !== this.version) return;
+          if (version !== this.version || account !== this.auth.user()?.id)
+            return;
           this.data.set(data);
           this.teamPage.set(data.teams.page);
           this.loading.set(false);
-          if (this.state()) this.loadTasks();
+          if (this.invalidIncoming)
+            this.error.set(
+              'Invalid task filters. Choose Running, Pending or Review.',
+            );
+          else if (this.incoming) this.openIncomingTasks(version);
+          else if (this.state()) this.loadTasks();
         },
         error: error => {
-          if (version === this.version) {
+          if (version === this.version && account === this.auth.user()?.id) {
             this.loading.set(false);
             this.handleError(error);
           }
         },
       });
     } catch (error) {
-      if (version !== this.version || this.destroy.destroyed) return;
+      if (
+        version !== this.version ||
+        this.destroy.destroyed ||
+        account !== this.auth.user()?.id
+      )
+        return;
       this.loading.set(false);
       this.handleError(error);
     }
+  }
+  private openIncomingTasks(version: number): void {
+    const incoming = this.incoming;
+    const organizationId = this.id;
+    const account = this.auth.user()?.id;
+    if (!incoming) return;
+    if (!incoming.teamId) {
+      this.incoming = null;
+      this.openTasks(incoming.state);
+      return;
+    }
+    // Resolve organization scope even for teams outside the dashboard page.
+    this.taskLoading.set(true);
+    const taskVersion = this.taskVersion;
+    this.taskRequest = this.teamApi
+      .detail(organizationId, incoming.teamId)
+      .subscribe({
+        next: response => {
+          if (
+            version !== this.version ||
+            taskVersion !== this.taskVersion ||
+            this.destroy.destroyed ||
+            account !== this.auth.user()?.id ||
+            organizationId !== this.id
+          )
+            return;
+          const team = response?.data;
+          this.taskLoading.set(false);
+          if (
+            !team ||
+            team.id !== incoming.teamId ||
+            team.organizationId !== organizationId ||
+            typeof team.name !== 'string'
+          ) {
+            this.error.set(
+              'Invalid team scope. Return to Teams and try again.',
+            );
+            return;
+          }
+          this.incoming = null;
+          this.openTasks(incoming.state, team.id, team.name);
+        },
+        error: error => {
+          if (
+            version !== this.version ||
+            taskVersion !== this.taskVersion ||
+            account !== this.auth.user()?.id ||
+            organizationId !== this.id ||
+            this.destroy.destroyed
+          )
+            return;
+          this.taskLoading.set(false);
+          if (error instanceof HttpErrorResponse && error.status === 404)
+            this.error.set('Team unavailable. Return to Teams and try again.');
+          else this.handleError(error);
+        },
+      });
   }
   private handleError(error: unknown, task = false): void {
     const status = error instanceof HttpErrorResponse ? error.status : 0;
