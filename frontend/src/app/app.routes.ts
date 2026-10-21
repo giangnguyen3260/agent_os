@@ -117,6 +117,15 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'workspace/:id/teams/:teamId/workspace',
+    canActivate: [authGuard],
+    runGuardsAndResolvers: 'always',
+    loadComponent: () =>
+      import('./features/teams/team-workspace.component').then(
+        module => module.TeamWorkspaceComponent,
+      ),
+  },
+  {
     path: 'workspace/:id/teams/:teamId',
     canDeactivate: [
       (

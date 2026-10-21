@@ -1,0 +1,107 @@
+.status-banner {
+  padding: 16px;
+  border-radius: 8px;
+  background: var(--warning-soft, #fff4dc);
+}
+.workspace-tabs {
+  display: flex;
+  gap: 24px;
+  overflow-x: auto;
+  min-height: 48px;
+}
+.workspace-tabs button {
+  flex-shrink: 0;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  padding: 12px 14px;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.workspace-tabs button[aria-current] {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+.workspace-board {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+.workspace-lane {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  min-width: 0;
+}
+.task-card {
+  display: grid;
+  gap: 8px;
+  background: var(--surface);
+  padding: 20px 12px;
+  border: 0;
+  border-radius: 8px;
+  min-height: 96px;
+  align-content: center;
+}
+.records,
+.configuration {
+  display: grid;
+  gap: 12px;
+}
+.workspace-record {
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  padding: 16px;
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr;
+  gap: 16px;
+}
+.agent-record {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.activity-record {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+input {
+  min-height: 44px;
+  max-width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+@media (max-width: 1023px) {
+  .workspace-board {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .workspace-record {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+    border-radius: 8px;
+  }
+  .workspace-tabs {
+    gap: 12px;
+  }
+}
+@media (max-width: 767px) {
+  .workspace-board {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .workspace-lane {
+    padding: 16px 0;
+  }
+  .workspace-tabs {
+    gap: 8px;
+  }
+  .workspace-tabs button {
+    padding: 12px;
+  }
+}

@@ -169,6 +169,17 @@
                 >
               </div>
               <div class="row-actions">
+                <a
+                  data-testid="open-team-workspace"
+                  [routerLink]="[
+                    '/workspace',
+                    id,
+                    'teams',
+                    team.id,
+                    'workspace',
+                  ]"
+                  >Open workspace</a
+                >
                 <a [routerLink]="['/workspace', id, 'teams', team.id]"
                   >View details</a
                 >
