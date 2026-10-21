@@ -6,8 +6,8 @@
       ><button disabled>Organization map</button
       ><span class="selected" aria-current="page">Teams</span
       ><a [routerLink]="['/workspace', id, 'agents']">Agents</a
-      ><button disabled>Missions</button><button disabled>Approvals</button
-      ><button disabled>Trace</button
+      ><a [routerLink]="['/workspace', id, 'missions']">Missions</a
+      ><button disabled>Approvals</button><button disabled>Trace</button
       ><a routerLink="/workspace">Đổi workspace</a>
     </nav>
   </aside>
@@ -35,6 +35,7 @@
     <nav>
       <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a
       ><a [routerLink]="['/workspace', id, 'agents']">Agents</a
+      ><a [routerLink]="['/workspace', id, 'missions']">Missions</a
       ><a routerLink="/workspace">Đổi workspace</a>
     </nav>
   </dialog>

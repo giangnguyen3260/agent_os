@@ -33,6 +33,15 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'workspace/:id/missions',
+    canActivate: [authGuard],
+    runGuardsAndResolvers: 'always',
+    loadComponent: () =>
+      import('./features/missions/mission-list-page.component').then(
+        module => module.MissionListPageComponent,
+      ),
+  },
+  {
     path: 'workspace/:id/agents',
     canActivate: [authGuard],
     runGuardsAndResolvers: 'always',

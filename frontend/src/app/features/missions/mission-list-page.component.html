@@ -1,0 +1,319 @@
+<div class="forest-shell">
+  <aside class="desktop-sidebar">
+    <div class="brand">agentos</div>
+    <nav aria-label="Điều hướng workspace">
+      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a
+      ><button disabled>Organization map</button
+      ><a [routerLink]="['/workspace', id, 'teams']">Teams</a
+      ><a [routerLink]="['/workspace', id, 'agents']">Agents</a
+      ><span class="selected" aria-current="page">Missions</span
+      ><button disabled>Approvals</button><button disabled>Trace</button
+      ><a routerLink="/workspace">Change workspace</a>
+    </nav>
+  </aside>
+  <header class="compact-header">
+    <span class="brand">agentos</span
+    ><button
+      class="button secondary"
+      type="button"
+      aria-haspopup="dialog"
+      aria-controls="directory-menu"
+      [attr.aria-expanded]="menuOpen()"
+      (click)="toggleMenu()"
+    >
+      Menu
+    </button>
+  </header>
+  <dialog
+    id="directory-menu"
+    aria-label="Workspace navigation"
+    (cancel)="closeMenu()"
+    (close)="closeMenu()"
+  >
+    <button type="button" class="button secondary" (click)="closeMenu()">
+      Close menu
+    </button>
+    <nav>
+      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a
+      ><a [routerLink]="['/workspace', id, 'teams']">Teams</a
+      ><a [routerLink]="['/workspace', id, 'agents']">Agents</a
+      ><a [routerLink]="['/workspace', id, 'missions']">Missions</a
+      ><a routerLink="/workspace">Change workspace</a>
+    </nav>
+  </dialog>
+  <main data-testid="mission-directory" [attr.aria-busy]="loading()">
+    <div class="breadcrumb">
+      <span>{{ context()?.name }} / Missions</span
+      ><span>{{ auth.user()?.displayName }}</span>
+    </div>
+    <header class="heading">
+      <h1>Missions</h1>
+      <p>Browse missions and recorded task progress.</p>
+    </header>
+    @if (context() && !denied()) {
+      <div class="actions">
+        @if (context()?.role === 'ADMIN') {
+          @if (result()?.team && result()?.team?.status !== 'ARCHIVED') {
+            <a
+              class="button"
+              [routerLink]="[
+                '/workspace',
+                id,
+                'teams',
+                teamId,
+                'missions',
+                'new',
+              ]"
+              >Create Mission</a
+            >
+          } @else {
+            <button
+              class="button"
+              type="button"
+              (click)="openChooser('create', $event)"
+            >
+              Create Mission
+            </button>
+          }
+        }
+        <button
+          class="button secondary"
+          type="button"
+          [disabled]="loading()"
+          (click)="load()"
+        >
+          Refresh
+        </button>
+      </div>
+      <form class="filters" (ngSubmit)="apply()">
+        <label
+          >Search missions<input
+            name="search"
+            maxlength="200"
+            [(ngModel)]="search"
+            placeholder="Mission title"
+        /></label>
+        <label
+          >Status<select
+            aria-label="Status"
+            name="status"
+            [(ngModel)]="selectedStatus"
+          >
+            <option value="">All statuses</option>
+            @for (state of statuses; track state) {
+              <option [value]="state">{{ state }}</option>
+            }
+          </select></label
+        >
+        <div class="team-filter">
+          <span>Team</span
+          ><button
+            class="button secondary"
+            type="button"
+            (click)="openChooser('filter', $event)"
+          >
+            Select Team</button
+          ><span>{{ selectedTeamName || 'All teams' }}</span>
+        </div>
+        <button class="button secondary" type="submit" [disabled]="loading()">
+          Apply filters
+        </button>
+      </form>
+    }
+    @if (!denied()) {
+      <div>
+        <button class="text-action" type="button" (click)="clearFilters()">
+          Clear filters
+        </button>
+      </div>
+    }
+    @if (loading()) {
+      <p role="status">Loading missions…</p>
+    }
+    @if (denied()) {
+      <p role="alert">
+        Mission access is unavailable for this workspace or Team.
+      </p>
+      <a routerLink="/workspace">Choose workspace</a>
+    }
+    @if (error()) {
+      <p role="alert">{{ error() }}</p>
+      <div>
+        <button class="button secondary" type="button" (click)="load()">
+          Try again
+        </button>
+      </div>
+    }
+    @if (result(); as directory) {
+      <p class="caption" role="status">
+        {{ directory.total }} missions · Page {{ directory.page + 1 }}
+        @if (directory.team) {
+          · {{ directory.team.name }}
+        }
+      </p>
+      @if (!directory.items.length) {
+        <section class="empty">
+          <h2>
+            {{
+              page > 0 && directory.total > 0
+                ? 'Page out of range'
+                : 'No missions found'
+            }}
+          </h2>
+          <p>Change or clear filters to browse missions.</p>
+        </section>
+      } @else {
+        <section class="directory" aria-label="Mission directory">
+          <div class="directory-head" aria-hidden="true">
+            <span>Mission</span><span>Team / Manager</span><span>Status</span
+            ><span>Progress</span><span>Action</span>
+          </div>
+          @for (mission of directory.items; track mission.id) {
+            <article class="directory-row" data-testid="mission-row">
+              <div>
+                <strong>{{ mission.title }}</strong
+                ><small>{{ mission.priority || 'No priority set' }}</small>
+              </div>
+              <div>
+                <span class="mobile-label">Team / Manager</span
+                >{{ mission.teamName || 'Team not assigned'
+                }}<small>{{
+                  mission.managerName || 'Manager not assigned'
+                }}</small>
+              </div>
+              <div>
+                <span class="mobile-label">Status</span
+                ><span class="pill">{{ mission.status }}</span>
+              </div>
+              <div>
+                <span class="mobile-label">Progress</span>
+                @if (mission.totalTasks) {
+                  <span
+                    >{{ mission.completedTasks }} /
+                    {{ mission.totalTasks }} completed</span
+                  ><progress
+                    [value]="mission.completedTasks"
+                    [max]="mission.totalTasks"
+                    aria-label="Recorded completed tasks"
+                  ></progress>
+                } @else {
+                  <span>No recorded tasks</span>
+                }
+                <small>{{ mission.pendingTasks }} pending</small>
+              </div>
+              <div class="row-actions">
+                @if (mission.teamId) {
+                  <a
+                    [routerLink]="[
+                      '/workspace',
+                      id,
+                      'teams',
+                      mission.teamId,
+                      'missions',
+                      mission.id,
+                    ]"
+                    >View details</a
+                  >
+                } @else {
+                  <span>Details unavailable</span>
+                }
+              </div>
+            </article>
+          }
+        </section>
+      }
+      <div class="pagination" aria-label="Directory pagination">
+        <button
+          class="button secondary"
+          type="button"
+          [disabled]="page === 0"
+          (click)="changePage(page - 1)"
+        >
+          Previous</button
+        ><button
+          class="button secondary"
+          type="button"
+          [disabled]="(page + 1) * 20 >= directory.total || page >= 100000"
+          (click)="changePage(page + 1)"
+        >
+          Next
+        </button>
+      </div>
+      <p class="caption">Task counts reflect recorded state.</p>
+    }
+  </main>
+  <dialog
+    id="team-chooser"
+    aria-labelledby="team-chooser-title"
+    (cancel)="closeChooser()"
+    (close)="closeChooser()"
+  >
+    <h2 id="team-chooser-title">
+      {{
+        chooserMode === 'create' ? 'Choose Team for new mission' : 'Select Team'
+      }}
+    </h2>
+    <form class="filters" (ngSubmit)="searchTeams()">
+      <label
+        >Search teams<input
+          name="teamSearch"
+          maxlength="200"
+          [(ngModel)]="teamSearch" /></label
+      ><button class="button secondary" type="submit">Search</button>
+    </form>
+    @if (teamLoading()) {
+      <p role="status">Loading teams…</p>
+    }
+    @if (teamError()) {
+      <p role="alert">{{ teamError() }}</p>
+      <button
+        type="button"
+        class="button secondary"
+        (click)="loadTeams(teamPage)"
+      >
+        Try again
+      </button>
+    }
+    @if (teamResult(); as teams) {
+      <p class="caption">{{ teams.total }} teams · Page {{ teams.page + 1 }}</p>
+      <div class="team-options">
+        @for (team of teams.items; track team.id) {
+          <div>
+            <button
+              type="button"
+              class="button secondary"
+              [disabled]="
+                chooserMode === 'create' && team.status === 'ARCHIVED'
+              "
+              (click)="chooseTeam(team)"
+            >
+              {{ team.name }}</button
+            ><small>{{ team.status }}</small>
+          </div>
+        } @empty {
+          <p>No teams found.</p>
+        }
+      </div>
+      <div class="pagination">
+        <button
+          class="button secondary"
+          type="button"
+          [disabled]="teamPage === 0"
+          (click)="loadTeams(teamPage - 1)"
+        >
+          Previous</button
+        ><button
+          class="button secondary"
+          type="button"
+          [disabled]="(teamPage + 1) * 20 >= teams.total || teamPage >= 100000"
+          (click)="loadTeams(teamPage + 1)"
+        >
+          Next
+        </button>
+      </div>
+    }
+    <button class="button secondary" type="button" (click)="closeChooser()">
+      Cancel
+    </button>
+  </dialog>
+</div>

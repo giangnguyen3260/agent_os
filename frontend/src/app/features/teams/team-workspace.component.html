@@ -6,8 +6,8 @@
       ><button disabled>Organization map</button
       ><a class="selected" [routerLink]="['/workspace', id, 'teams']">Teams</a
       ><a [routerLink]="['/workspace', id, 'agents']">Agents</a
-      ><button disabled>Missions</button><button disabled>Approvals</button
-      ><button disabled>Trace</button>
+      ><a [routerLink]="['/workspace', id, 'missions']">Missions</a
+      ><button disabled>Approvals</button><button disabled>Trace</button>
     </nav>
   </aside>
   <header class="compact-header">
@@ -35,10 +35,16 @@
       <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a
       ><a [routerLink]="['/workspace', id, 'teams']">Teams</a
       ><a [routerLink]="['/workspace', id, 'agents']">Agents</a
+      ><a [routerLink]="['/workspace', id, 'missions']">Missions</a
       ><a routerLink="/workspace">Change workspace</a>
     </nav>
   </dialog>
   <main data-testid="team-workspace" [attr.aria-busy]="loading()">
+    <a
+      [routerLink]="['/workspace', id, 'missions']"
+      [queryParams]="{teamId: teamId}"
+      >View missions</a
+    >
     <div class="breadcrumb">
       <span
         >{{ context()?.name }} /

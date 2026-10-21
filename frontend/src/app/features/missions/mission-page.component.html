@@ -5,7 +5,9 @@
       <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a
       ><a [routerLink]="['/workspace', id, 'teams']">Teams</a
       ><a [routerLink]="['/workspace', id, 'agents']">Agents</a
-      ><span class="selected">Missions</span>
+      ><a class="selected" [routerLink]="['/workspace', id, 'missions']"
+        >Missions</a
+      >
     </nav>
   </aside>
   <header class="compact-header">
@@ -33,10 +35,16 @@
       <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a
       ><a [routerLink]="['/workspace', id, 'teams']">Teams</a
       ><a [routerLink]="['/workspace', id, 'agents']">Agents</a
+      ><a [routerLink]="['/workspace', id, 'missions']">Missions</a
       ><a routerLink="/workspace">Change workspace</a>
     </nav>
   </dialog>
   <main [attr.aria-busy]="loading() || busy()">
+    <a
+      [routerLink]="['/workspace', id, 'missions']"
+      [queryParams]="{teamId: teamId}"
+      >Browse missions</a
+    >
     <div class="breadcrumb">
       <span>{{ context()?.name }} / {{ teamName() || 'Team' }} / Missions</span
       ><span>{{ auth.user()?.displayName }}</span>

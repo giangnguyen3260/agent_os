@@ -6,8 +6,8 @@
       ><button disabled>Organization map</button
       ><a [routerLink]="['/workspace', id, 'teams']">Teams</a
       ><a class="selected" [routerLink]="['/workspace', id, 'agents']">Agents</a
-      ><button disabled>Missions</button><button disabled>Approvals</button
-      ><button disabled>Trace</button>
+      ><a [routerLink]="['/workspace', id, 'missions']">Missions</a
+      ><button disabled>Approvals</button><button disabled>Trace</button>
     </nav>
   </aside>
   <header class="compact-header">
@@ -33,6 +33,7 @@
     <nav aria-label="Điều hướng workspace">
       <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a>
       <a [routerLink]="['/workspace', id, 'teams']">Teams</a
+      ><a [routerLink]="['/workspace', id, 'missions']">Missions</a
       ><a routerLink="/workspace">Đổi workspace</a>
     </nav>
   </dialog>
