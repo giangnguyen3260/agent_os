@@ -213,6 +213,17 @@
                       mission.id,
                     ]"
                     >View details</a
+                  ><a
+                    [routerLink]="[
+                      '/workspace',
+                      id,
+                      'teams',
+                      mission.teamId,
+                      'missions',
+                      mission.id,
+                      'workspace',
+                    ]"
+                    >Open workspace</a
                   >
                 } @else {
                   <span>Details unavailable</span>

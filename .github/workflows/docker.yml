@@ -113,6 +113,14 @@ jobs:
         env:
           E2E_BASE_URL: http://127.0.0.1:18080
         run: python3 scripts/mission-directory-probe.py
+      - name: Provision Mission workspace fixtures
+        run: |
+          docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < scripts/mission-workspace-ci-fixture.sql
+      - name: PostgreSQL Mission workspace scope and read boundary
+        timeout-minutes: 2
+        env:
+          E2E_BASE_URL: http://127.0.0.1:18080
+        run: python3 scripts/mission-workspace-probe.py
       - name: Install browser test dependencies
         working-directory: frontend
         run: |

@@ -71,6 +71,19 @@
       @if (saved(); as m) {
         <header class="heading">
           <h1>{{ m.title }}</h1>
+          <a
+            class="button secondary"
+            [routerLink]="[
+              '/workspace',
+              id,
+              'teams',
+              teamId,
+              'missions',
+              m.id,
+              'workspace',
+            ]"
+            >Open workspace</a
+          >
           <p>{{ m.teamName }} · {{ m.status }}</p>
         </header>
         <section class="panel notice">
