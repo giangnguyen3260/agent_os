@@ -7,7 +7,8 @@
       ><a [routerLink]="['/workspace', id, 'teams']">Teams</a
       ><a [routerLink]="['/workspace', id, 'agents']">Agents</a
       ><span class="selected" aria-current="page">Missions</span
-      ><button disabled>Approvals</button><button disabled>Trace</button
+      ><a [routerLink]="['/workspace', id, 'approvals']">Approvals</a
+      ><button disabled>Trace</button
       ><a routerLink="/workspace">Change workspace</a>
     </nav>
   </aside>
