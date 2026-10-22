@@ -36,3 +36,7 @@ References:
 ## Temporary dependency override
 
 The gts7 -> inquirer -> external-editor chain selected vulnerable tmp. Scope the override to external-editor/tmp0.2.7: the 0.2.6 fix for GHSA-ph9p-34f9-6g65 also required the follow-up patch for GHSA-7c78-jf6q-g5cm. Do not use npm audit fix --force to downgrade Angular. `npm run test:tooling` verifies the real consumer can create/read/cleanup a temporary file through the patched dependency without launching an editor, and rejects string/array traversal prefixes. Recheck the override after upstream gts/external-editor updates. This limited smoke test is not a general interactive-editor or penetration-test result.
+
+## Tooling advisory overrides — October2026
+
+Angular CLI21.2.27 pins SDK1.31.0 and build21.2.27 pins Vite7.3.6. Scoped overrides select SDK1.32.0 and Vite7.3.7 to address current advisories while retaining Angular21. Quality and Docker build require `npm run audit:check` including dev dependencies and `npm run test:tooling`, which exercises actual CLI MCP and Angular dev-server consumers as well as the existing tmp checks. No audit suppressions, omitted dev graph or forced major upgrade. Frontend/tooling maintainers must review on the next CLI/build update and remove overrides once upstream selects patched children with all gates passing. See docs/qc/TOOLING_SECURITY_QC_REPORT.md for bounded evidence and limitations.

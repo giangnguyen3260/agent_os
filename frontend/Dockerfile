@@ -4,7 +4,8 @@ WORKDIR /workspace
 COPY package.json package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm npm ci --no-fund
 COPY . ./
-RUN npm run lint \
+RUN npm run audit:check \
+    && npm run lint \
     && npm run format:check \
     && npm run test:tooling \
     && npm run build

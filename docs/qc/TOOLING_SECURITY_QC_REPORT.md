@@ -1,0 +1,30 @@
+# Tooling dependency security QC — 22 October 2026
+
+Status: accepted within this tooling patch scope; local gates, remote Code Quality and Docker/full browser regression passed. Draft PR [18](https://github.com/giangnguyen3260/agent_os/pull/18) remains unmerged. Branch fix/tooling-security stacks on draft/unmerged Task Intake PR17, base90700acb6412f9783298795fb2ee9d566f5035f0.
+
+## Patch and scope
+
+Baseline complete npm audit reported 4 affected packages: 1 low / 3 high / 0 critical. Direct CLI/build entries were propagated from their SDK/Vite children. Parent-scoped exact overrides replace Angular CLI's SDK 1.31.0 with 1.32.0 and Angular build's Vite 7.3.6 with 7.3.7. Existing external-editor/tmp 0.2.7 override is preserved. The lockfile diff changes only those two resolved versions/registry URLs/integrities. Angular CLI/build 21.2.27, framework/compiler 21.2.25, TypeScript 5.9.3 and Node 24 compatibility remain in scope; no Angular major migration, `audit fix --force`, app-source/API/schema or business behavior change.
+
+Advisories: SDK [task/session ownership](https://github.com/advisories/GHSA-22jm-h49p-29qw), [redirect forwarding](https://github.com/advisories/GHSA-6prh-2h8m-c8cw), [validation memory exhaustion](https://github.com/advisories/GHSA-46jr-4wx8-v453), [bearer audience](https://github.com/advisories/GHSA-rvq5-wwqv-78pq); Vite [Windows editor escaping](https://github.com/advisories/GHSA-698v-4r3x-3vcv), [editor flags](https://github.com/advisories/GHSA-r825-w8mm-5pxw), [Windows existence check](https://github.com/advisories/GHSA-587h-7wmj-h5pm), [middleware script execution](https://github.com/advisories/GHSA-9jrq-w75r-8gcw), [filesystem allow-list](https://github.com/advisories/GHSA-rq7h-c2jc-7f22).
+
+Owner: frontend/tooling maintainers. Review overrides on the next CLI/build update and remove each override once the upstream Angular 21 consumer pins a patched child and the same gates pass. Overrides are compatibility boundaries requiring review, not advisory suppressions.
+
+## Executed local evidence
+
+- Fresh `npm ci --no-audit --no-fund` installed 638 packages from the changed lockfile. Anchored `npm ls` resolved CLI → SDK 1.32.0 and build/plugin → Vite 7.3.7 without invalid peers.
+- Full `npm run audit:check` (`npm audit --include=dev --audit-level=low`) passed: 0 vulnerabilities. Explicit dev inclusion prevents production/omit configuration from hiding the patched toolchain. No ignored advisory/omitted package gate.
+- Existing tmp consumer/temp-cleanup and traversal-rejection checks passed.
+- Patched SDK consumer smoke passed: actual local Angular CLI `mcp --read-only --local-only`, stdio initialize, list tools and list_projects call discover the actual Angular workspace. No network MCP deployment or grant is introduced.
+- Actual Angular dev-server smoke passed on 127.0.0.1 / ephemeral port: application HTML and JavaScript module served, temporary outside-workspace fixture denied 403/404 and marker absent. Detached Unix process group cleaned with TERM/KILL fallback; fixture cleanup runs in nested finally. No private host files are probed.
+- Node script syntax, frontend format/lint/build and Git whitespace checks passed. Independent source review and full audit are recorded separately in TOOLING_SECURITY_REVIEW.md.
+
+## CI and acceptance limits
+
+Quality and frontend Docker build now require the full dependency audit and existing+new tooling consumer checks. Candidate `fbf46c42a453abef8ab84e14f2ecc138c888d504`, tree `0d83ab0d87beb7b4e4757f464688f1515d1f2f29`, is stacked on base `90700acb6412f9783298795fb2ee9d566f5035f0`. CI checked merge `238c317ba7305423980510038d953e43c4168dd0` (candidate into that base). Code Quality [run 39779199260](https://github.com/giangnguyen3260/agent_os/actions/runs/39779199260), job `119825788169`, passed: 121 backend tests, zero failures/errors/skips, explicit including-dev audit zero vulnerabilities, tmp and actual MCP/dev-server consumer checks, style/build. Completed job logs place backend success at 12:33:56 UTC, audit at 12:34:09 and patched consumer passes at 12:34:15/21. Docker [run 39779199403](https://github.com/giangnguyen3260/agent_os/actions/runs/39779199403), job `119825788604`, passed on the same checked merge. Completed logs confirm Alpine including-dev audit zero vulnerabilities at 12:33:31 UTC, actual CLI MCP at 12:33:42 and Angular dev-server smoke at 12:33:53. Healthy stack, migrations, SPA/API/private-management checks and native PostgreSQL scope/concurrency/no-write probes passed; Task Intake atomic persistence/replay/stale-conflict probe passed at 12:36:17. All **300 real-backend browser instances passed** across desktop/tablet/mobile at 12:45:18 (8.1 minutes). Exact session survival after backend restart and rejection after logout passed at 12:45:53. Job completed successfully at 12:46 UTC. No ignored advisory, skipped acceptance gate or browser retry failure is recorded.
+
+These checks verify patched dependency resolution and consumer compatibility. They do not reproduce every upstream exploit, HMR behavior, Windows behavior or HTTP MCP security. The filesystem smoke does not create the special root-relative import collision from GHSA-rq7h-c2jc-7f22. Angular CLI is stdio-only here; an HTTP MCP deployment would require its own request/input limits and review. A clean npm audit is time-bound known-advisory evidence, not a full penetration test or production release acceptance. Sonar remains paused, not passed. No deployment to the user's Mac is claimed.
+
+## Revision provenance
+
+The tested application/tooling candidate is `fbf46c42a453abef8ab84e14f2ecc138c888d504`; the follow-up documentation commit records completed evidence and corrects review provenance only. That documentation head is not represented as the tested revision. Historical Task Create audit findings remain in its original report, with a link to this follow-up. Independent review provenance remains separate from coordinator-verified CI logs.
