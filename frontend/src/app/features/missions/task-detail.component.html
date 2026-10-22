@@ -121,10 +121,36 @@
           <dt>Updated</dt>
           <dd>{{ data.task.updatedAt | date: 'medium' }}</dd>
         </dl>
-        <p>
-          Task description, acceptance criteria, output target and assigned
-          owner are unavailable.
+        <h3>Description / input</h3>
+        <p class="saved-text">{{ data.task.description ?? 'Unavailable' }}</p>
+        <h3>Acceptance criteria</h3>
+        <p class="saved-text">
+          {{ data.task.acceptanceCriteria ?? 'Unavailable' }}
         </p>
+        <dl>
+          <dt>Priority</dt>
+          <dd>{{ data.task.priority ?? 'Unavailable' }}</dd>
+          <dt>Owner</dt>
+          <dd>{{ data.task.ownerName ?? 'Unassigned' }}</dd>
+        </dl>
+        <h3>Dependencies</h3>
+        @for (dependency of data.task.dependencyIds; track dependency) {
+          <a
+            [routerLink]="[
+              '/workspace',
+              id,
+              'teams',
+              teamId,
+              'missions',
+              missionId,
+              'tasks',
+              dependency,
+            ]"
+            >{{ dependency }}</a
+          >
+        } @empty {
+          <p>No dependencies.</p>
+        }
       </section>
       <section class="panel" aria-labelledby="task-runs">
         <h2 id="task-runs">Runs &amp; output history</h2>

@@ -95,3 +95,5 @@ npm run build
 Follow [Google coding standards](docs/engineering/CODING_STANDARDS.md). SonarQube scanning is temporarily paused. CI still enforces Java formatting, backend tests and coverage generation, frontend lint/format/tooling checks and build. Docker build and smoke checks run independently. The Sonar configuration is retained for later reactivation; a green CI run does not imply a Sonar quality gate has passed. Database/key-management/security, browser and load checks remain required before production.
 
 Task Detail read delivery: [contract](docs/engineering/TASK_DETAIL_CONTRACT.md), [QC](docs/qc/TASK_DETAIL_QC_REPORT.md). Scoped status/pending/timestamps and safe activity; runtime/approval/output actions remain unavailable.
+
+Create Task intake: [contract](docs/engineering/TASK_CREATE_CONTRACT.md), [QC](docs/qc/TASK_CREATE_QC_REPORT.md), [V009 rollout](backend/TASK_INTAKE_MIGRATION.md). Saves real DRAFT work to Intake with scoped owner/dependencies and safe retries; execution remains unavailable.

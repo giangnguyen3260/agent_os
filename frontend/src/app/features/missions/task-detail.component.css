@@ -40,3 +40,8 @@ dd {
     padding: 20px 24px;
   }
 }
+
+.saved-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

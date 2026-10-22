@@ -59,11 +59,13 @@ def main():
     snapshot = '\n'.join(f'SELECT row_to_json(x)::text FROM {table} x ORDER BY id;'
                          for table in ('teams', 'agents', 'missions', 'tasks', 'audit_events'))
     snapshot += '\nSELECT row_to_json(x)::text FROM mission_create_receipts x ORDER BY organization_id,account_id,idempotency_key;'
+    snapshot += '\nSELECT row_to_json(x)::text FROM task_dependencies x ORDER BY organization_id,team_id,mission_id,task_id,dependency_task_id;'
+    snapshot += '\nSELECT row_to_json(x)::text FROM task_create_receipts x ORDER BY organization_id,account_id,idempotency_key;'
     before = sql(snapshot)
     expected = json.loads(sql(f'''SELECT json_agg(x)::text FROM
         (SELECT id,organization_id AS "organizationId",team_id AS "teamId",mission_id AS "missionId",
         title,status,pending_reason AS "pendingReason",waiting_since AS "waitingSince",resolver,
-        created_at AS "createdAt",updated_at AS "updatedAt" FROM tasks
+        created_at AS "createdAt",updated_at AS "updatedAt",description,acceptance_criteria AS "acceptanceCriteria",priority,owner_agent_id AS "ownerAgentId",NULL AS "ownerName",'[]'::json AS "dependencyIds" FROM tasks
         WHERE organization_id='{ORG}' AND team_id='{TEAM}' AND mission_id='{MISSION}' ORDER BY id) x;'''))
     assert len(expected) == 31
     for task in expected:

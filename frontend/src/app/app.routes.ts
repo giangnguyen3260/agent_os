@@ -149,6 +149,20 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'workspace/:id/teams/:teamId/missions/:missionId/tasks/new',
+    canActivate: [authGuard],
+    canDeactivate: [
+      (
+        component: import('./features/missions/new-task-create.component').NewTaskCreateComponent,
+      ) => component.canLeave(),
+    ],
+    runGuardsAndResolvers: 'always',
+    loadComponent: () =>
+      import('./features/missions/new-task-create.component').then(
+        m => m.NewTaskCreateComponent,
+      ),
+  },
+  {
     path: 'workspace/:id/teams/:teamId/missions/:missionId/tasks/:taskId',
     canActivate: [authGuard],
     runGuardsAndResolvers: 'always',

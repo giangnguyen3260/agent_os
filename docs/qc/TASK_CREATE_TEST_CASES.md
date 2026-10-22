@@ -1,0 +1,47 @@
+# Task creation test cases
+
+Contract: `docs/engineering/TASK_CREATE_CONTRACT.md`. Creation persists configuration as DRAFT, mapped to the Team INTAKE lane. It does not execute a task or generate a run.
+
+## Browser suite and evidence
+
+Run from `frontend`: `E2E_PASSWORD=<fixture password> npx playwright test task-create.spec.mjs`. `E2E_BASE_URL` defaults to `http://127.0.0.1:8080`. Eight scenarios run in the existing desktop 1440×1000, tablet 768×1024 and mobile 390×844 projects: **24 instances maximum**.
+
+Prerequisites: migrated real backend/PostgreSQL, Main's `scripts/task-create-ci-fixture.sql`, installed Chromium, and the fixture password. ADMIN and MEMBER accounts are `task-create-admin@example.test` and `task-create-member@example.test`. Organization is **22222222-2323-4232-8232-222222222222**, distinct from the preexisting organization beginning 22222222. Browser writes use Missions suffix 10/11/12 respectively. Main's native probe writes only to Mission 1. Shared Team and eligible owners are read-only; tests do not change membership, pause flags or fixture rows.
+
+Successful data is always native. Error interception is limited to unavailable/malformed reads and ambiguous responses after a real server commit. No success record is fabricated. Discovery and syntax checks are not browser execution; runtime acceptance requires recorded results from Main's stack/CI.
+
+| ID   | Scenario                             | Required evidence                                                                                                                                                                                                                                                                                                                                            |
+| ---- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| TC01 | Validation, Cancel and focus         | Whitespace title cannot POST; title/description/acceptance maximum lengths enforced; Cancel can be dismissed or accepted with zero writes; keyboard Cancel and compact menu Escape return; dirty beforeunload prevents departure; no horizontal overflow                                                                                                     |
+| TC02 | Durable native happy flow            | Real 201, UUID and correct scope; trimmed title, description, acceptance, priority and optional assignment/dependencies persisted; DRAFT status; scoped detail navigation, GET readback and reload; real Mission Control task link and Team Intake record                                                                                                    |
+| TC03 | Ambiguous commit/retry               | First POST actually commits and returns 201 before desktop network abort, tablet 503 or mobile malformed success; fields frozen; no invented detail; retry has identical body and UUID key; real 200 replay returns original task identity                                                                                                                   |
+| TC04 | Candidates                           | Native fixed 20+5 eligible owner and dependency pages in stable name/title+ID order; search is case-insensitive and percent/underscore/backslash literal; no suspended, other-Team or foreign owner; dependencies scoped to surface Mission                                                                                                                  |
+| TC05 | Native invalid input and idempotency | Blank/overlength required fields, invalid priority, >20 dependencies and negative version return 400; suspended/other-Team/foreign owner and out-of-Mission dependency return TASK_SETUP_CONFLICT; missing CSRF 403; rejected requests leave intake version unchanged; same-key replay 200; changed body IDEMPOTENCY_CONFLICT; exactly one version increment |
+| TC06 | Scope and MEMBER                     | Wrong Team/Mission 404, foreign organization 403 on context and writes; MEMBER can read saved detail but cannot create/enumerate context/candidates; denied page clears form; Mission Control Add Task remains disabled for MEMBER                                                                                                                           |
+| TC07 | Paused, terminal and stale intake    | Paused flag and terminal status yield canCreate=false; native writes conflict and UI offers no submit; accepted write makes old version stale; TASK_INTAKE_CONFLICT does not increment version; fresh context/new key succeeds                                                                                                                               |
+| TC08 | Failed context integrity             | Injected 503 and malformed context show an alert, no form/submit/detail; removing interception and native reload restores the real form with responsive layout                                                                                                                                                                                               |
+
+## Independent review and completion gates
+
+Main owns fixture, native probe, workflow and final QC report. Native PostgreSQL/probe or backend integration evidence must additionally establish atomic task/dependencies/receipt/audit/version rollback, receipt cardinality, safe audit metadata, parallel same-key replay, competing distinct-key stale-version conflicts, canonical sorted dependencies, fresh account/credential/membership authorization including replay after revocation, replay before mutable parent eligibility, strict JSON input types/unknown keys and legacy endpoint closure. Browser retry demonstrates identity reuse; database cardinality remains a native-probe gate.
+
+Inspect the finished frontend for candidate chooser paging/search, max20 selection, Escape/focus return, candidate failure clearing, safe definitive 400/409 recovery with fresh context/key, route guard and beforeunload handling, stale callback suppression, malformed success scope validation, and detail-read recovery without another POST. These require source review and/or runtime evidence; do not infer them from test discovery.
+
+The Task Detail response now adds description, acceptanceCriteria, priority, ownerAgentId, ownerName and dependencyIds. Main has updated exact-key validation in `scripts/task-detail-probe.py`. Preserve existing nullable legacy fields and member read paths. Sonar is paused, not passed.
+
+## Current execution status
+
+Static checks passed: `node --check`, Prettier on both owned files, `git diff --check`, and Playwright discovery of exactly 24 instances. No browser pass claimed: this QC worker initially found no listener at port 8080 and no E2E_PASSWORD in its environment. Main's runtime execution is required before acceptance.
+
+## Source review findings for Main
+
+- The initial FE response-envelope mismatch was fixed during review: context/candidate services now unwrap `ApiResponse.data`.
+- Picker search input limit now matches the API maximum of 100 characters (initial template used 255).
+- Probe is designed for one run after fresh provisioning: Mission 1 starts at revision 0 and ends with 28 tasks/revision 3. Do not rerun it against its already-mutated fixture. Surface Missions remain isolated.
+- The native probe verifies nonwrites for rejected requests; it does not inject a mid-transaction insertion failure. Its printed rollback claim must be interpreted alongside backend integration evidence.
+- **Closed:** `receiptFailureRollsBackTaskEdgesVersionAndAudit` now creates a real dependency first, forces receipt failure for the rejected key, and verifies unchanged task/receipt/audit counts, zero inserted edges and preserved revision 1. Source verified; Main reports all 120 backend tests passed (six new tests). This QC worker did not execute that backend run.
+- Reviewed authorization runs fresh organization/account/credential-version/membership checks before receipt replay. Replay precedes mutable Team/Mission eligibility. Organization row locking serializes concurrent same-organization creates before receipt lookup; native independent-session race evidence is still required. Dependency FKs carry organization/Team/Mission scope on both edge ends. Owner scope is enforced by the application under row lock and revalidated on detail projection; the owner FK itself references agent identity only.
+
+- **Closed:** required-field accessible names now explicitly match the test selectors: Title, Mission, Description / input and Acceptance criteria. Source verified after Main identified the label-asterisk mismatch; rebuilt browser verification remains Main-owned.
+- **Closed:** TC02 Intake pagination race. Initial page-0 response must complete and the workspace must be idle with its tasks section visible before inspecting rows. Each subsequent page waits for its exact GET path/lane/page response, matching route query, idle workspace and visible tasks section. Patch rechecked and frozen.
+- Final source review found no additional blocking issue in the reviewed authorization/replay, dependency FK, rollback or owned test paths. Runtime conclusions remain limited to recorded execution evidence.

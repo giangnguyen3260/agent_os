@@ -1,0 +1,273 @@
+<div class="forest-shell">
+  <aside class="desktop-sidebar">
+    <div class="brand">agentos</div>
+    <nav aria-label="Workspace navigation">
+      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a
+      ><button disabled>Organization map</button
+      ><a [routerLink]="['/workspace', id, 'teams']">Teams</a
+      ><a [routerLink]="['/workspace', id, 'agents']">Agents</a
+      ><a [routerLink]="['/workspace', id, 'missions']" class="selected"
+        >Missions</a
+      ><button disabled>Approvals</button><button disabled>Trace</button>
+    </nav>
+  </aside>
+  <header class="compact-header">
+    <span class="brand">agentos</span
+    ><button
+      class="button secondary"
+      type="button"
+      aria-controls="task-create-menu"
+      [attr.aria-expanded]="menuOpen()"
+      (click)="toggleMenu()"
+    >
+      Menu
+    </button>
+  </header>
+  <dialog
+    id="task-create-menu"
+    aria-label="Workspace navigation"
+    (cancel)="closeMenu()"
+    (close)="closeMenu()"
+  >
+    <button class="button secondary" type="button" (click)="closeMenu()">
+      Close menu
+    </button>
+    <nav>
+      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a
+      ><a [routerLink]="['/workspace', id, 'teams']">Teams</a
+      ><a [routerLink]="['/workspace', id, 'agents']">Agents</a
+      ><a [routerLink]="['/workspace', id, 'missions']" class="selected"
+        >Missions</a
+      ><a routerLink="/workspace">Change workspace</a>
+    </nav>
+  </dialog>
+  <main data-testid="task-create" [attr.aria-busy]="loading() || busy()">
+    @if (loading()) {
+      <p role="status">Loading creation context…</p>
+    }
+    @if (denied()) {
+      <p role="alert">
+        Task creation is unavailable. Administrator access is required.
+      </p>
+      <a routerLink="/workspace">Choose another workspace</a>
+    }
+    @if (error()) {
+      <p role="alert" class="auth-error">{{ error() }}</p>
+    }
+    @if (!context() && !denied() && !loading()) {
+      <button class="button secondary" (click)="load()">Try again</button>
+    }
+    @if (context(); as c) {
+      <div class="breadcrumb">
+        <span>{{ c.teamName }} / {{ c.missionTitle }}</span
+        ><span>{{ auth.user()?.displayName }}</span>
+      </div>
+      <header class="heading">
+        <h1>Create Task</h1>
+        <p>Define the work and acceptance criteria for this mission.</p>
+      </header>
+      @if (!allowed) {
+        <p role="alert">
+          {{
+            c.intakePaused
+              ? 'Task intake is paused.'
+              : 'This mission is not accepting tasks.'
+          }}
+        </p>
+      }
+      <form (ngSubmit)="submit()">
+        <fieldset
+          class="mission-form panel"
+          [disabled]="!allowed || busy() || frozen"
+        >
+          <label for="task-title">Title <span aria-hidden="true">*</span></label
+          ><input
+            id="task-title"
+            aria-label="Title"
+            name="title"
+            [(ngModel)]="title"
+            required
+            maxlength="255"
+          />
+          <label for="task-mission"
+            >Mission <span aria-hidden="true">*</span></label
+          ><input
+            id="task-mission"
+            aria-label="Mission"
+            [value]="c.missionTitle"
+            readonly
+          />
+          <label for="task-description"
+            >Description / input <span aria-hidden="true">*</span></label
+          ><textarea
+            id="task-description"
+            aria-label="Description / input"
+            name="description"
+            [(ngModel)]="description"
+            required
+            maxlength="8000"
+            rows="3"
+          ></textarea>
+          <label for="task-acceptance"
+            >Acceptance criteria <span aria-hidden="true">*</span></label
+          ><textarea
+            id="task-acceptance"
+            aria-label="Acceptance criteria"
+            name="acceptanceCriteria"
+            [(ngModel)]="acceptanceCriteria"
+            required
+            maxlength="4000"
+            rows="3"
+          ></textarea>
+          <div class="typed-controls">
+            <div>
+              <label for="task-priority">Priority</label
+              ><select
+                id="task-priority"
+                name="priority"
+                [(ngModel)]="priority"
+              >
+                <option value="LOW">Low</option>
+                <option value="NORMAL">Normal</option>
+                <option value="HIGH">High</option>
+                <option value="URGENT">Urgent</option>
+              </select>
+            </div>
+            <div>
+              <span>Owner</span
+              ><button
+                type="button"
+                class="button secondary"
+                (click)="openPicker('owner')"
+              >
+                Select owner</button
+              ><span>{{ owner?.name ?? 'Unassigned' }}</span>
+              @if (owner) {
+                <button
+                  type="button"
+                  class="button secondary"
+                  (click)="owner = null"
+                >
+                  Clear owner
+                </button>
+              }
+            </div>
+            <div>
+              <span>Dependencies</span
+              ><button
+                type="button"
+                class="button secondary"
+                (click)="openPicker('dependencies')"
+              >
+                Select dependencies</button
+              ><span>{{ dependencies.length }} / 20 selected</span>
+            </div>
+          </div>
+          @for (d of dependencies; track d.id) {
+            <p>{{ d.title }}</p>
+          }
+        </fieldset>
+        @if (frozen) {
+          <p role="status">
+            Submitted fields are locked. Retry uses the same task and
+            idempotency key.
+          </p>
+        }
+        <div class="actions">
+          <button
+            class="button primary"
+            type="submit"
+            [disabled]="!allowed || busy()"
+          >
+            {{
+              busy() ? 'Creating…' : frozen ? 'Retry creation' : 'Create task'
+            }}</button
+          ><button class="button secondary" type="button" (click)="cancel()">
+            Cancel
+          </button>
+        </div>
+      </form>
+      <aside class="guidance">
+        <h2>Task intake</h2>
+        <p>
+          Saved to Intake (DRAFT). Creating a task does not run it. Planning,
+          plan version and runtime controls are unavailable.
+        </p>
+      </aside>
+    }
+  </main>
+  <dialog
+    id="task-picker"
+    [attr.aria-label]="
+      picker() === 'owner' ? 'Select owner' : 'Select dependencies'
+    "
+    (cancel)="closePicker()"
+  >
+    <h2>{{ picker() === 'owner' ? 'Select owner' : 'Select dependencies' }}</h2>
+    <form (ngSubmit)="search(0)">
+      <label for="candidate-query"
+        >Search {{ picker() === 'owner' ? 'owners' : 'dependencies' }}</label
+      ><input
+        id="candidate-query"
+        name="query"
+        [(ngModel)]="query"
+        maxlength="100"
+      /><button class="button secondary" type="submit">Search</button>
+    </form>
+    @if (pickerLoading()) {
+      <p role="status">Loading selections…</p>
+    }
+    @if (pickerError()) {
+      <p role="alert">{{ pickerError() }}</p>
+      <button class="button secondary" (click)="search(page)">Try again</button>
+    }
+    @if (candidates(); as result) {
+      <div class="candidate-list">
+        @for (candidate of result.items; track candidate.id) {
+          <button
+            type="button"
+            class="button secondary"
+            [attr.aria-pressed]="
+              picker() === 'dependencies' ? selected(candidate.id) : null
+            "
+            [disabled]="
+              picker() === 'dependencies' &&
+              dependencies.length >= 20 &&
+              !selected(candidate.id)
+            "
+            (click)="select(candidate)"
+          >
+            {{ candidate.name ?? candidate.title }} · {{ candidate.status }}
+            @if (candidate.level) {
+              · {{ candidate.level }}
+            }
+          </button>
+        } @empty {
+          <p>
+            No eligible
+            {{ picker() === 'owner' ? 'owners' : 'dependencies' }} found.
+          </p>
+        }
+      </div>
+      <div class="pagination">
+        <button
+          class="button secondary"
+          [disabled]="page === 0"
+          (click)="search(page - 1)"
+        >
+          Previous</button
+        ><span>Page {{ page + 1 }}</span
+        ><button
+          class="button secondary"
+          [disabled]="(page + 1) * 20 >= result.total"
+          (click)="search(page + 1)"
+        >
+          Next
+        </button>
+      </div>
+    }
+    <button class="button secondary" type="button" (click)="closePicker()">
+      Done
+    </button>
+  </dialog>
+</div>
