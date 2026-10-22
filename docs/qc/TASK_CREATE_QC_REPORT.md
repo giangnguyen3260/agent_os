@@ -35,3 +35,7 @@ This gate accepts intake/configuration creation, persisted reads and regression 
 ## Existing dependency audit finding
 
 Completed Docker install log and coordinator `npm audit --json` report4affected packages:1low/3high/0critical. The existing development toolchain includes @angular/cli and its @modelcontextprotocol/sdk dependency, plus vite under @angular/build. Package manifests/lockfile are unchanged by this feature. This functional gate does not claim a clean dependency audit. Triage and patch these development dependencies before release; do not use `npm audit fix --force` to silently change the Angular major version. Production release/security acceptance remains incomplete. Audit evidence is separate from the paused Sonar gate.
+
+## Follow-up tooling patch
+
+The audit findings recorded above describe the Task Create candidate at its acceptance time. Follow-up draft PR [18](https://github.com/giangnguyen3260/agent_os/pull/18) addresses the SDK/Vite graph without changing Task Create behavior. See [Tooling security QC](TOOLING_SECURITY_QC_REPORT.md) for the separate candidate, audit and execution evidence; historical findings above remain unchanged.

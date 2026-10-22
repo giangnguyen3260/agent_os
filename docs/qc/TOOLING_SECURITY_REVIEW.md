@@ -1,6 +1,6 @@
 # Independent tooling security QC / SA review
 
-2026-10-22 UTC · branch `fix/tooling-security` · base `90700ac` · draft PR 17.
+2026-10-22 UTC · branch `fix/tooling-security` · base `90700ac` from draft PR 17 · tooling patch draft PR 18.
 
 ## Disposition and scope
 
@@ -76,3 +76,7 @@ Low-priority residual teardown limits: stopServer returns if the group leader al
 Review each override at the next Angular 21 update. Remove CLI → SDK when the selected upstream Angular 21 CLI resolves an advisory-clean SDK >=1.32.0 without it; remove build → Vite when the selected upstream Angular 21 build resolves advisory-clean Vite >=7.3.7 without it. Remove independently as each condition holds. Regenerate the lockfile, clean npm ci, verify parent-anchored resolutions/peers, rerun full including-dev audit and consumer smokes, and check current advisories before acceptance. A published upstream release alone is insufficient until the selected locked graph consumes it. Avoid retaining exact pins indefinitely or migrating Angular major solely to remove them.
 
 The coordinator-reported cleanup-adjusted rerun is complete and passed (session 16668, exit 0). Final-revision CI/Docker results remain pending and must be recorded when available. Review document frozen after this evidence update; nonblocking abnormal-teardown observations remain unchanged. This review accepts the final source within its stated scope; it does not convert pending execution, Sonar pause, or untested browser/HMR/advisory exploit paths into passes.
+
+## Coordinator CI evidence addendum
+
+After the independent review was frozen, the coordinator verified completed Quality run `39779199260` / job `119825788169` and Docker run `39779199403` / job `119825788604` for candidate `fbf46c42a453abef8ab84e14f2ecc138c888d504`, checked merge `238c317ba7305423980510038d953e43c4168dd0`. Both succeeded: 121 backend tests, zero audit vulnerabilities including dev, actual CLI/dev-server smoke in Ubuntu and Alpine, 300 browser instances, PostgreSQL probes and restart/logout. This is coordinator-verified remote evidence, not additional independent reviewer execution. The pending-CI wording above preserves the original review-time provenance; final acceptance evidence is in [Tooling security QC](TOOLING_SECURITY_QC_REPORT.md).
