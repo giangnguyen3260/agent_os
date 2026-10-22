@@ -2,6 +2,8 @@
 
 ## Current branch outcome
 
+On `feature/approval-detail`, Forest S15 detail/acknowledge/reject/record flows use V011 sealed PUBLISH_PREVIEW snapshots, exact scoped grants and durable decision receipts. Legacy/other-action/self/stale/expired cases fail closed. Candidate89279de passed142backend tests,354real-backend browser instances (33new across3widths), native PostgreSQL exact decision/replay/concurrency/revocation/rollback probes, Docker/restart/logout and captured-region review of30synthetic screenshots. Independent source review is clear; draft PR20 remains unmerged. No production producer/grant UI, request-information/reply or Task/execution transition. See [contract](docs/engineering/APPROVAL_DETAIL_CONTRACT.md) and [QC](docs/qc/APPROVAL_DETAIL_QC_REPORT.md).
+
 On `feature/approval-center`, Forest S14 Approval Center reads the real V010 metadata ledger with three groups, counts/paging, safe inline inspection and scoped Mission/Task links. Candidate3156977 passed127backend tests,321real-backend browser instances across3viewports, native PostgreSQL scope/projection/no-write probes, Docker/restart/logout and6synthetic visual captures. Independent source review accepted both UX fixes and the late-response harness; no blocker remains in this bounded read scope. Draft PR19 is unmerged. No production seed, Governance producer, approval grant/decision or execution/resume flow. See [contract](docs/engineering/APPROVAL_CENTER_CONTRACT.md) and [QC](docs/qc/APPROVAL_CENTER_QC_REPORT.md).
 
 On `fix/tooling-security`, parent-scoped SDK1.32.0/Vite7.3.7 overrides resolve the existing1low/3high dependency audit entries with the Angular21 stack retained. Fresh install/full audit 0/real CLI MCP and Angular dev-server consumer checks/FE style-build passed locally and in CI. Candidate `fbf46c4` passed 121 backend tests, 300 real-backend browser instances across three viewports, Docker Alpine consumer/audit checks, native PostgreSQL probes and restart/logout. Draft PR18 remains unmerged. Quality/Docker require full dev-inclusive audit plus consumer checks. See [QC](docs/qc/TOOLING_SECURITY_QC_REPORT.md) and [independent review](docs/qc/TOOLING_SECURITY_REVIEW.md). No application/API/schema behavior change.
@@ -47,7 +49,8 @@ Prior workspace application revision `4f3e795` passed 33 backend tests and 33 br
 | Agent activation review | Saved configuration/Team preflight and fail-closed activation boundary; actual activation unavailable |
 | Agent Studio Draft edits | Development gate verified; 66 backend tests, 117 browser instances and native PostgreSQL version/replay probe |
 | Agent Draft creation | Development gate verified; 57 backend tests and 96 browser instances, plus native PostgreSQL retry probe |
-| Task mutation/execution, team/agent activation, effective grants, approvals and administration | Full designed flows incomplete; older static previews remain blocked |
+| Approval detail/recorded decisions | Bounded sealed PUBLISH_PREVIEW adapter verified; explicit grants enforced; request-information/reply, producer, grant management and execution remain unavailable |
+| Task mutation/execution, team/agent activation, complete effective grant management and administration | Full designed flows incomplete; older static previews remain blocked |
 | Production security/scale | Complete roles/grants, load/failover, full visual/accessibility and release hardening not accepted |
 
 ## Historical foundation snapshot — 15 October 2026

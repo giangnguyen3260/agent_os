@@ -1,5 +1,6 @@
 import {Routes} from '@angular/router';
 import {authGuard, previewGuard} from './core/auth/auth.guard';
+import {approvalDetailNavigationGuard} from './features/approvals/approval-navigation.guard';
 
 export const routes: Routes = [
   {path: '', pathMatch: 'full', redirectTo: 'workspace'},
@@ -30,6 +31,20 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./features/workspace/workspace-page.component').then(
         module => module.WorkspacePageComponent,
+      ),
+  },
+  {
+    path: 'workspace/:id/approvals/:approvalId',
+    canActivate: [authGuard, approvalDetailNavigationGuard],
+    runGuardsAndResolvers: 'always',
+    canDeactivate: [
+      (
+        component: import('./features/approvals/approval-detail.component').ApprovalDetailComponent,
+      ) => component.canLeave(),
+    ],
+    loadComponent: () =>
+      import('./features/approvals/approval-detail.component').then(
+        module => module.ApprovalDetailComponent,
       ),
   },
   {

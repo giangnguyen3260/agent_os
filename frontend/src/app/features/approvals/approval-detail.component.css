@@ -1,0 +1,52 @@
+.panel {
+  display: grid;
+  gap: 12px;
+  padding: 20px 24px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  min-width: 0;
+}
+.panel p,
+code {
+  overflow-wrap: anywhere;
+}
+code {
+  font-family: inherit;
+}
+.notice {
+  background: #fff4dc;
+  color: #79550a;
+  padding: 16px;
+  border-radius: 8px;
+}
+.blocker {
+  color: var(--muted);
+}
+.danger {
+  color: #a83232;
+  background: #fcece8;
+  border: 1px solid var(--line);
+}
+.decision-form {
+  display: grid;
+  gap: 20px;
+}
+textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 120px;
+}
+.reason {
+  white-space: pre-wrap;
+}
+.actions a {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+}
+@media (max-width: 599px) {
+  .panel {
+    padding: 20px 16px;
+  }
+}

@@ -99,7 +99,11 @@
           <article class="record" data-testid="approval-record">
             <div>
               <small class="mobile-label">Request</small>
-              <h2>{{ item.title }}</h2>
+              <h2>
+                <a [routerLink]="['/workspace', id, 'approvals', item.id]">{{
+                  item.title
+                }}</a>
+              </h2>
               <span class="caption">{{ item.actionType }}</span>
             </div>
             <div>
