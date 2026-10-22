@@ -22,3 +22,7 @@ Coordinator/worker review additionally identified an organization-last lock orde
 ## Pending acceptance
 
 Record exact candidate/merge/run/job IDs, actual backend/browser counts, native concurrency and rollback evidence, all requested responsive states and screenshot digests. Preserve any failed checkpoints and separate doc-only final head from tested candidate. Sonar paused; no Mac deployment, production load/penetration acceptance or complete Governance execution claim.
+
+## First CI checkpoint
+
+Application candidate17d4421 (merge78077aa into2eb369b) passed Quality run39829456859/job120001414883:142 backend tests including15 new Approval Detail tests, zero failures/errors/skips; FE style/build/tooling checks and npm audit0. Docker run39829456839/job120001414684 built/started the healthy stack, migrated V011 and provisioned detail data, then stopped at native replay assertion line237. The probe incorrectly compared complete ApiResponse envelopes even though ApiMeta.current() intentionally generates a fresh requestId per response. Initial persisted decision fields/time/hash checks passed. Correction must retain status200 and exact immutable data equality while excluding request-specific metadata. Browser/visual acceptance did not run at this failed checkpoint.

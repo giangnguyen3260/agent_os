@@ -234,7 +234,15 @@ def main():
         assert stored['snapshot_version'] == decision['snapshotVersion'] == 1
         assert datetime.fromisoformat(stored['decided_at']) == datetime.fromisoformat(decision['decidedAt'].replace('Z','+00:00'))
         sql(f"UPDATE approval_action_heads SET active=false WHERE action_id='{ident('3060',n)}';")
-        assert client.decide(n,key=key,body=body) == (200,result)
+        replay_code, replay = client.decide(n,key=key,body=body)
+        # ApiMeta.requestId is fresh per HTTP response; only data is the immutable result.
+        assert replay_code == 200, {'case': n, 'replayStatus': replay_code,
+                                   'errorCode': replay.get('error', {}).get('code') if isinstance(replay.get('error'), dict) else None}
+        replay_data = replay.get('data')
+        differing_fields = sorted(k for k in set(decision) | set(replay_data or {})
+                                  if decision.get(k) != (replay_data or {}).get(k))
+        assert replay_data == decision, {'case': n, 'differingDecisionFields': differing_fields,
+                                         'replayDataType': type(replay_data).__name__}
         assert client.decide(n,key=key,body=dict(body,reason='different'))[0] == 409
         assert sql(f"SELECT count(*) FROM audit_events WHERE event_type='APPROVAL_DECIDED' AND payload::jsonb->>'approvalId'='{ident('3050',n)}';") == '1'
         grant = ident('3070',1 if n==901 else 2)

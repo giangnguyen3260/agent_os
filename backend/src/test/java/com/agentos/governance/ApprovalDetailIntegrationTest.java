@@ -216,14 +216,38 @@ class ApprovalDetailIntegrationTest {
                 .contentType("application/json")
                 .content("{}"))
         .andExpect(status().isForbidden());
-    mvc.perform(
-            post(path + "/approve")
-                .with(auth)
-                .with(csrf())
-                .header("Idempotency-Key", UUID.randomUUID())
-                .contentType("application/json")
-                .content(json.writeValueAsString(command())))
-        .andExpect(status().isCreated());
+    UUID key = UUID.randomUUID();
+    var initial =
+        mvc.perform(
+                post(path + "/approve")
+                    .with(auth)
+                    .with(csrf())
+                    .header("Idempotency-Key", key)
+                    .contentType("application/json")
+                    .content(json.writeValueAsString(command())))
+            .andExpect(status().isCreated())
+            .andReturn()
+            .getResponse();
+    jdbc.update("update approval_action_heads set active=false where action_id=?", action);
+    var replay =
+        mvc.perform(
+                post(path + "/approve")
+                    .with(auth)
+                    .with(csrf())
+                    .header("Idempotency-Key", key)
+                    .contentType("application/json")
+                    .content(json.writeValueAsString(command())))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse();
+    var initialJson = json.readTree(initial.getContentAsString());
+    var replayJson = json.readTree(replay.getContentAsString());
+    assertThat(replayJson.path("data")).isEqualTo(initialJson.path("data"));
+    assertThat(initialJson.path("data"))
+        .isEqualTo(json.valueToTree(service.detail(org, id, human).decision()));
+    UUID initialRequestId = UUID.fromString(initialJson.path("meta").path("requestId").asText());
+    UUID replayRequestId = UUID.fromString(replayJson.path("meta").path("requestId").asText());
+    assertThat(replayRequestId).isNotEqualTo(initialRequestId);
   }
 
   @Test

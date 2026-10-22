@@ -353,7 +353,7 @@ Task APIs are nested under Mission API.
 | POST | `/organizations/{organizationId}/approvals/{approvalId}/approve` | Approve action |
 | POST | `/organizations/{organizationId}/approvals/{approvalId}/reject` | Reject action |
 
-### Approval Decision Request
+### Target decision request (superseded for the delivered bounded adapter below)
 
 ```json
 {
@@ -648,3 +648,9 @@ com.agentos.observability.application.AuditService
 ## Delivered Approval Center read boundary
 
 The organization-scoped GET `/api/v1/organizations/{organizationId}/approvals` is implemented by the Approval Center read slice with `group=PENDING|NEEDS_INFORMATION|DECIDED` and fixed20-row `page` pagination. It returns safe metadata only under fresh ADMIN/MEMBER membership checks. The detail/approve/reject endpoints listed in the target design above remain planned and are not delivered by this slice; read membership is not an approval grant. See [delivery contract](docs/engineering/APPROVAL_CENTER_CONTRACT.md).
+
+## Delivered Approval Detail boundary (draft PR20)
+
+Detail GET and exact approve/reject POST routes above now have a bounded implementation under `/api/v1`. The current command is `{snapshotVersion, snapshotSha256, acknowledgement, reason}` with CSRF and UUID `Idempotency-Key`; arbitrary `constraints` are rejected. First decision returns201, identical authorized receipt replay200. Fresh explicit human grants match organization, Team, action type and risk; ADMIN/MEMBER membership only permits reading/transport and never supplies a grant. Same-org requester membership, non-self identity, current sealed complete parameters and parent/action validity are required for a new decision.
+
+Only PUBLISH_PREVIEW's reviewed parameters are supported. One transaction records approval status, immutable decision, safe audit event and idempotency receipt. No Task/Mission transition, worker resume, execution token or Tool Gateway call occurs. Request-information/reply, public request producer and grant-management endpoints remain unimplemented. The broader commands/event consumers above are target architecture, not delivered runtime behavior. See [current contract](docs/engineering/APPROVAL_DETAIL_CONTRACT.md).

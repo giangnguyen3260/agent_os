@@ -363,3 +363,18 @@ Initial migrations:
 ## Delivered V010 approval metadata subset
 
 The target `approval_requests` definition above describes the future complete workflow. V010 currently delivers only a metadata ledger: id, organization_id, team_id, optional mission_id/task_id/requested_by_agent_id, title, action_type, risk_level, status, created_at and updated_at. Status also supports NEEDS_INFORMATION and INVALIDATED from the approved UI flow. Same-scope composite references bind Team/Mission/Task; no payload, execution run, human decision fields, grants or enforcement is delivered. See [migration scope](backend/APPROVAL_METADATA_MIGRATION.md).
+
+## Delivered V011 decision-recording subset (draft PR20)
+
+V011 extends the V010 ledger without rewriting it or inserting production requests/grants.
+
+| Table | Delivered responsibility |
+|---|---|
+| approval_requests | Nullable requester_human_id; status is updated only by an accepted decision |
+| approval_action_heads | Current org/Team action revision, digest and active flag |
+| approval_snapshots | One canonical complete sealed snapshot per approval; version, head revision, expiry/invalidation |
+| approval_grants | Exact human/org/Team/action/risk authority with expiry/revocation |
+| approval_decisions | Unique decision per approval; immutable actor/name, reason, version/digest and time |
+| approval_receipts | Org/actor/key uniqueness, command fingerprint and original decision reference |
+
+Application checks enforce all cross-binding and current same-org requester membership. Global human FKs alone are not authorization. There are no snapshot/grant producer APIs, immutable-DB triggers or runtime/execution tables in this slice. Privileged direct SQL is outside API immutability. See [migration contract](backend/APPROVAL_DECISION_MIGRATION.md).
