@@ -45,3 +45,7 @@ Static checks passed: `node --check`, Prettier on both owned files, `git diff --
 - **Closed:** required-field accessible names now explicitly match the test selectors: Title, Mission, Description / input and Acceptance criteria. Source verified after Main identified the label-asterisk mismatch; rebuilt browser verification remains Main-owned.
 - **Closed:** TC02 Intake pagination race. Initial page-0 response must complete and the workspace must be idle with its tasks section visible before inspecting rows. Each subsequent page waits for its exact GET path/lane/page response, matching route query, idle workspace and visible tasks section. Patch rechecked and frozen.
 - Final source review found no additional blocking issue in the reviewed authorization/replay, dependency FK, rollback or owned test paths. Runtime conclusions remain limited to recorded execution evidence.
+
+## Final coordinator CI acceptance
+
+Candidatef9bcbcf17b9b643843bddd17948b9550e8d4c412 at merge82b758425e4c2c3ee357d4fcf1ade2d9ff87ae04 passed121backend tests and300real-service browser instances: all24new plus276baseline. Native PostgreSQL persistence/concurrent-replay/error-no-write/scope probes and Docker/restart/logout passed. Runs39774232545(quality)/39774232547(Docker). Coordinator inspected completed logs; see TASK_CREATE_QC_REPORT.md for exact timing and bounded scope. Local rendered mock QA65checks passed at1440/768/390, screenshots inspected. Historical independent worker execution limits above do not override this later coordinator CI evidence.
