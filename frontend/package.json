@@ -8,8 +8,9 @@
     "lint": "eslint src --max-warnings 0",
     "format": "prettier --write \"src/**/*.{ts,css,html}\"",
     "format:check": "prettier --check \"src/**/*.{ts,css,html}\"",
-    "test:tooling": "node scripts/test-editor-dependency.cjs",
-    "test:e2e": "playwright test"
+    "test:tooling": "node scripts/test-editor-dependency.cjs && node scripts/test-tooling-security.cjs",
+    "test:e2e": "playwright test",
+    "audit:check": "npm audit --include=dev --audit-level=low"
   },
   "private": true,
   "dependencies": {
@@ -42,6 +43,12 @@
   "overrides": {
     "external-editor": {
       "tmp": "0.2.7"
+    },
+    "@angular/cli": {
+      "@modelcontextprotocol/sdk": "1.32.0"
+    },
+    "@angular/build": {
+      "vite": "7.3.7"
     }
   }
 }

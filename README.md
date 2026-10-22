@@ -97,3 +97,5 @@ Follow [Google coding standards](docs/engineering/CODING_STANDARDS.md). SonarQub
 Task Detail read delivery: [contract](docs/engineering/TASK_DETAIL_CONTRACT.md), [QC](docs/qc/TASK_DETAIL_QC_REPORT.md). Scoped status/pending/timestamps and safe activity; runtime/approval/output actions remain unavailable.
 
 Create Task intake: [contract](docs/engineering/TASK_CREATE_CONTRACT.md), [QC](docs/qc/TASK_CREATE_QC_REPORT.md), [V009 rollout](backend/TASK_INTAKE_MIGRATION.md). Saves real DRAFT work to Intake with scoped owner/dependencies and safe retries; execution remains unavailable.
+
+Tooling dependency patch: [QC](docs/qc/TOOLING_SECURITY_QC_REPORT.md) and [independent review](docs/qc/TOOLING_SECURITY_REVIEW.md). Full dev-inclusive audit and real CLI/dev-server compatibility checks are required by Quality/Docker.
