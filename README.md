@@ -101,3 +101,5 @@ Create Task intake: [contract](docs/engineering/TASK_CREATE_CONTRACT.md), [QC](d
 Tooling dependency patch: [QC](docs/qc/TOOLING_SECURITY_QC_REPORT.md) and [independent review](docs/qc/TOOLING_SECURITY_REVIEW.md). Full dev-inclusive audit and real CLI/dev-server compatibility checks are required by Quality/Docker.
 
 Approval Center read delivery: [contract](docs/engineering/APPROVAL_CENTER_CONTRACT.md), [test cases](docs/qc/APPROVAL_CENTER_TEST_CASES.md), [QC](docs/qc/APPROVAL_CENTER_QC_REPORT.md). Real approval metadata, no pending-task substitution; decision/runtime flows remain unavailable.
+
+Approval Center independent source review: [review](docs/qc/APPROVAL_CENTER_REVIEW.md); V010 metadata scope: [migration](backend/APPROVAL_METADATA_MIGRATION.md).
