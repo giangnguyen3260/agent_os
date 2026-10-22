@@ -1,0 +1,46 @@
+.typed-controls {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+.typed-controls > div {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+}
+.typed-controls label {
+  margin: 0;
+}
+.guidance {
+  padding: 16px 24px;
+  color: var(--muted);
+}
+.guidance h2 {
+  font-size: 18px;
+  line-height: 26px;
+}
+.candidate-list {
+  display: grid;
+  gap: 8px;
+  margin: 16px 0;
+}
+.candidate-list button {
+  white-space: normal;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+dialog {
+  width: min(560px, calc(100vw - 48px));
+  max-height: 85vh;
+  overflow: auto;
+}
+@media (max-width: 767px) {
+  .typed-controls {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .guidance {
+    padding: 16px;
+  }
+}

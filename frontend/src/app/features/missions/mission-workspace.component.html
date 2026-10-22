@@ -96,10 +96,25 @@
         </p>
       </header>
       <div class="actions">
-        @for (
-          action of ['Add Task', 'Pause mission', 'Cancel mission'];
-          track action
-        ) {
+        @if (context()?.role === 'ADMIN') {
+          <a
+            class="button primary"
+            [routerLink]="[
+              '/workspace',
+              id,
+              'teams',
+              teamId,
+              'missions',
+              missionId,
+              'tasks',
+              'new',
+            ]"
+            >Add Task</a
+          >
+        } @else {
+          <button class="button secondary" disabled>Add Task</button>
+        }
+        @for (action of ['Pause mission', 'Cancel mission']; track action) {
           <button
             class="button secondary"
             type="button"
@@ -119,7 +134,7 @@
         </button>
       </div>
       <p id="execution-unavailable" class="caption">
-        Task changes, planning, outputs and execution are unavailable. Mission
+        Task editing, planning, outputs and execution are unavailable. Mission
         status is saved state. Updated {{ data.generatedAt | date: 'medium' }}.
       </p>
       <p class="caption">Mission overview · Scroll down for waiting details</p>

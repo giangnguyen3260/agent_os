@@ -126,6 +126,14 @@ jobs:
         env:
           E2E_BASE_URL: http://127.0.0.1:18080
         run: python3 scripts/task-detail-probe.py
+      - name: Provision Task creation fixtures
+        run: |
+          docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < scripts/task-create-ci-fixture.sql
+      - name: PostgreSQL Task creation persistence and concurrent replay
+        timeout-minutes: 3
+        env:
+          E2E_BASE_URL: http://127.0.0.1:18080
+        run: python3 scripts/task-create-probe.py
       - name: Install browser test dependencies
         working-directory: frontend
         run: |

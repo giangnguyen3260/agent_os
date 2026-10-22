@@ -135,6 +135,9 @@ class MissionHttpErrorIntegrationTest {
     assertThat(json.readTree(response.body()).at("/error/code").asText()).isEqualTo("BAD_REQUEST");
     assertThat(json.readTree(response.body()).at("/error/message").asText())
         .isEqualTo("Invalid request");
-    assertThat(response.body()).doesNotContain("private", "1e2");
+    assertThat(response.body()).doesNotContain("private");
+    assertThat(json.readTree(response.body()).get("error").toString())
+        .doesNotContain("private", "1e2");
+    UUID.fromString(json.readTree(response.body()).at("/meta/requestId").asText());
   }
 }

@@ -33,7 +33,13 @@ public class TaskDetailService {
       Instant waitingSince,
       String resolver,
       Instant createdAt,
-      Instant updatedAt) {}
+      Instant updatedAt,
+      String description,
+      String acceptanceCriteria,
+      String priority,
+      UUID ownerAgentId,
+      String ownerName,
+      List<UUID> dependencyIds) {}
 
   public record Mission(UUID id, String title) {}
 
@@ -57,11 +63,12 @@ public class TaskDetailService {
         jdbc.query(
             """
             select t.id,t.title,t.status,t.pending_reason,t.waiting_since,t.resolver,
-              t.created_at,t.updated_at,m.title as mission_title,tm.name as team_name
+              t.created_at,t.updated_at,t.description,t.acceptance_criteria,t.priority,a.id as owner_id,a.name as owner_name,m.title as mission_title,tm.name as team_name
             from tasks t
             join missions m on m.id=t.mission_id and m.organization_id=t.organization_id
               and m.team_id=t.team_id
             join teams tm on tm.id=m.team_id and tm.organization_id=m.organization_id
+            left join agents a on a.id=t.owner_agent_id and a.organization_id=t.organization_id and a.team_id=t.team_id
             where t.organization_id=? and t.team_id=? and t.mission_id=? and t.id=?
             """,
             (rs, n) -> {
@@ -79,7 +86,19 @@ public class TaskDetailService {
                       waiting == null ? null : waiting.toInstant(),
                       rs.getString("resolver"),
                       rs.getObject("created_at", OffsetDateTime.class).toInstant(),
-                      rs.getObject("updated_at", OffsetDateTime.class).toInstant()),
+                      rs.getObject("updated_at", OffsetDateTime.class).toInstant(),
+                      rs.getString("description"),
+                      rs.getString("acceptance_criteria"),
+                      rs.getString("priority"),
+                      rs.getObject("owner_id", UUID.class),
+                      rs.getString("owner_name"),
+                      jdbc.query(
+                          "select dependency_task_id from task_dependencies where organization_id=? and team_id=? and mission_id=? and task_id=? order by dependency_task_id",
+                          (dep, i) -> dep.getObject(1, UUID.class),
+                          org,
+                          team,
+                          mission,
+                          task)),
                   new Mission(mission, rs.getString("mission_title")),
                   new Team(team, rs.getString("team_name")));
             },

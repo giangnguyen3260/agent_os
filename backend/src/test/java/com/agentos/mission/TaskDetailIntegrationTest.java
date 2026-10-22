@@ -186,7 +186,17 @@ class TaskDetailIntegrationTest {
         "waitingSince",
         "resolver",
         "createdAt",
-        "updatedAt");
+        "updatedAt",
+        "description",
+        "acceptanceCriteria",
+        "priority",
+        "ownerAgentId",
+        "ownerName",
+        "dependencyIds");
+    for (String field :
+        List.of("description", "acceptanceCriteria", "priority", "ownerAgentId", "ownerName"))
+      assertThat(detail.get(field).isNull()).isTrue();
+    assertThat(detail.get("dependencyIds")).isEmpty();
     assertThat(detail.get("id").asText()).isEqualTo(taskId.toString());
     assertThat(detail.get("organizationId").asText()).isEqualTo(org.toString());
     assertThat(detail.get("teamId").asText()).isEqualTo(team.toString());
