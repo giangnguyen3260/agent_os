@@ -108,15 +108,31 @@ test('AC06 revoked API read clears private state; compact menu supports Escape/f
 test('AC07 bounded workspace preflight recovers and ignores a late stale response',async ({page:p})=>{
   test.setTimeout(60000);
   await login(p);
-  let stalled;
+  let release;
+  const gate=new Promise(resolve=>{release=resolve;});
+  let delivered;
+  const delivery=new Promise(resolve=>{delivered=resolve;});
+  let intercepted=false;
   const workspace=`**/api/v1/auth/workspaces/${org}`;
-  await p.route(workspace,route=>{stalled=route;});
+  await p.route(workspace,async route=>{
+    if(intercepted) return route.continue();
+    intercepted=true;
+    await gate;
+    await route.fulfill({json:{data:{id:foreign,name:'STALE_FOREIGN_WORKSPACE',role:'ADMIN'}}});
+    delivered();
+  });
   await p.goto(url);
   await expect(p.getByRole('alert')).toContainText('Unable to load approvals',{timeout:40000});
   await expect(rows(p)).toHaveCount(0);
-  await p.unroute(workspace);
+  // Keep the first handler pending while the retry uses the real backend.
   await button(p,'Try again').click();await expect(rows(p)).toHaveCount(20);
-  await stalled.fulfill({json:{data:{id:foreign,name:'STALE_FOREIGN_WORKSPACE',role:'ADMIN'}}});
+  const lateResponse=p.waitForResponse(async response=>new URL(response.url()).pathname===`/api/v1/auth/workspaces/${org}` && (await response.json()).data?.id===foreign);
+  release();
+  const response=await lateResponse;
+  await response.finished();
+  await delivery;
+  await p.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
   await expect(p.getByRole('main')).not.toContainText('STALE_FOREIGN_WORKSPACE');
   await expect(rows(p)).toHaveCount(20);
+  await p.unroute(workspace);
 });
