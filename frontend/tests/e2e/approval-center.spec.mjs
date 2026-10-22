@@ -63,7 +63,8 @@ test('AC03 empty organization, invalid filters and out-of-range pages stay hones
   await expect(p.getByRole('status')).toHaveText('No approval records in this group.');
   await expect(button(p,'Pending · 0')).toBeVisible();
   await open(p,'?page=100000');await expect(rows(p)).toHaveCount(0);
-  await expect(p.getByRole('status')).toHaveText('No approval records in this group.');
+  await expect(p.getByRole('status')).toHaveText('No approval records on this page.');
+  await button(p,'First page').click();await expect(rows(p)).toHaveCount(20);
   for(const suffix of ['?group=ALL','?page=-1']){
     await p.goto(url+suffix);await expect(p.getByRole('alert')).toContainText('Invalid approval filters');
     await expect(rows(p)).toHaveCount(0);
@@ -101,4 +102,21 @@ test('AC06 revoked API read clears private state; compact menu supports Escape/f
   }
   await p.route(`**${api}*`,r=>r.fulfill({status:403,json:{message:'Denied'}}));
   await button(p,'Refresh').click();await expect(p.getByRole('alert')).toContainText('Approval access is unavailable');await expect(rows(p)).toHaveCount(0);
+});
+
+
+test('AC07 bounded workspace preflight recovers and ignores a late stale response',async ({page:p})=>{
+  test.setTimeout(60000);
+  await login(p);
+  let stalled;
+  const workspace=`**/api/v1/auth/workspaces/${org}`;
+  await p.route(workspace,route=>{stalled=route;});
+  await p.goto(url);
+  await expect(p.getByRole('alert')).toContainText('Unable to load approvals',{timeout:40000});
+  await expect(rows(p)).toHaveCount(0);
+  await p.unroute(workspace);
+  await button(p,'Try again').click();await expect(rows(p)).toHaveCount(20);
+  await stalled.fulfill({json:{data:{id:foreign,name:'STALE_FOREIGN_WORKSPACE',role:'ADMIN'}}});
+  await expect(p.getByRole('main')).not.toContainText('STALE_FOREIGN_WORKSPACE');
+  await expect(rows(p)).toHaveCount(20);
 });

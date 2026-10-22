@@ -10,7 +10,7 @@ import {
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {DatePipe} from '@angular/common';
 import {ActivatedRoute, Router, RouterLink} from '@angular/router';
-import {combineLatest, Subscription} from 'rxjs';
+import {combineLatest, firstValueFrom, from, Subscription, timeout} from 'rxjs';
 import {
   AuthFailure,
   AuthService,
@@ -109,7 +109,9 @@ export class ApprovalListPageComponent {
       account === this.auth.user()?.id;
     this.loading.set(true);
     try {
-      const context = await this.auth.getWorkspace(this.id);
+      const context = await firstValueFrom(
+        from(this.auth.getWorkspace(this.id)).pipe(timeout(30000)),
+      );
       if (!active()) return;
       if (
         !account ||

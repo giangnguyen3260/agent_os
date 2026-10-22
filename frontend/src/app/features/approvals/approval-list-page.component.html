@@ -180,9 +180,20 @@
             }
           </article>
         } @empty {
-          <p class="empty" role="status">No approval records in this group.</p>
+          <p class="empty" role="status">
+            {{
+              data.total > 0
+                ? 'No approval records on this page.'
+                : 'No approval records in this group.'
+            }}
+          </p>
         }
       </section>
+      @if (data.items.length === 0 && page > 0) {
+        <button class="button secondary" (click)="changePage(0)">
+          First page
+        </button>
+      }
       <div class="pagination" aria-label="Approval pagination">
         <button
           class="button secondary"

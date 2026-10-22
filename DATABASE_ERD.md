@@ -359,3 +359,7 @@ Initial migrations:
 | V005 | Model call, tool call |
 | V006 | Approval request, policy |
 | V007 | Memory, artifact, audit event |
+
+## Delivered V010 approval metadata subset
+
+The target `approval_requests` definition above describes the future complete workflow. V010 currently delivers only a metadata ledger: id, organization_id, team_id, optional mission_id/task_id/requested_by_agent_id, title, action_type, risk_level, status, created_at and updated_at. Status also supports NEEDS_INFORMATION and INVALIDATED from the approved UI flow. Same-scope composite references bind Team/Mission/Task; no payload, execution run, human decision fields, grants or enforcement is delivered. See [migration scope](backend/APPROVAL_METADATA_MIGRATION.md).

@@ -12,3 +12,5 @@
 | AC-PG | Native PostgreSQL fixture exact group counts, ordered IDs/page boundaries, safe linked Task/requester projection, tenant denial, whole business-table before/after snapshot |
 
 No production fixtures. Browser interception supplies failures only; positive rows must come from actual HTTP/PostgreSQL data. Coordinator authored these cases after the independent QC agent hit its usage limit. Execution results remain separate in QC report.
+
+AC07: stall workspace authorization preflight through30second timeout, show recovery and no records, remove failure interception for real GET retry, release late stale foreign-workspace response and ensure current records remain. AC03 now distinguishes beyond-last page and uses First page.
