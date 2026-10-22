@@ -149,6 +149,15 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'workspace/:id/teams/:teamId/missions/:missionId/tasks/:taskId',
+    canActivate: [authGuard],
+    runGuardsAndResolvers: 'always',
+    loadComponent: () =>
+      import('./features/missions/task-detail.component').then(
+        module => module.TaskDetailComponent,
+      ),
+  },
+  {
     path: 'workspace/:id/teams/:teamId/missions/:missionId/workspace',
     canActivate: [authGuard],
     runGuardsAndResolvers: 'always',

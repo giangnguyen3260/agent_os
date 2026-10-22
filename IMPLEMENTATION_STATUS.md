@@ -1,6 +1,8 @@
-# Implementation status — 21 October 2026
+# Implementation status — 22 October 2026
 
 ## Current branch outcome
+
+On `feature/task-detail`, Forest S13 task detail and task-scoped safe activity reads are implemented from Mission Control task links. Local FE format/lint/build and38rendered mock checks across3widths passed. Service-backed CI acceptance is pending; see [contract](docs/engineering/TASK_DETAIL_CONTRACT.md) and [QC](docs/qc/TASK_DETAIL_QC_REPORT.md). Approval/run/retry/owner/acceptance/output data remain unavailable. No business writes or migration.
 
 On `feature/mission-workspace`, Forest S12 Mission Control reads exact scoped task counters, filtered/paginated task states, pending reasons/resolvers and safe Mission activity. Candidate1488f16 passed109backend tests,258real-backend browser instances and native PostgreSQL summary/task/event scope/no-write checks, plus Docker and restart/logout. A baseline chooser-response race in its test waiter was corrected without changing application expectations; full gate retested successfully. Draft PR15 stacks on unmerged PR14. Planning/control/output actions remain unavailable; no migration or business mutations added. See [contract](docs/engineering/MISSION_WORKSPACE_CONTRACT.md) and [QC](docs/qc/MISSION_WORKSPACE_QC_REPORT.md) for exact revisions/runs.
 

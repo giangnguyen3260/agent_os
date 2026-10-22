@@ -121,6 +121,11 @@ jobs:
         env:
           E2E_BASE_URL: http://127.0.0.1:18080
         run: python3 scripts/mission-workspace-probe.py
+      - name: PostgreSQL Task detail scope and read boundary
+        timeout-minutes: 2
+        env:
+          E2E_BASE_URL: http://127.0.0.1:18080
+        run: python3 scripts/task-detail-probe.py
       - name: Install browser test dependencies
         working-directory: frontend
         run: |

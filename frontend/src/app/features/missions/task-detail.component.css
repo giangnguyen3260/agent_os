@@ -1,0 +1,42 @@
+.status-banner {
+  background: #fff4dc;
+  border-radius: 8px;
+  padding: 16px;
+  overflow-wrap: anywhere;
+}
+.panel {
+  display: grid;
+  gap: 12px;
+}
+.panel h2,
+.panel p,
+.status-banner p {
+  margin: 0;
+}
+dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 8px 16px;
+}
+dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.heading h1 {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 600px) {
+  dl {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+  dd {
+    margin-bottom: 8px;
+  }
+}
+@media (min-width: 768px) and (max-width: 1023px) {
+  .panel {
+    padding: 20px 24px;
+  }
+}
