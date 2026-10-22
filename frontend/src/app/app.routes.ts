@@ -33,6 +33,15 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'workspace/:id/approvals',
+    canActivate: [authGuard],
+    runGuardsAndResolvers: 'always',
+    loadComponent: () =>
+      import('./features/approvals/approval-list-page.component').then(
+        module => module.ApprovalListPageComponent,
+      ),
+  },
+  {
     path: 'workspace/:id/missions',
     canActivate: [authGuard],
     runGuardsAndResolvers: 'always',

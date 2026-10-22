@@ -134,6 +134,14 @@ jobs:
         env:
           E2E_BASE_URL: http://127.0.0.1:18080
         run: python3 scripts/task-create-probe.py
+      - name: Provision isolated Approval Center fixtures
+        run: |
+          docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < scripts/approval-center-ci-fixture.sql
+      - name: PostgreSQL Approval Center projection and read boundary
+        timeout-minutes: 2
+        env:
+          E2E_BASE_URL: http://127.0.0.1:18080
+        run: python3 scripts/approval-center-probe.py
       - name: Install browser test dependencies
         working-directory: frontend
         run: |
@@ -145,6 +153,13 @@ jobs:
           E2E_BASE_URL: http://127.0.0.1:18080
           E2E_MAILPIT_URL: http://127.0.0.1:18025
         run: npm run test:e2e
+      - name: Upload synthetic Approval Center visual evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: approval-center-visuals
+          path: frontend/qa-visuals/approval-center-*.png
+          if-no-files-found: ignore
       - name: PostgreSQL concurrent Agent Draft creation and replay
         timeout-minutes: 2
         env:

@@ -1,0 +1,234 @@
+<div class="forest-shell">
+  <aside class="desktop-sidebar">
+    <div class="brand">agentos</div>
+    <nav aria-label="Điều hướng workspace">
+      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a
+      ><button disabled>Organization map</button
+      ><a [routerLink]="['/workspace', id, 'teams']">Teams</a
+      ><a [routerLink]="['/workspace', id, 'agents']">Agents</a
+      ><a [routerLink]="['/workspace', id, 'missions']">Missions</a
+      ><span class="selected" aria-current="page">Approvals</span
+      ><button disabled>Trace</button
+      ><a routerLink="/workspace">Change workspace</a>
+    </nav>
+  </aside>
+  <header class="compact-header">
+    <span class="brand">agentos</span
+    ><button
+      class="button secondary"
+      type="button"
+      aria-haspopup="dialog"
+      aria-controls="approval-menu"
+      [attr.aria-expanded]="menuOpen()"
+      (click)="toggleMenu()"
+    >
+      Menu
+    </button>
+  </header>
+  <dialog
+    id="approval-menu"
+    aria-label="Workspace navigation"
+    (cancel)="closeMenu()"
+    (close)="closeMenu()"
+  >
+    <button type="button" class="button secondary" (click)="closeMenu()">
+      Close menu
+    </button>
+    <nav>
+      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a
+      ><a [routerLink]="['/workspace', id, 'teams']">Teams</a
+      ><a [routerLink]="['/workspace', id, 'agents']">Agents</a
+      ><a [routerLink]="['/workspace', id, 'missions']">Missions</a
+      ><a routerLink="/workspace">Change workspace</a>
+    </nav>
+  </dialog>
+  <main data-testid="approval-center" [attr.aria-busy]="loading()">
+    <div class="breadcrumb">
+      <span>{{ context()?.name }} / Approvals</span
+      ><span>{{ auth.user()?.displayName }}</span>
+    </div>
+    <header class="heading">
+      <h1>Approval Center</h1>
+      <p>Quản lý yêu cầu, trạng thái và các bước cần xử lý.</p>
+    </header>
+    @if (context() && !denied()) {
+      <div class="actions" aria-label="Approval groups">
+        @for (g of groups; track g) {
+          <button
+            class="button secondary"
+            type="button"
+            [attr.aria-pressed]="group === g"
+            (click)="selectGroup(g)"
+          >
+            {{ label(g) }}
+            @if (count(g) !== null) {
+              · {{ count(g) }}
+            }
+          </button>
+        }
+        <button
+          class="button secondary"
+          [disabled]="loading()"
+          (click)="load()"
+        >
+          Refresh
+        </button>
+      </div>
+    }
+    @if (loading()) {
+      <p role="status">Loading approvals…</p>
+    }
+    @if (denied()) {
+      <p role="alert">Approval access is unavailable for this workspace.</p>
+      <a routerLink="/workspace">Choose workspace</a>
+    }
+    @if (error()) {
+      <p role="alert">{{ error() }}</p>
+      <button class="button secondary" (click)="load()">Try again</button
+      ><button class="text-action" (click)="clearFilters()">
+        Clear filters
+      </button>
+    }
+    @if (result(); as data) {
+      <section aria-label="Approval records" class="records">
+        <div class="record table-head" aria-hidden="true">
+          <span>Request</span><span>Task / Requester</span><span>Status</span
+          ><span>Age</span><span>Action</span>
+        </div>
+        @for (item of data.items; track item.id) {
+          <article class="record" data-testid="approval-record">
+            <div>
+              <small class="mobile-label">Request</small>
+              <h2>{{ item.title }}</h2>
+              <span class="caption">{{ item.actionType }}</span>
+            </div>
+            <div>
+              <small class="mobile-label">Task / Requester</small>
+              <p>{{ item.taskTitle || 'No task linked' }}</p>
+              <p>{{ item.requesterName || 'Requester unavailable' }}</p>
+              <small>{{ item.teamName }}</small>
+            </div>
+            <div>
+              <small class="mobile-label">Status</small
+              ><span
+                class="status-badge"
+                [class.pending]="
+                  item.status === 'PENDING' ||
+                  item.status === 'NEEDS_INFORMATION'
+                "
+                >{{ item.status }}</span
+              >
+            </div>
+            <div>
+              <small class="mobile-label">Age at refresh</small
+              ><span [title]="item.createdAt">{{ age(item) }}</span>
+            </div>
+            <button
+              class="text-action"
+              type="button"
+              [attr.aria-expanded]="expanded() === item.id"
+              [attr.aria-controls]="'request-' + item.id"
+              (click)="expanded.set(expanded() === item.id ? null : item.id)"
+            >
+              {{ expanded() === item.id ? 'Close inspection' : 'Inspect' }}
+            </button>
+            @if (expanded() === item.id) {
+              <section
+                class="inspection"
+                [id]="'request-' + item.id"
+                aria-label="Request metadata"
+              >
+                <h3>Request metadata</h3>
+                <p>Request ID: {{ item.id }}</p>
+                <p>Recorded risk: {{ item.riskLevel }}</p>
+                <p>Created: {{ item.createdAt | date: 'medium' }}</p>
+                <p>Updated: {{ item.updatedAt | date: 'medium' }}</p>
+                @if (item.missionId) {
+                  <a
+                    [routerLink]="[
+                      '/workspace',
+                      id,
+                      'teams',
+                      item.teamId,
+                      'missions',
+                      item.missionId,
+                    ]"
+                    >Open mission: {{ item.missionTitle }}</a
+                  >
+                }
+                @if (item.taskId) {
+                  <a
+                    [routerLink]="[
+                      '/workspace',
+                      id,
+                      'teams',
+                      item.teamId,
+                      'missions',
+                      item.missionId,
+                      'tasks',
+                      item.taskId,
+                    ]"
+                    >Open task: {{ item.taskTitle }}</a
+                  >
+                }
+                <p class="caption">
+                  Read-only metadata. Decision details and action snapshots are
+                  not available here. A recorded status does not authorize
+                  execution.
+                </p>
+              </section>
+            }
+          </article>
+        } @empty {
+          <p class="empty" role="status">
+            {{
+              data.total > 0
+                ? 'No approval records on this page.'
+                : 'No approval records in this group.'
+            }}
+          </p>
+        }
+      </section>
+      @if (data.items.length === 0 && page > 0) {
+        <button class="button secondary" (click)="changePage(0)">
+          First page
+        </button>
+      }
+      <div class="pagination" aria-label="Approval pagination">
+        <button
+          class="button secondary"
+          [disabled]="page === 0"
+          (click)="changePage(page - 1)"
+        >
+          Previous</button
+        ><span>Page {{ page + 1 }} · {{ data.total }} records</span
+        ><button
+          class="button secondary"
+          [disabled]="(page + 1) * 20 >= data.total"
+          (click)="changePage(page + 1)"
+        >
+          Next
+        </button>
+      </div>
+      <p class="caption">
+        Observed {{ data.generatedAt | date: 'medium' }}. Age is measured at
+        refresh.
+      </p>
+      <section class="guidance">
+        <h2>Điều kiện / hướng xử lý</h2>
+        <p>
+          Approval requests khác với pending tasks. Không bulk approve trong
+          MVP.
+        </p>
+        <p>
+          Quyền đọc không cấp quyền duyệt. Decided gồm cả expired, cancelled và
+          invalidated; các trạng thái này không có nghĩa đã được phê duyệt.
+        </p>
+        <p>
+          Hệ thống chưa kết nối luồng Governance tạo yêu cầu và xử lý quyết
+          định.
+        </p>
+      </section>
+    }
+  </main>
+</div>

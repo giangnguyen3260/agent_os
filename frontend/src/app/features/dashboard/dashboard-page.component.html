@@ -14,6 +14,7 @@
       </button>
     }
     <a routerLink="/workspace">Đổi workspace</a>
+    <a [routerLink]="['/workspace', context()?.id, 'approvals']">Approvals</a>
   </nav>
   @if (context(); as workspace) {
     <p class="muted">{{ workspace.name }} · {{ role(workspace.role) }}</p>

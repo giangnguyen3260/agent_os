@@ -644,3 +644,7 @@ com.agentos.observability.application.AuditService
 | Multi-tenancy | Organization-scoped rows |
 | Billing | Usage tracking only |
 | Agent-to-agent chat | Structured messages only |
+
+## Delivered Approval Center read boundary
+
+The organization-scoped GET `/api/v1/organizations/{organizationId}/approvals` is implemented by the Approval Center read slice with `group=PENDING|NEEDS_INFORMATION|DECIDED` and fixed20-row `page` pagination. It returns safe metadata only under fresh ADMIN/MEMBER membership checks. The detail/approve/reject endpoints listed in the target design above remain planned and are not delivered by this slice; read membership is not an approval grant. See [delivery contract](docs/engineering/APPROVAL_CENTER_CONTRACT.md).
