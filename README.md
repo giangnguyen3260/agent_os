@@ -103,3 +103,5 @@ Tooling dependency patch: [QC](docs/qc/TOOLING_SECURITY_QC_REPORT.md) and [indep
 Approval Center read delivery: [contract](docs/engineering/APPROVAL_CENTER_CONTRACT.md), [test cases](docs/qc/APPROVAL_CENTER_TEST_CASES.md), [QC](docs/qc/APPROVAL_CENTER_QC_REPORT.md). Real approval metadata, no pending-task substitution; decision/runtime flows remain unavailable.
 
 Approval Center independent source review: [review](docs/qc/APPROVAL_CENTER_REVIEW.md); V010 metadata scope: [migration](backend/APPROVAL_METADATA_MIGRATION.md).
+
+Approval Detail and bounded preview decisions: [contract](docs/engineering/APPROVAL_DETAIL_CONTRACT.md), [migration scope](backend/APPROVAL_DECISION_MIGRATION.md), [QC](docs/qc/APPROVAL_DETAIL_QC_REPORT.md), [independent review](docs/qc/APPROVAL_DETAIL_REVIEW.md). Explicit grants and immutable recorded decisions do not start execution.

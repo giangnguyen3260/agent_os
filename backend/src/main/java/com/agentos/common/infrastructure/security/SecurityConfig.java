@@ -80,6 +80,13 @@ public class SecurityConfig {
                             UUID organization =
                                 UUID.fromString(context.getRequest().getRequestURI().split("/")[4]);
                             String method = context.getRequest().getMethod();
+                            boolean decisionTransport =
+                                method.equals("POST")
+                                    && context
+                                        .getRequest()
+                                        .getRequestURI()
+                                        .matches(
+                                            "/api/v1/organizations/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/approvals/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/(approve|reject)");
                             boolean read =
                                 method.equals("GET")
                                     || method.equals("HEAD")
@@ -91,7 +98,9 @@ public class SecurityConfig {
                                             + " human_accounts a on a.id = m.account_id where"
                                             + " m.account_id = ? and m.organization_id = ? and"
                                             + " a.enabled = true"
-                                            + (read ? "" : " and m.role = 'ADMIN'"),
+                                            + (read || decisionTransport
+                                                ? ""
+                                                : " and m.role = 'ADMIN'"),
                                         Boolean.class,
                                         human.id(),
                                         organization)));

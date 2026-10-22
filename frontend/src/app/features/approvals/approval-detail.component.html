@@ -1,0 +1,332 @@
+<div class="forest-shell">
+  <aside class="desktop-sidebar">
+    <div class="brand">agentos</div>
+    <nav aria-label="Điều hướng workspace">
+      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a
+      ><button disabled>Organization map</button
+      ><a [routerLink]="['/workspace', id, 'teams']">Teams</a
+      ><a [routerLink]="['/workspace', id, 'agents']">Agents</a
+      ><a [routerLink]="['/workspace', id, 'missions']">Missions</a
+      ><span class="selected" aria-current="page">Approvals</span
+      ><button disabled>Trace</button
+      ><a routerLink="/workspace">Change workspace</a>
+    </nav>
+  </aside>
+  <header class="compact-header">
+    <span class="brand">agentos</span
+    ><button
+      class="button secondary"
+      type="button"
+      aria-haspopup="dialog"
+      aria-controls="detail-menu"
+      [attr.aria-expanded]="menuOpen()"
+      (click)="toggleMenu()"
+    >
+      Menu
+    </button>
+  </header>
+  <dialog
+    id="detail-menu"
+    aria-label="Workspace navigation"
+    (cancel)="closeMenu()"
+    (close)="closeMenu()"
+  >
+    <button type="button" class="button secondary" (click)="closeMenu()">
+      Close menu
+    </button>
+    <nav>
+      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a
+      ><a [routerLink]="['/workspace', id, 'teams']">Teams</a
+      ><a [routerLink]="['/workspace', id, 'agents']">Agents</a
+      ><a [routerLink]="['/workspace', id, 'missions']">Missions</a
+      ><a routerLink="/workspace">Change workspace</a>
+    </nav>
+  </dialog>
+  <main data-testid="approval-detail" [attr.aria-busy]="loading() || busy()">
+    <div class="breadcrumb">
+      <span>{{ context()?.name }} / Approvals</span
+      ><span>{{ auth.user()?.displayName }}</span>
+    </div>
+    <header class="heading">
+      <h1>
+        {{
+          stage() === 'verify'
+            ? 'Confirm target and scope'
+            : stage() === 'reject'
+              ? 'Reject request'
+              : result()?.request?.title || 'Approval detail'
+        }}
+      </h1>
+      @if (result(); as data) {
+        <p>
+          {{ data.request.status }} · {{ data.request.teamName }} · requester
+          {{ data.request.requesterName || 'unavailable' }}
+        </p>
+      }
+    </header>
+    @if (loading()) {
+      <p role="status">Loading approval…</p>
+    }
+    @if (denied()) {
+      <p role="alert">Approval access or decision permission is unavailable.</p>
+      <a routerLink="/workspace">Choose workspace</a>
+    }
+    @if (error()) {
+      <p role="alert">{{ error() }}</p>
+      <button class="button secondary" [disabled]="busy()" (click)="load()">
+        Refresh request
+      </button>
+    }
+    @if (outcome()) {
+      <p role="status" class="notice">{{ outcome() }}</p>
+    }
+    @if (uncertain()) {
+      <section class="panel" aria-label="Unconfirmed decision">
+        <h2>Check the recorded result</h2>
+        <p>
+          The original outcome is not confirmed. A refused retry does not prove
+          the original decision failed.
+        </p>
+        <div class="actions">
+          @if (canRetry()) {
+            <button
+              class="button"
+              [disabled]="busy() || loading()"
+              (click)="retry()"
+            >
+              Retry same decision
+            </button>
+          }
+          <button
+            class="button secondary"
+            [disabled]="busy() || loading()"
+            (click)="load()"
+          >
+            Check recorded result
+          </button>
+        </div>
+      </section>
+    }
+    @if (result(); as data) {
+      @if (stage() === 'verify') {
+        <section class="panel" aria-labelledby="verify-title">
+          <h2 id="verify-title">Review before approving</h2>
+          @if (data.snapshot; as s) {
+            <p>Target: {{ s.target }}</p>
+            <p>Destination: {{ s.parameters.destination }}</p>
+            <p>Resource path: {{ s.parameters.resourcePath }}</p>
+            <p>Visibility: {{ s.parameters.visibility }}</p>
+            <p>Action: {{ s.actionType }} · payload v{{ s.version }}</p>
+            <p>Scope: {{ s.scope }}</p>
+            <p>Side effect: {{ s.effectSummary }}</p>
+            <p>
+              Snapshot SHA-256: <code>{{ s.payloadSha256 }}</code>
+            </p>
+            <p>Expires: {{ s.expiresAt | date: 'medium' }}</p>
+            <p>
+              {{
+                s.estimatedCost === null
+                  ? 'Estimated cost unavailable'
+                  : 'Estimated cost: ' + s.estimatedCost + ' ' + s.currency
+              }}
+            </p>
+          }
+          <p>
+            Confirm that this target and snapshot match the evidence you
+            reviewed.
+          </p>
+        </section>
+        <div class="actions">
+          <button class="button" (click)="confirmScope()">
+            I confirm this scope</button
+          ><button class="button secondary" (click)="cancel()">Cancel</button>
+        </div>
+      } @else if (stage() === 'reject') {
+        <form (ngSubmit)="submit('reject')" class="decision-form">
+          <section class="panel">
+            <label for="rejection-reason">Reason *</label
+            ><textarea
+              id="rejection-reason"
+              name="reason"
+              rows="4"
+              maxlength="2000"
+              [(ngModel)]="reason"
+              [disabled]="busy() || uncertain()"
+              required
+            ></textarea>
+            <p class="caption">
+              Do not include credentials or private payloads in the decision
+              reason.
+            </p>
+          </section>
+          <div class="actions">
+            <button
+              class="button"
+              type="submit"
+              [disabled]="busy() || uncertain() || !reason.trim()"
+            >
+              Confirm rejection</button
+            ><button
+              class="button secondary"
+              type="button"
+              [disabled]="busy() || uncertain()"
+              (click)="cancel()"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      } @else {
+        <section class="panel" aria-labelledby="requested-action">
+          <h2 id="requested-action">Requested action</h2>
+          @if (data.snapshot; as s) {
+            <p>{{ s.actionType }} · payload v{{ s.version }}</p>
+            <p>Target: {{ s.target }}</p>
+            <p>Destination: {{ s.parameters.destination }}</p>
+            <p>Resource path: {{ s.parameters.resourcePath }}</p>
+            <p>Visibility: {{ s.parameters.visibility }}</p>
+            <p>Scope: {{ s.scope }}</p>
+            <p>Side effect: {{ s.effectSummary }}</p>
+            <p>
+              {{
+                s.estimatedCost === null
+                  ? 'Estimated cost unavailable'
+                  : 'Estimated cost: ' + s.estimatedCost + ' ' + s.currency
+              }}
+            </p>
+          } @else {
+            <p>
+              A currently verifiable action snapshot is unavailable. No new
+              decision can be made.
+            </p>
+          }
+        </section>
+        <section class="panel" aria-labelledby="evidence-policy">
+          <h2 id="evidence-policy">Evidence &amp; policy</h2>
+          <p>
+            Explicit scoped approver grant required. Org Admin is not an
+            approval grant. Self-decisions are blocked.
+          </p>
+          @if (data.snapshot; as s) {
+            <p>
+              Snapshot SHA-256: <code>{{ s.payloadSha256 }}</code>
+            </p>
+            <p>Expires: {{ s.expiresAt | date: 'medium' }}</p>
+          }
+          @for (blocker of data.eligibility.blockers; track blocker) {
+            <p class="blocker">{{ blockerLabel(blocker) }}</p>
+          }
+          <p>
+            Approve records a decision. It does not start execution or clear
+            other task blockers.
+          </p>
+        </section>
+        @if (data.decision; as d) {
+          <section class="panel" aria-labelledby="decision-record">
+            <h2 id="decision-record">Decision record</h2>
+            <p class="notice">
+              {{ d.status }} · {{ d.actorName }} ·
+              {{ d.decidedAt | date: 'medium' }}
+            </p>
+            <p>Decision ID: {{ d.id }}</p>
+            <p>
+              Snapshot v{{ d.snapshotVersion }} ·
+              <code>{{ d.snapshotSha256 }}</code>
+            </p>
+            @if (d.reason) {
+              <p class="reason">Reason: {{ d.reason }}</p>
+            }
+            <p>Execution has not started from this screen.</p>
+          </section>
+        }
+        <p class="caption">
+          {{
+            acknowledged()
+              ? 'Target and scope acknowledged for the current snapshot.'
+              : 'Confirm the target and scope before approving this request.'
+          }}
+        </p>
+        <div class="actions">
+          <button
+            class="button"
+            [disabled]="
+              !data.eligibility.canApprove ||
+              !acknowledged() ||
+              busy() ||
+              uncertain()
+            "
+            (click)="submit('approve')"
+          >
+            Approve
+          </button>
+          <button
+            class="button danger"
+            [disabled]="!data.eligibility.canReject || busy() || uncertain()"
+            (click)="reject()"
+          >
+            Reject
+          </button>
+          <button
+            class="button secondary"
+            disabled
+            aria-describedby="information-unavailable"
+          >
+            Request information
+          </button>
+          <a
+            class="button secondary"
+            [routerLink]="['/workspace', id, 'approvals']"
+            >Back to approvals</a
+          >
+          <button
+            class="button"
+            [disabled]="!data.eligibility.canApprove || busy() || uncertain()"
+            (click)="review()"
+          >
+            Verify target &amp; scope
+          </button>
+          <button
+            class="button secondary"
+            [disabled]="busy() || loading()"
+            (click)="load()"
+          >
+            Refresh request
+          </button>
+        </div>
+        <p id="information-unavailable" class="caption">
+          Information requests and replies are not available yet.
+        </p>
+        <div class="actions">
+          @if (data.request.missionId) {
+            <a
+              [routerLink]="[
+                '/workspace',
+                id,
+                'teams',
+                data.request.teamId,
+                'missions',
+                data.request.missionId,
+              ]"
+              >Back to mission: {{ data.request.missionTitle }}</a
+            >
+          }
+          @if (data.request.taskId) {
+            <a
+              [routerLink]="[
+                '/workspace',
+                id,
+                'teams',
+                data.request.teamId,
+                'missions',
+                data.request.missionId,
+                'tasks',
+                data.request.taskId,
+              ]"
+              >Back to task: {{ data.request.taskTitle }}</a
+            >
+          }
+        </div>
+      }
+    }
+  </main>
+</div>
