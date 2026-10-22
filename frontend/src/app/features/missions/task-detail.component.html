@@ -1,0 +1,181 @@
+<div class="forest-shell">
+  <aside class="desktop-sidebar">
+    <div class="brand">agentos</div>
+    <nav aria-label="Workspace navigation">
+      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a
+      ><button disabled>Organization map</button
+      ><a [routerLink]="['/workspace', id, 'teams']">Teams</a
+      ><a [routerLink]="['/workspace', id, 'agents']">Agents</a
+      ><a [routerLink]="['/workspace', id, 'missions']" class="selected"
+        >Missions</a
+      ><button disabled>Approvals</button><button disabled>Trace</button>
+    </nav>
+  </aside>
+  <header class="compact-header">
+    <span class="brand">agentos</span
+    ><button
+      class="button secondary"
+      type="button"
+      aria-controls="task-detail-menu"
+      [attr.aria-expanded]="menuOpen()"
+      (click)="toggleMenu()"
+    >
+      Menu
+    </button>
+  </header>
+  <dialog
+    id="task-detail-menu"
+    aria-label="Workspace navigation"
+    (cancel)="closeMenu()"
+    (close)="closeMenu()"
+  >
+    <button class="button secondary" type="button" (click)="closeMenu()">
+      Close menu
+    </button>
+    <nav>
+      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a
+      ><a [routerLink]="['/workspace', id, 'teams']">Teams</a
+      ><a [routerLink]="['/workspace', id, 'agents']">Agents</a
+      ><a [routerLink]="['/workspace', id, 'missions']" class="selected"
+        >Missions</a
+      ><a routerLink="/workspace">Change workspace</a>
+    </nav>
+  </dialog>
+  <main data-testid="task-detail" [attr.aria-busy]="loading()">
+    @if (loading()) {
+      <p role="status">Loading task details…</p>
+    }
+    @if (denied()) {
+      <p class="auth-error" role="alert">Task access is unavailable.</p>
+      <a routerLink="/workspace">Choose another workspace</a>
+    }
+    @if (error()) {
+      <p class="auth-error" role="alert">{{ error() }}</p>
+      <div class="actions">
+        <button class="button secondary" (click)="load()">Try again</button
+        ><button class="button secondary" (click)="changePage(0)">
+          Reset activity page
+        </button>
+      </div>
+    }
+    @if (snapshot(); as data) {
+      <div class="breadcrumb">
+        <span>{{ context()?.name }} / {{ data.team.name }}</span
+        ><span>{{ auth.user()?.displayName }}</span>
+      </div>
+      <header class="heading">
+        <h1>{{ data.task.title }}</h1>
+        <p>
+          {{ data.mission.title }} · {{ data.team.name }} ·
+          {{ data.task.status }}
+        </p>
+      </header>
+      <div class="actions">
+        <button
+          class="button secondary"
+          disabled
+          aria-describedby="task-actions-unavailable"
+        >
+          View approval</button
+        ><a
+          class="button secondary"
+          [routerLink]="[
+            '/workspace',
+            id,
+            'teams',
+            teamId,
+            'missions',
+            missionId,
+            'workspace',
+          ]"
+          >Back to mission</a
+        ><a
+          class="button secondary"
+          [routerLink]="['/workspace', id, 'teams', teamId, 'workspace']"
+          >Back to team</a
+        ><button class="button secondary" (click)="load()">Refresh</button>
+      </div>
+      <p id="task-actions-unavailable" class="caption">
+        Approval decisions, task changes and execution are unavailable. Status
+        is saved state.
+      </p>
+      @if (data.task.waitingSince) {
+        <section class="status-banner" aria-label="Waiting details">
+          <strong>{{ data.task.pendingReason }}</strong>
+          <p>Resolver: {{ data.task.resolver }}</p>
+          <p>
+            Waiting since
+            <time [attr.datetime]="data.task.waitingSince">{{
+              data.task.waitingSince | date: 'medium'
+            }}</time>
+          </p>
+        </section>
+      }
+      <section class="panel" aria-labelledby="task-overview">
+        <h2 id="task-overview">Overview / acceptance</h2>
+        <dl>
+          <dt>Status</dt>
+          <dd>{{ data.task.status }}</dd>
+          <dt>Created</dt>
+          <dd>{{ data.task.createdAt | date: 'medium' }}</dd>
+          <dt>Updated</dt>
+          <dd>{{ data.task.updatedAt | date: 'medium' }}</dd>
+        </dl>
+        <p>
+          Task description, acceptance criteria, output target and assigned
+          owner are unavailable.
+        </p>
+      </section>
+      <section class="panel" aria-labelledby="task-runs">
+        <h2 id="task-runs">Runs &amp; output history</h2>
+        <p>
+          Run history, attempts, input/output versions and artifacts are
+          unavailable.
+        </p>
+        <div class="actions">
+          <button class="button secondary" disabled>View run</button
+          ><button class="button secondary" disabled>Retry task</button>
+        </div>
+      </section>
+      @if (activity(); as result) {
+        <section
+          class="panel records"
+          data-testid="task-activity"
+          aria-label="Task activity"
+        >
+          <h2>Recorded activity · {{ result.total }}</h2>
+          <p class="caption">
+            Recorded event metadata; execution trace unavailable.
+          </p>
+          @for (event of result.items; track event.id) {
+            <article class="activity-record" data-testid="activity-row">
+              <time [attr.datetime]="event.createdAt">{{
+                event.createdAt | date: 'medium'
+              }}</time>
+              <p>{{ event.eventType }} · {{ event.actorType }}</p>
+            </article>
+          }
+          @if (!result.items.length) {
+            <p>No activity recorded.</p>
+          }
+        </section>
+        <div class="pagination" aria-label="Activity pagination">
+          <button
+            class="button secondary"
+            [disabled]="page === 0"
+            (click)="changePage(page - 1)"
+          >
+            Previous</button
+          ><span>Page {{ page + 1 }}</span
+          ><button
+            class="button secondary"
+            [disabled]="(page + 1) * 20 >= result.total || page >= 100000"
+            (click)="changePage(page + 1)"
+          >
+            Next
+          </button>
+        </div>
+      }
+    }
+  </main>
+</div>

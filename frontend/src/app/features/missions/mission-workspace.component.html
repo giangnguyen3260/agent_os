@@ -208,7 +208,21 @@
           </div>
           @for (task of result.items; track task.id) {
             <article class="mission-task" data-testid="task-row">
-              <h3>{{ task.title }}</h3>
+              <h3>
+                <a
+                  [routerLink]="[
+                    '/workspace',
+                    id,
+                    'teams',
+                    teamId,
+                    'missions',
+                    missionId,
+                    'tasks',
+                    task.id,
+                  ]"
+                  >{{ task.title }}</a
+                >
+              </h3>
               <div>
                 <small class="mobile-label">Resolver</small
                 ><span>{{ task.resolver ?? 'Unavailable' }}</span>
