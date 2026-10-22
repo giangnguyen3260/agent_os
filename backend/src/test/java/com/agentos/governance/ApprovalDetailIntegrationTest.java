@@ -244,7 +244,8 @@ class ApprovalDetailIntegrationTest {
     var replayJson = json.readTree(replay.getContentAsString());
     assertThat(replayJson.path("data")).isEqualTo(initialJson.path("data"));
     assertThat(initialJson.path("data"))
-        .isEqualTo(json.valueToTree(service.detail(org, id, human).decision()));
+        .isEqualTo(
+            json.readTree(json.writeValueAsString(service.detail(org, id, human).decision())));
     UUID initialRequestId = UUID.fromString(initialJson.path("meta").path("requestId").asText());
     UUID replayRequestId = UUID.fromString(replayJson.path("meta").path("requestId").asText());
     assertThat(replayRequestId).isNotEqualTo(initialRequestId);
