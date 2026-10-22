@@ -8,8 +8,8 @@ INSERT INTO organizations(id,name,slug,status,created_at,updated_at) VALUES
 ('27272727-2727-4727-8727-272727272727','Foreign Approval QC','foreign-approval-qc','ACTIVE',now(),now()),
 ('28282828-2828-4828-8828-282828282828','Empty Approval QC','empty-approval-qc','ACTIVE',now(),now());
 INSERT INTO organization_memberships(account_id,organization_id,role)
-SELECT id,o.id,CASE WHEN email='approval-admin@example.test' THEN 'ADMIN' ELSE 'MEMBER' END
-FROM human_accounts CROSS JOIN organizations o WHERE email IN ('approval-admin@example.test','approval-member@example.test')
+SELECT a.id,o.id,CASE WHEN a.email='approval-admin@example.test' THEN 'ADMIN' ELSE 'MEMBER' END
+FROM human_accounts a CROSS JOIN organizations o WHERE a.email IN ('approval-admin@example.test','approval-member@example.test')
 AND o.id IN ('26262626-2626-4626-8626-262626262626','28282828-2828-4828-8828-282828282828');
 INSERT INTO teams(id,organization_id,name,status,created_at,updated_at) VALUES
 ('26100000-0000-4000-8000-000000000001','26262626-2626-4626-8626-262626262626','Approval Delivery','ACTIVE',now(),now()),
