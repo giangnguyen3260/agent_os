@@ -296,14 +296,17 @@ class TaskDetailIntegrationTest {
   }
 
   @Test
-  void malformedParametersAndPageBoundsReturn400() throws Exception {
+  void malformedParametersRespectSecurityBoundaryAndPageBounds() throws Exception {
     for (String page : List.of("-1", "100001", "2147483648", "1.0", "bad"))
       mvc.perform(get(url() + "/activity").param("page", page).with(auth()))
           .andExpect(status().isBadRequest());
-    for (UUID parameter : List.of(org, team, id, taskId))
+    for (UUID parameter : List.of(team, id, taskId))
       for (String suffix : List.of("", "/activity"))
         mvc.perform(get(url().replace(parameter.toString(), "bad") + suffix).with(auth()))
             .andExpect(status().isBadRequest());
+    for (String suffix : List.of("", "/activity"))
+      mvc.perform(get(url().replace(org.toString(), "bad") + suffix).with(auth()))
+          .andExpect(status().isForbidden());
   }
 
   void allowed(HumanIdentity human) {
