@@ -153,6 +153,13 @@ jobs:
           E2E_BASE_URL: http://127.0.0.1:18080
           E2E_MAILPIT_URL: http://127.0.0.1:18025
         run: npm run test:e2e
+      - name: Upload synthetic Approval Center visual evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: approval-center-visuals
+          path: frontend/qa-visuals/approval-center-*.png
+          if-no-files-found: ignore
       - name: PostgreSQL concurrent Agent Draft creation and replay
         timeout-minutes: 2
         env:

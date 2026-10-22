@@ -174,6 +174,11 @@ class ApprovalCenterIntegrationTest {
     for (String q :
         List.of("?page=-1", "?page=100001", "?page=no", "?group=ALL", "?group=APPROVED"))
       mvc.perform(get(path(org) + q).with(auth())).andExpect(status().isBadRequest());
+    mvc.perform(post(path(org)).with(auth()).with(csrf())).andExpect(status().isForbidden());
+    jdbc.update(
+        "update organization_memberships set role='ADMIN' where account_id=? and organization_id=?",
+        account,
+        org);
     mvc.perform(post(path(org)).with(auth()).with(csrf())).andExpect(status().isMethodNotAllowed());
     mvc.perform(get(path(org))).andExpect(status().isUnauthorized());
   }

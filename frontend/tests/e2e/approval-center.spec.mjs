@@ -1,4 +1,5 @@
 import {test, expect} from '@playwright/test';
+import {mkdirSync} from 'node:fs';
 
 const org = '26262626-2626-4626-8626-262626262626';
 const foreign = '27272727-2727-4727-8727-272727272727';
@@ -21,7 +22,7 @@ async function open(p, suffix='') {
   return (await response.json()).data;
 }
 
-test('AC01 real approval paging, metadata inspection, linked task and reload', async ({page:p})=>{
+test('AC01 real approval paging, metadata inspection, linked task and reload', async ({page:p}, testInfo)=>{
   await login(p);
   const writes=[];p.on('request',r=>{if(r.method()!=='GET' && r.url().includes('/api/v1/organizations/'))writes.push(r.url());});
   const data=await open(p);
@@ -29,9 +30,12 @@ test('AC01 real approval paging, metadata inspection, linked task and reload', a
   await expect(rows(p)).toHaveCount(20);
   await expect(rows(p).first()).toContainText('Approval request 01');
   await expect(rows(p).first()).toContainText('Requester unavailable');
+  mkdirSync('qa-visuals', {recursive:true});
+  await p.screenshot({path:`qa-visuals/approval-center-${testInfo.project.name}.png`});
   await expect(p.getByRole('main')).not.toContainText('MOVED_REQUESTER_PRIVATE');
   await button(rows(p).first(),'Inspect').click();
   await expect(p.getByRole('region',{name:'Request metadata'})).toContainText('Recorded risk: HIGH');
+  await p.screenshot({path:`qa-visuals/approval-center-${testInfo.project.name}-inspected.png`});
   await expect(p.getByRole('link',{name:'Open task: Approval Task'})).toHaveAttribute('href',`/workspace/${org}/teams/26100000-0000-4000-8000-000000000001/missions/26300000-0000-4000-8000-000000000001/tasks/26400000-0000-4000-8000-000000000001`);
   await button(p,'Next').click();await expect(rows(p)).toHaveCount(4);
   await expect(rows(p).first()).toContainText('Approval request 21');
