@@ -1,5 +1,7 @@
 # AgentOS
 
+Member access inventory is implemented on the current stacked development branch; runtime verification is pending. It reads actual memberships and grant lifecycles for current organization administrators. Grant issuance/revocation, invitations and role changes remain unavailable. See [contract](docs/engineering/MEMBER_ACCESS_CONTRACT.md) and [QC](docs/qc/MEMBER_ACCESS_QC_REPORT.md).
+
 Java21 / Spring Boot backend, Angular21 frontend and PostgreSQL. This is a local-development foundation, not a production release: persisted login/session, local-SMTP password recovery and membership-backed workspace selection are implemented. This branch adds a live organization overview and persisted task read model; the three-step Team Draft creation flow persists configuration and atomic agent assignments. The four-step Agent Draft flow saves identity, contract and requested capability configuration with optional team assignment and safe retries.
 
 Agent Studio adds configuration editing with before/after review, persisted versions, optimistic concurrency and safe retries. See [Studio contract](docs/engineering/AGENT_STUDIO_CONTRACT.md), [Studio QC](docs/qc/AGENT_STUDIO_QC_REPORT.md) and [V007 rollout](backend/AGENT_STUDIO_MIGRATION.md).

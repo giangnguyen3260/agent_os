@@ -158,6 +158,14 @@ jobs:
         env:
           E2E_BASE_URL: http://127.0.0.1:18080
         run: python3 scripts/approval-information-probe.py
+      - name: Provision isolated Member access fixtures
+        run: |
+          docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < scripts/member-access-ci-fixture.sql
+      - name: PostgreSQL Member access inventory and read boundary
+        timeout-minutes: 2
+        env:
+          E2E_BASE_URL: http://127.0.0.1:18080
+        run: python3 scripts/member-access-probe.py
       - name: Install browser test dependencies
         working-directory: frontend
         run: |
@@ -190,6 +198,13 @@ jobs:
         with:
           name: approval-information-visuals
           path: frontend/qa-visuals/approval-information-*.png
+          if-no-files-found: ignore
+      - name: Upload synthetic Member access visual evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: member-access-visuals
+          path: frontend/qa-visuals/member-access-*.png
           if-no-files-found: ignore
       - name: PostgreSQL concurrent Agent Draft creation and replay
         timeout-minutes: 2

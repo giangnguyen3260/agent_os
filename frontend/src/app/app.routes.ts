@@ -34,6 +34,24 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'workspace/:id/members/:accountId/approval-grants',
+    canActivate: [authGuard],
+    runGuardsAndResolvers: 'always',
+    loadComponent: () =>
+      import('./features/members/member-access.component').then(
+        module => module.MemberAccessComponent,
+      ),
+  },
+  {
+    path: 'workspace/:id/members',
+    canActivate: [authGuard],
+    runGuardsAndResolvers: 'always',
+    loadComponent: () =>
+      import('./features/members/member-access.component').then(
+        module => module.MemberAccessComponent,
+      ),
+  },
+  {
     path: 'workspace/:id/approvals/:approvalId/information',
     canActivate: [authGuard, approvalDetailNavigationGuard],
     runGuardsAndResolvers: 'always',

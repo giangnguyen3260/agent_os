@@ -1,0 +1,203 @@
+<main class="access-wrapper">
+  <header class="access-brand">
+    <a routerLink="/workspace">agentos</a>
+    <p>{{ context()?.name || 'Workspace' }} · Quản trị truy cập</p>
+  </header>
+  <section
+    class="access-panel"
+    aria-labelledby="access-title"
+    [attr.aria-busy]="loading()"
+  >
+    <h1 id="access-title">
+      {{ accountId ? 'Quyền duyệt Approval' : 'Thành viên & quyền' }}
+    </h1>
+    @if (loading()) {
+      <p role="status">Đang xác thực và tải dữ liệu…</p>
+    } @else if (denied()) {
+      <p class="error" role="alert">
+        Không thể truy cập danh sách này. Cần quyền quản trị viên hiện tại trong
+        tổ chức.
+      </p>
+    } @else if (error()) {
+      <p class="error" role="alert">{{ error() }}</p>
+      <button class="button secondary" type="button" (click)="load()">
+        Thử lại
+      </button>
+      <button class="button secondary" type="button" (click)="clearFilters()">
+        Xóa bộ lọc
+      </button>
+    } @else if (context()) {
+      <p class="muted">
+        {{ context()?.name }} · Vai trò tổ chức và quyền duyệt là các phạm vi
+        riêng.
+      </p>
+      @if (grants(); as result) {
+        <article class="access-card" data-testid="grant-member">
+          <h2>
+            {{ result.member.displayName
+            }}{{ result.member.isSelf ? ' · Bạn' : '' }}
+          </h2>
+          <p>{{ result.member.email }} · {{ roleLabel(result.member.role) }}</p>
+          <p>
+            Tài khoản:
+            {{ result.member.enabled ? 'Đang hoạt động' : 'Đã vô hiệu hóa' }}
+          </p>
+        </article>
+        <form (ngSubmit)="apply()" class="filters" aria-label="Lọc grant">
+          <label
+            >Trạng thái grant
+            <select name="status" [(ngModel)]="statusInput">
+              @for (item of statuses; track item) {
+                <option [value]="item">{{ statusLabel(item) }}</option>
+              }
+            </select>
+          </label>
+          <button class="button secondary" type="submit">Áp dụng bộ lọc</button>
+          <button
+            class="button secondary"
+            type="button"
+            (click)="clearFilters()"
+          >
+            Xóa bộ lọc
+          </button>
+        </form>
+        <p role="status">
+          {{ result.total }} grant phù hợp · Trang {{ page + 1 }}
+        </p>
+        @for (grant of result.items; track grant.id) {
+          <article class="access-card" data-testid="approval-grant">
+            <h2>{{ grant.teamName }}</h2>
+            <p>
+              Hành động: {{ grant.actionType }} · Mức rủi ro:
+              {{ grant.riskLevel }}
+            </p>
+            <p>
+              Trạng thái: <strong>{{ statusLabel(grant.status) }}</strong>
+            </p>
+            <p>Hết hạn: {{ grant.expiresAt | date: 'medium' }}</p>
+            @if (grant.revokedAt) {
+              <p>Đã thu hồi: {{ grant.revokedAt | date: 'medium' }}</p>
+            }
+          </article>
+        } @empty {
+          <p class="access-card">Chưa có grant phù hợp với bộ lọc.</p>
+        }
+      }
+      @if (members(); as result) {
+        <form (ngSubmit)="apply()" class="filters" aria-label="Lọc thành viên">
+          <label
+            >Tìm thành viên
+            <input
+              name="search"
+              type="search"
+              [(ngModel)]="searchInput"
+              placeholder="Tên hoặc email"
+            />
+          </label>
+          <label
+            >Vai trò tổ chức
+            <select name="role" [(ngModel)]="roleInput">
+              <option value="">Tất cả</option>
+              <option value="ADMIN">Quản trị viên tổ chức</option>
+              <option value="MEMBER">Thành viên tổ chức</option>
+            </select>
+          </label>
+          <button class="button secondary" type="submit">Áp dụng bộ lọc</button>
+          <button
+            class="button secondary"
+            type="button"
+            (click)="clearFilters()"
+          >
+            Xóa bộ lọc
+          </button>
+        </form>
+        <p role="status">
+          {{ result.total }} thành viên phù hợp · Trang {{ page + 1 }}
+        </p>
+        @for (member of result.items; track member.accountId) {
+          <article class="access-card" data-testid="member-card">
+            <h2>{{ member.displayName }}{{ member.isSelf ? ' · Bạn' : '' }}</h2>
+            <p>{{ member.email }} · {{ roleLabel(member.role) }}</p>
+            <p>
+              Tài khoản:
+              {{ member.enabled ? 'Đang hoạt động' : 'Đã vô hiệu hóa' }}
+            </p>
+            <p>
+              Grant: {{ member.grantCounts.unexpired }} chưa hết hạn ·
+              {{ member.grantCounts.expired }} đã hết hạn ·
+              {{ member.grantCounts.revoked }} đã thu hồi
+            </p>
+            <a
+              class="button secondary"
+              [routerLink]="[
+                '/workspace',
+                id,
+                'members',
+                member.accountId,
+                'approval-grants',
+              ]"
+              >Xem quyền duyệt Approval</a
+            >
+          </article>
+        } @empty {
+          <p class="access-card">Không có thành viên phù hợp với bộ lọc.</p>
+        }
+      }
+      @if (members() || grants()) {
+        <nav class="pagination" aria-label="Phân trang">
+          <button
+            class="button secondary"
+            type="button"
+            [disabled]="page === 0"
+            (click)="changePage(page - 1)"
+          >
+            Trang trước
+          </button>
+          <button
+            class="button secondary"
+            type="button"
+            [disabled]="
+              (page + 1) * 20 >= (members()?.total ?? grants()?.total ?? 0)
+            "
+            (click)="changePage(page + 1)"
+          >
+            Trang sau
+          </button>
+        </nav>
+        <aside class="access-card scope-note">
+          <h2>Vai trò và phạm vi</h2>
+          <p>
+            Quản trị viên tổ chức không tự có quyền duyệt Approval. Grant chưa
+            hết hạn vẫn cần qua kiểm tra người duyệt, phạm vi và yêu cầu tại
+            thời điểm duyệt.
+          </p>
+          <p>
+            Vai trò team và Owner chưa được hỗ trợ. Mời thành viên, sửa vai trò
+            và cấp/thu hồi grant đang được phát triển.
+          </p>
+          <p>
+            Grant không cấp quyền công cụ cho Agent và không cho phép tự duyệt
+            yêu cầu của mình.
+          </p>
+          <p class="muted">
+            Dữ liệu tại
+            {{
+              members()?.generatedAt || grants()?.generatedAt | date: 'medium'
+            }}.
+          </p>
+        </aside>
+        <button class="button secondary" type="button" (click)="load()">
+          Làm mới
+        </button>
+      }
+    }
+    @if (accountId) {
+      <a class="button secondary" [routerLink]="['/workspace', id, 'members']"
+        >Về thành viên & quyền</a
+      >
+    }
+    <a class="button secondary" [routerLink]="['/workspace', id]"
+      >Về workspace</a
+    >
+  </section>
+</main>
