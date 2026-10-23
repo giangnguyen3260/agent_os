@@ -388,3 +388,16 @@ Application checks enforce all cross-binding and current same-org requester memb
 | approval_information_receipts | Org/actor/key uniqueness across information operations; fingerprint, original scope and immutable transition result |
 
 Unique approval/revision and transactional org-first locks serialize ask, reply and approve/reject. Public service validates same-approval question binding and ordered alternating history; maximum20 rounds/40 entries. Shared Java/JS normalization precedes storage/fingerprinting, blank optional evidence becomes null. No production seed, attachment storage, action parameter rewrite or execution tables. Decision receipts retain the prior table and revision0 fingerprint compatibility. Tables provide API immutability, not malicious-DB-owner protection.
+
+
+## V013 approval grant management — runtime acceptance pending (PR23)
+
+V013 adds a unique `(organization_id, account_id, id)` key to existing approval_grants without rewriting legacy rows.
+
+| Table | Keys and relation | Purpose |
+| --- | --- | --- |
+| approval_grant_ledgers | PK organization/account; organization and global human FKs | Current recipient management revision; missing row reads as zero |
+| approval_grant_management_events | PK id; unique organization/account/revision; scoped composite grant FK | Restricted immutable-through-API ISSUE/REVOKE history with reason, actor snapshot and original timestamps |
+| approval_grant_management_receipts | PK organization/actor/idempotency key; scoped composite event FK | Canonical request fingerprint and durable historical replay |
+
+Membership removal does not cascade these records. Existing grants retain their original provenance limitations. API transactions write the safe generic audit without copying restricted reasons. No production seed or runtime execution table is introduced. See [accepted contract](docs/engineering/APPROVAL_GRANT_MANAGEMENT_CONTRACT.md).

@@ -666,3 +666,19 @@ Prior references to request-information/reply being unavailable describe earlier
 ### Member access inventory (stacked development slice)
 
 GET `/api/v1/organizations/{org}/members` and `/members/{accountId}/approval-grants` expose bounded persisted membership and grant-lifecycle inventory to a fresh enabled/version-matching organization ADMIN only. Fixed20-row pagination and literal name/email search or lifecycle filters run in a read-only repeatable-read snapshot. DTOs exclude password/session/credential internals. Disabled targets remain inspectable while current membership exists. Grant lifecycle is not effective decision authority. No issuer, role edit, invitation or grant writer is delivered; see [contract](docs/engineering/MEMBER_ACCESS_CONTRACT.md). Runtime acceptance is recorded separately in QC.
+
+
+## Approval grant management — implemented, runtime acceptance pending (PR23)
+
+The accepted [contract](docs/engineering/APPROVAL_GRANT_MANAGEMENT_CONTRACT.md) supersedes earlier statements that grant writers are absent. All routes use `/api/v1/organizations/{org}/members/{account}/approval-grants` and fresh enabled/versioned organization ADMIN authorization.
+
+| Method | Suffix | Purpose |
+| --- | --- | --- |
+| GET | `/management-context` | Current recipient, revision and optional exact Team/risk issue preflight |
+| POST | collection | Issue explicit PUBLISH_PREVIEW LOW/MEDIUM/HIGH, 1–168 hours, never self-issue |
+| GET | `/{grant}/revocation-context` | Scoped single-grant fingerprint, lifecycle and remaining recorded matching rows |
+| POST | `/{grant}/revoke` | Revoke this ID with expected revision, fingerprint, reason and acknowledgement |
+| GET | `/management-receipts/{key}?operation=ISSUE|REVOKE` | Minimal actor-scoped historical receipt, including after target removal |
+| GET | `/{grant}/management-history?page=0` | Restricted paginated management provenance; legacy grants have no invented history |
+
+POST requires CSRF and UUID Idempotency-Key, returns 201 first/200 exact replay, and performs one atomic grant/ledger/event/receipt/safe-audit transaction. Org mutex precedes globally ordered account locks; fresh authorization follows waits. Read-only preflights never reserve authority. Historical receipt replay is not current eligibility. No provider, Task/Mission or execution side effect is added.

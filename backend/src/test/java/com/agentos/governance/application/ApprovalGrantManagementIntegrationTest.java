@@ -431,7 +431,22 @@ class ApprovalGrantManagementIntegrationTest {
             .andReturn()
             .getResponse()
             .getContentAsString();
-    assertThat(json.readTree(response).get("data").size()).isEqualTo(13);
+    var names = new java.util.HashSet<String>();
+    json.readTree(response).get("data").fieldNames().forEachRemaining(names::add);
+    assertThat(names)
+        .containsExactlyInAnyOrder(
+            "operation",
+            "organizationId",
+            "accountId",
+            "actorId",
+            "actorName",
+            "idempotencyKey",
+            "grantId",
+            "eventId",
+            "revision",
+            "recordedAt",
+            "expiresAt",
+            "revokedAt");
     assertThat(response).doesNotContain("reason", "password", "email");
   }
 

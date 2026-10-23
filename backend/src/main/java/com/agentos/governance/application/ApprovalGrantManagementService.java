@@ -12,6 +12,7 @@ import com.agentos.governance.api.ApprovalGrantManagementResponse.Selection;
 import com.agentos.governance.api.MemberAccessResponse.Grant;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityNotFoundException;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.sql.Timestamp;
 import java.time.Instant;
@@ -290,7 +291,9 @@ public class ApprovalGrantManagementService {
       return HexFormat.of()
           .formatHex(
               MessageDigest.getInstance("SHA-256")
-                  .digest(json.writeValueAsBytes(new TreeMap<>(fields))));
+                  .digest(
+                      json.writeValueAsString(new TreeMap<>(fields))
+                          .getBytes(StandardCharsets.UTF_8)));
     } catch (Exception ex) {
       throw new IllegalStateException("Cannot hash command", ex);
     }
