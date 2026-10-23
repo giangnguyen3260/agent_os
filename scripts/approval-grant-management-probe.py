@@ -267,7 +267,11 @@ def main():
     finally:
         sql('ALTER TABLE audit_events DROP CONSTRAINT agm_probe_rollback;')
     # Historical legacy data: expired/unsupported/disabled/removed/self all revocable.
-    for target,grant in [(6,6),(7,7),(1,8)]:
+    # Copy legacy rows for native mutation; browser read-only legacy cases retain
+    # their original unrevoked fixtures across every viewport.
+    for original, copied in [(6,906),(7,907),(8,908)]:
+        sql(f"INSERT INTO approval_grants(id,organization_id,account_id,team_id,action_type,risk_level,expires_at,revoked_at) SELECT '{ident('6070',copied)}',organization_id,account_id,team_id,action_type,risk_level,expires_at,revoked_at FROM approval_grants WHERE id='{ident('6070',original)}';")
+    for target,grant in [(6,906),(7,907),(1,908)]:
         c=admin.data(root(target)+f'/{ident("6070",grant)}/revocation-context')
         assert c['canRevoke']
         mutate_ok(admin,target,revoke(c),ident('6070',grant))

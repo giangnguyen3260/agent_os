@@ -10,421 +10,430 @@
   >
     <h1 id="grant-title">
       {{
-        result()
-          ? 'Thao tác đã được ghi nhận'
-          : unknown()
-            ? 'Chưa xác định kết quả'
-            : grantId
-              ? 'Thu hồi quyền duyệt'
-              : stage() === 'review'
-                ? 'Kiểm tra trước khi cấp'
-                : 'Cấp quyền duyệt'
+        identityChecking()
+          ? 'Đang kiểm tra phiên'
+          : result()
+            ? 'Thao tác đã được ghi nhận'
+            : unknown()
+              ? 'Chưa xác định kết quả'
+              : grantId
+                ? 'Thu hồi quyền duyệt'
+                : stage() === 'review'
+                  ? 'Kiểm tra trước khi cấp'
+                  : 'Cấp quyền duyệt'
       }}
     </h1>
-    @if (loading() || busy()) {
+    @if (identityChecking() || loading() || busy()) {
       <p role="status">Đang xác thực quyền và dữ liệu…</p>
     }
-    @if (denied()) {
-      <p class="error" role="alert">
-        Không còn quyền quản trị hoặc không thể truy cập grant này. Dữ liệu
-        riêng tư đã được xóa.
-      </p>
-    }
-    @if (error()) {
-      <p class="error" role="alert">{{ error() }}</p>
-    }
-    @if (notice()) {
-      <p class="scope-note soft" role="status">{{ notice() }}</p>
-    }
-    @if (result(); as r) {
-      <p class="soft">
-        Biên nhận xác nhận một thao tác trong quá khứ. Không chứng minh quyền
-        duyệt hiện tại.
-      </p>
-      <article class="access-card summary" data-testid="grant-result">
-        <p>Thao tác: {{ r.operation }}</p>
-        <p>Grant: {{ r.grantId }}</p>
-        <p>Sự kiện: {{ r.eventId }}</p>
-        <p>Người thao tác: {{ r.actorName }} · {{ r.actorId }}</p>
-        <p>
-          Ghi nhận:
-          <time [attr.datetime]="r.recordedAt">{{ r.recordedAt }}</time>
+    @if (!identityChecking()) {
+      @if (denied()) {
+        <p class="error" role="alert">
+          Không còn quyền quản trị hoặc không thể truy cập grant này. Dữ liệu
+          riêng tư đã được xóa.
+        </p>
+      }
+      @if (error()) {
+        <p class="error" role="alert">{{ error() }}</p>
+      }
+      @if (notice()) {
+        <p class="scope-note soft" role="status">{{ notice() }}</p>
+      }
+      @if (result(); as r) {
+        <p class="soft">
+          Biên nhận xác nhận một thao tác trong quá khứ. Không chứng minh quyền
+          duyệt hiện tại.
+        </p>
+        <article class="access-card summary" data-testid="grant-result">
+          <p>Thao tác: {{ r.operation }}</p>
+          <p>Grant: {{ r.grantId }}</p>
+          <p>Sự kiện: {{ r.eventId }}</p>
+          <p>Người thao tác: {{ r.actorName }} · {{ r.actorId }}</p>
+          <p>
+            Ghi nhận:
+            <time [attr.datetime]="r.recordedAt">{{ r.recordedAt }}</time>
+          </p>
+          <p>
+            Hết hạn:
+            <time [attr.datetime]="r.expiresAt">{{ r.expiresAt }}</time>
+          </p>
+          <p>
+            Thu hồi:
+            @if (r.revokedAt) {
+              <time [attr.datetime]="r.revokedAt">{{ r.revokedAt }}</time>
+            } @else {
+              Không áp dụng cho biên nhận cấp
+            }
+          </p>
+        </article>
+        <a
+          class="button"
+          [routerLink]="[
+            '/workspace',
+            id,
+            'members',
+            accountId,
+            'approval-grants',
+          ]"
+          >Làm mới danh sách quyền</a
+        >
+        <p class="muted">
+          Lý do không hiển thị trong biên nhận. Xem trạng thái hiện tại bằng
+          cách làm mới danh sách.
+        </p>
+      } @else if (unknown()) {
+        <p class="warning">
+          Phản hồi mất hoặc không hợp lệ. Thao tác có thể đã được ghi nhận.
+          Không gửi thao tác thay thế.
         </p>
         <p>
-          Hết hạn: <time [attr.datetime]="r.expiresAt">{{ r.expiresAt }}</time>
+          Giữ nguyên yêu cầu và mã đối chiếu của lần gửi này trong phiên hiện
+          tại. Không tự động gửi lại.
         </p>
-        <p>
-          Thu hồi:
-          @if (r.revokedAt) {
-            <time [attr.datetime]="r.revokedAt">{{ r.revokedAt }}</time>
-          } @else {
-            Không áp dụng cho biên nhận cấp
-          }
-        </p>
-      </article>
-      <a
-        class="button"
-        [routerLink]="[
-          '/workspace',
-          id,
-          'members',
-          accountId,
-          'approval-grants',
-        ]"
-        >Làm mới danh sách quyền</a
-      >
-      <p class="muted">
-        Lý do không hiển thị trong biên nhận. Xem trạng thái hiện tại bằng cách
-        làm mới danh sách.
-      </p>
-    } @else if (unknown()) {
-      <p class="warning">
-        Phản hồi mất hoặc không hợp lệ. Thao tác có thể đã được ghi nhận. Không
-        gửi thao tác thay thế.
-      </p>
-      <p>
-        Giữ nguyên yêu cầu và mã đối chiếu của lần gửi này trong phiên hiện tại.
-        Không tự động gửi lại.
-      </p>
-      <button
-        class="button"
-        type="button"
-        [disabled]="busy() || loading()"
-        (click)="load()"
-      >
-        Kiểm tra biên nhận
-      </button>
-      @if (canRetry()) {
         <button
-          class="button secondary"
+          class="button"
           type="button"
           [disabled]="busy() || loading()"
-          (click)="retry()"
+          (click)="load()"
         >
-          Gửi lại đúng yêu cầu này
+          Kiểm tra biên nhận
         </button>
-      }
-      <p class="soft">
-        Chưa có biên nhận không có nghĩa là thao tác thất bại. Kết quả vẫn chưa
-        xác định cho đến khi đối chiếu được biên nhận hợp lệ.
-      </p>
-      <p class="muted">
-        Rời trang hoặc tải lại có thể làm mất khả năng khôi phục theo mã này.
-        Đổi tài khoản xóa toàn bộ đối chiếu cũ.
-      </p>
-    } @else if (!loading() && !busy() && workspace()) {
-      @if (recipient(); as recipient) {
-        <p class="muted" data-testid="grant-recipient">
-          Người nhận: {{ recipient.displayName }}
+        @if (canRetry()) {
+          <button
+            class="button secondary"
+            type="button"
+            [disabled]="busy() || loading()"
+            (click)="retry()"
+          >
+            Gửi lại đúng yêu cầu này
+          </button>
+        }
+        <p class="soft">
+          Chưa có biên nhận không có nghĩa là thao tác thất bại. Kết quả vẫn
+          chưa xác định cho đến khi đối chiếu được biên nhận hợp lệ.
         </p>
-        @if (!recipient.membershipPresent) {
-          <p class="warning">
-            Tài khoản không còn là thành viên. Chỉ có thể thu hồi grant đã có,
-            không cấp thêm.
+        <p class="muted">
+          Rời trang hoặc tải lại có thể làm mất khả năng khôi phục theo mã này.
+          Đổi tài khoản xóa toàn bộ đối chiếu cũ.
+        </p>
+      } @else if (!loading() && !busy() && workspace()) {
+        @if (recipient(); as recipient) {
+          <p class="muted" data-testid="grant-recipient">
+            Người nhận: {{ recipient.displayName }}
           </p>
+          @if (!recipient.membershipPresent) {
+            <p class="warning">
+              Tài khoản không còn là thành viên. Chỉ có thể thu hồi grant đã có,
+              không cấp thêm.
+            </p>
+          }
+          @if (!recipient.enabled) {
+            <p class="warning">Tài khoản nhận đã bị vô hiệu hóa.</p>
+          }
         }
-        @if (!recipient.enabled) {
-          <p class="warning">Tài khoản nhận đã bị vô hiệu hóa.</p>
-        }
-      }
-      @if (issue(); as d) {
-        @for (code of d.blockers; track code) {
-          <p class="warning" role="alert">{{ blocker(code) }}</p>
-        }
-        @if (stage() === 'edit') {
-          <p class="soft">
-            Chỉ ADMIN hiện tại được cấp cho thành viên khác đang hoạt động.
-            Không thể tự cấp quyền.
-          </p>
-          @if (d.canIssue || d.selection) {
-            <section class="field" aria-labelledby="choose-team-label">
-              <h2 id="choose-team-label">Team *</h2>
-              <form class="team-search" (ngSubmit)="loadTeams(0)">
-                <label for="grant-team-query">Tìm team</label>
-                <input
-                  id="grant-team-query"
-                  name="teamQuery"
-                  type="search"
-                  [(ngModel)]="teamQuery"
-                />
-                <button
-                  class="button secondary"
-                  type="submit"
-                  [disabled]="teamLoading()"
-                >
-                  Tìm kiếm team
-                </button>
-              </form>
-              @if (teamLoading()) {
-                <p role="status">Đang tải danh mục Team…</p>
-              }
-              @if (teams(); as teams) {
-                <div
-                  class="team-options"
-                  role="group"
-                  aria-label="Team thực tế"
-                >
-                  @for (team of teams.items; track team.id) {
+        @if (issue(); as d) {
+          @for (code of d.blockers; track code) {
+            <p class="warning" role="alert">{{ blocker(code) }}</p>
+          }
+          @if (stage() === 'edit') {
+            <p class="soft">
+              Chỉ ADMIN hiện tại được cấp cho thành viên khác đang hoạt động.
+              Không thể tự cấp quyền.
+            </p>
+            @if (d.canIssue || d.selection) {
+              <section class="field" aria-labelledby="choose-team-label">
+                <h2 id="choose-team-label">Team *</h2>
+                <form class="team-search" (ngSubmit)="loadTeams(0)">
+                  <label for="grant-team-query">Tìm team</label>
+                  <input
+                    id="grant-team-query"
+                    name="teamQuery"
+                    type="search"
+                    [(ngModel)]="teamQuery"
+                  />
+                  <button
+                    class="button secondary"
+                    type="submit"
+                    [disabled]="teamLoading()"
+                  >
+                    Tìm kiếm team
+                  </button>
+                </form>
+                @if (teamLoading()) {
+                  <p role="status">Đang tải danh mục Team…</p>
+                }
+                @if (teams(); as teams) {
+                  <div
+                    class="team-options"
+                    role="group"
+                    aria-label="Team thực tế"
+                  >
+                    @for (team of teams.items; track team.id) {
+                      <button
+                        class="button secondary"
+                        type="button"
+                        [disabled]="team.status === 'ARCHIVED'"
+                        [attr.aria-pressed]="teamId === team.id"
+                        (click)="chooseTeam(team)"
+                      >
+                        Chọn team: {{ team.name }} · {{ team.status }}
+                      </button>
+                    } @empty {
+                      <p>Không có team phù hợp.</p>
+                    }
+                  </div>
+                  <nav class="pagination" aria-label="Phân trang team">
                     <button
                       class="button secondary"
                       type="button"
-                      [disabled]="team.status === 'ARCHIVED'"
-                      [attr.aria-pressed]="teamId === team.id"
-                      (click)="chooseTeam(team)"
+                      [disabled]="teamPage === 0"
+                      (click)="loadTeams(teamPage - 1)"
                     >
-                      Chọn team: {{ team.name }} · {{ team.status }}
+                      Team trước
                     </button>
-                  } @empty {
-                    <p>Không có team phù hợp.</p>
-                  }
-                </div>
-                <nav class="pagination" aria-label="Phân trang team">
-                  <button
-                    class="button secondary"
-                    type="button"
-                    [disabled]="teamPage === 0"
-                    (click)="loadTeams(teamPage - 1)"
-                  >
-                    Team trước
-                  </button>
-                  <button
-                    class="button secondary"
-                    type="button"
-                    [disabled]="(teamPage + 1) * 20 >= teams.total"
-                    (click)="loadTeams(teamPage + 1)"
-                  >
-                    Team sau
-                  </button>
-                </nav>
-              }
-              <p class="muted">
-                Team DRAFT chỉ là cấu hình. Cấp grant không kích hoạt team hoặc
-                thực thi công việc.
-              </p>
-            </section>
-            <div class="field">
-              <label for="grant-action">Hành động</label
-              ><input id="grant-action" value="PUBLISH_PREVIEW" readonly />
-              <p class="muted">Cố định · Không cấp quyền thực thi.</p>
-            </div>
-            <div class="field">
-              <label for="grant-risk">Mức rủi ro *</label
-              ><select
-                id="grant-risk"
-                aria-label="Mức rủi ro"
-                [(ngModel)]="risk"
-                (ngModelChange)="acknowledgement = false"
-              >
-                <option value="">Chọn mức rủi ro</option>
-                @for (risk of risks; track risk) {
-                  <option [value]="risk">{{ risk }}</option>
+                    <button
+                      class="button secondary"
+                      type="button"
+                      [disabled]="(teamPage + 1) * 20 >= teams.total"
+                      (click)="loadTeams(teamPage + 1)"
+                    >
+                      Team sau
+                    </button>
+                  </nav>
                 }
-              </select>
-              <p class="muted">LOW · MEDIUM · HIGH. Không hỗ trợ CRITICAL.</p>
-            </div>
-            <div class="field">
-              <label for="grant-duration">Thời hạn (giờ) *</label
-              ><input
-                id="grant-duration"
-                aria-label="Thời hạn (giờ)"
-                inputmode="numeric"
-                [(ngModel)]="duration"
-              />
-              <p class="muted">
-                Nhập số nguyên từ 1 đến 168. Hạn hết hiệu lực được tính khi máy
-                chủ ghi nhận.
-              </p>
-            </div>
-            <div class="field">
-              <label for="grant-reason">Lý do *</label
-              ><textarea
-                id="grant-reason"
-                aria-label="Lý do"
-                rows="4"
-                [(ngModel)]="reason"
-              ></textarea>
-              <p class="muted">
-                1–1000 ký tự sau khi bỏ khoảng trắng đầu/cuối. Chỉ lưu trong
-                lịch sử quản trị hạn chế; không nhập mật khẩu hoặc token.
-              </p>
-            </div>
-            <button
-              class="button"
-              type="button"
-              [disabled]="!canReview()"
-              (click)="review()"
-            >
-              Xem lại quyền duyệt
-            </button>
-          }
-        } @else {
-          <p class="soft">
-            Đã kiểm tra lại phạm vi và phiên bản hiện tại. Xác nhận chỉ có hiệu
-            lực cho lần kiểm tra này.
-          </p>
-          <article class="access-card summary" data-testid="grant-review">
-            <p>
-              Team: {{ d.selection?.teamName }} · {{ d.selection?.teamStatus }}
-            </p>
-            <p>Hành động: PUBLISH_PREVIEW</p>
-            <p>Rủi ro: {{ d.selection?.riskLevel }}</p>
-            <p>Thời hạn: {{ duration }} giờ</p>
-            <p class="reason">Lý do: {{ reason }}</p>
-            <p>
-              Phiên bản: {{ d.revision }} · Kiểm tra lúc:
-              {{ d.checkedAt | date: 'medium' }}
-            </p>
-          </article>
-          <p class="soft">
-            Quyền chỉ áp dụng đúng Team, hành động và mức rủi ro đã chọn. Không
-            cho phép tự duyệt yêu cầu của mình.
-          </p>
-          <label class="ack"
-            ><input type="checkbox" [(ngModel)]="acknowledgement" />Tôi xác nhận
-            phạm vi và thời hạn trên.</label
-          >
-          <button
-            class="button"
-            type="button"
-            [disabled]="!acknowledgement || !d.canIssue"
-            (click)="send()"
-          >
-            Cấp quyền duyệt
-          </button>
-          <button class="button secondary" type="button" (click)="edit()">
-            Quay lại chỉnh sửa
-          </button>
-        }
-      }
-      @if (revoke(); as d) {
-        @for (code of d.blockers; track code) {
-          <p class="warning" role="alert">{{ blocker(code) }}</p>
-        }
-        <article class="access-card summary" data-testid="grant-revoke">
-          <p>Grant: {{ d.grant.id }}</p>
-          <p>Team: {{ d.grant.teamName }}</p>
-          <p>{{ d.grant.actionType }} · {{ d.grant.riskLevel }}</p>
-          <p>Hết hạn: {{ d.grant.expiresAt | date: 'medium' }}</p>
-          <p>Trạng thái: {{ d.grant.status }}</p>
-        </article>
-        <p class="warning">
-          Chỉ thu hồi grant này. Có {{ d.remainingScopeGrants }} grant khác cùng
-          phạm vi còn hạn; quyền duyệt có thể vẫn còn.
-        </p>
-        @if (d.canRevoke) {
-          @if (stage() === 'edit') {
-            <div class="field">
-              <label for="revoke-reason">Lý do thu hồi *</label
-              ><textarea
-                id="revoke-reason"
-                aria-label="Lý do thu hồi"
-                rows="4"
-                [(ngModel)]="reason"
-              ></textarea>
-              <p class="muted">
-                Bắt buộc · 1–1000 ký tự · Chỉ hiển thị trong lịch sử quản trị.
-              </p>
-            </div>
-            <button
-              class="button"
-              type="button"
-              [disabled]="!canReview()"
-              (click)="review()"
-            >
-              Xem lại thu hồi
-            </button>
+                <p class="muted">
+                  Team DRAFT chỉ là cấu hình. Cấp grant không kích hoạt team
+                  hoặc thực thi công việc.
+                </p>
+              </section>
+              <div class="field">
+                <label for="grant-action">Hành động</label
+                ><input id="grant-action" value="PUBLISH_PREVIEW" readonly />
+                <p class="muted">Cố định · Không cấp quyền thực thi.</p>
+              </div>
+              <div class="field">
+                <label for="grant-risk">Mức rủi ro *</label
+                ><select
+                  id="grant-risk"
+                  aria-label="Mức rủi ro"
+                  [(ngModel)]="risk"
+                  (ngModelChange)="acknowledgement = false"
+                >
+                  <option value="">Chọn mức rủi ro</option>
+                  @for (risk of risks; track risk) {
+                    <option [value]="risk">{{ risk }}</option>
+                  }
+                </select>
+                <p class="muted">LOW · MEDIUM · HIGH. Không hỗ trợ CRITICAL.</p>
+              </div>
+              <div class="field">
+                <label for="grant-duration">Thời hạn (giờ) *</label
+                ><input
+                  id="grant-duration"
+                  aria-label="Thời hạn (giờ)"
+                  inputmode="numeric"
+                  [(ngModel)]="duration"
+                />
+                <p class="muted">
+                  Nhập số nguyên từ 1 đến 168. Hạn hết hiệu lực được tính khi
+                  máy chủ ghi nhận.
+                </p>
+              </div>
+              <div class="field">
+                <label for="grant-reason">Lý do *</label
+                ><textarea
+                  id="grant-reason"
+                  aria-label="Lý do"
+                  rows="4"
+                  [(ngModel)]="reason"
+                ></textarea>
+                <p class="muted">
+                  1–1000 ký tự sau khi bỏ khoảng trắng đầu/cuối. Chỉ lưu trong
+                  lịch sử quản trị hạn chế; không nhập mật khẩu hoặc token.
+                </p>
+              </div>
+              <button
+                class="button"
+                type="button"
+                [disabled]="!canReview()"
+                (click)="review()"
+              >
+                Xem lại quyền duyệt
+              </button>
+            }
           } @else {
-            <p class="reason">Lý do: {{ reason }}</p>
-            <p class="muted">
-              Phiên bản: {{ d.revision }} · Kiểm tra lúc:
-              {{ d.checkedAt | date: 'medium' }}
+            <p class="soft">
+              Đã kiểm tra lại phạm vi và phiên bản hiện tại. Xác nhận chỉ có
+              hiệu lực cho lần kiểm tra này.
+            </p>
+            <article class="access-card summary" data-testid="grant-review">
+              <p>
+                Team: {{ d.selection?.teamName }} ·
+                {{ d.selection?.teamStatus }}
+              </p>
+              <p>Hành động: PUBLISH_PREVIEW</p>
+              <p>Rủi ro: {{ d.selection?.riskLevel }}</p>
+              <p>Thời hạn: {{ duration }} giờ</p>
+              <p class="reason">Lý do: {{ reason }}</p>
+              <p>
+                Phiên bản: {{ d.revision }} · Kiểm tra lúc:
+                {{ d.checkedAt | date: 'medium' }}
+              </p>
+            </article>
+            <p class="soft">
+              Quyền chỉ áp dụng đúng Team, hành động và mức rủi ro đã chọn.
+              Không cho phép tự duyệt yêu cầu của mình.
             </p>
             <label class="ack"
-              ><input type="checkbox" [(ngModel)]="acknowledgement" />Tôi hiểu
-              việc thu hồi là vĩnh viễn.</label
+              ><input type="checkbox" [(ngModel)]="acknowledgement" />Tôi xác
+              nhận phạm vi và thời hạn trên.</label
             >
             <button
               class="button"
               type="button"
-              [disabled]="!acknowledgement"
+              [disabled]="!acknowledgement || !d.canIssue"
               (click)="send()"
             >
-              Thu hồi grant này
+              Cấp quyền duyệt
             </button>
             <button class="button secondary" type="button" (click)="edit()">
               Quay lại chỉnh sửa
             </button>
           }
         }
-        <section class="access-card" aria-labelledby="grant-history-label">
-          <h2 id="grant-history-label">Lịch sử quản trị</h2>
-          @if (historyLoading()) {
-            <p role="status">Đang tải lịch sử…</p>
+        @if (revoke(); as d) {
+          @for (code of d.blockers; track code) {
+            <p class="warning" role="alert">{{ blocker(code) }}</p>
           }
-          @if (history(); as history) {
-            @for (event of history.items; track event.id) {
-              <article class="history-event" data-testid="grant-history-event">
-                <p>
-                  {{ event.operation }} · {{ event.actorName }} ·
-                  {{ event.recordedAt | date: 'medium' }}
+          <article class="access-card summary" data-testid="grant-revoke">
+            <p>Grant: {{ d.grant.id }}</p>
+            <p>Team: {{ d.grant.teamName }}</p>
+            <p>{{ d.grant.actionType }} · {{ d.grant.riskLevel }}</p>
+            <p>Hết hạn: {{ d.grant.expiresAt | date: 'medium' }}</p>
+            <p>Trạng thái: {{ d.grant.status }}</p>
+          </article>
+          <p class="warning">
+            Chỉ thu hồi grant này. Có {{ d.remainingScopeGrants }} grant khác
+            cùng phạm vi còn hạn; quyền duyệt có thể vẫn còn.
+          </p>
+          @if (d.canRevoke) {
+            @if (stage() === 'edit') {
+              <div class="field">
+                <label for="revoke-reason">Lý do thu hồi *</label
+                ><textarea
+                  id="revoke-reason"
+                  aria-label="Lý do thu hồi"
+                  rows="4"
+                  [(ngModel)]="reason"
+                ></textarea>
+                <p class="muted">
+                  Bắt buộc · 1–1000 ký tự · Chỉ hiển thị trong lịch sử quản trị.
                 </p>
-                <p class="reason">{{ event.reason }}</p>
-              </article>
-            } @empty {
-              <p>
-                Không có lịch sử quản trị; không xác định người cấp hoặc lý do
-                trước đây.
-              </p>
-            }
-            <p class="muted">
-              Trang {{ historyPage + 1 }} · {{ history.total }} sự kiện
-            </p>
-            <nav class="pagination" aria-label="Phân trang lịch sử">
+              </div>
               <button
-                class="button secondary"
+                class="button"
                 type="button"
-                [disabled]="historyPage === 0"
-                (click)="loadHistory(historyPage - 1)"
+                [disabled]="!canReview()"
+                (click)="review()"
               >
-                Lịch sử trước</button
-              ><button
-                class="button secondary"
-                type="button"
-                [disabled]="(historyPage + 1) * 20 >= history.total"
-                (click)="loadHistory(historyPage + 1)"
-              >
-                Lịch sử sau
+                Xem lại thu hồi
               </button>
-            </nav>
+            } @else {
+              <p class="reason">Lý do: {{ reason }}</p>
+              <p class="muted">
+                Phiên bản: {{ d.revision }} · Kiểm tra lúc:
+                {{ d.checkedAt | date: 'medium' }}
+              </p>
+              <label class="ack"
+                ><input type="checkbox" [(ngModel)]="acknowledgement" />Tôi hiểu
+                việc thu hồi là vĩnh viễn.</label
+              >
+              <button
+                class="button"
+                type="button"
+                [disabled]="!acknowledgement"
+                (click)="send()"
+              >
+                Thu hồi grant này
+              </button>
+              <button class="button secondary" type="button" (click)="edit()">
+                Quay lại chỉnh sửa
+              </button>
+            }
           }
-        </section>
+          <section class="access-card" aria-labelledby="grant-history-label">
+            <h2 id="grant-history-label">Lịch sử quản trị</h2>
+            @if (historyLoading()) {
+              <p role="status">Đang tải lịch sử…</p>
+            }
+            @if (history(); as history) {
+              @for (event of history.items; track event.id) {
+                <article
+                  class="history-event"
+                  data-testid="grant-history-event"
+                >
+                  <p>
+                    {{ event.operation }} · {{ event.actorName }} ·
+                    {{ event.recordedAt | date: 'medium' }}
+                  </p>
+                  <p class="reason">{{ event.reason }}</p>
+                </article>
+              } @empty {
+                <p>
+                  Không có lịch sử quản trị; không xác định người cấp hoặc lý do
+                  trước đây.
+                </p>
+              }
+              <p class="muted">
+                Trang {{ historyPage + 1 }} · {{ history.total }} sự kiện
+              </p>
+              <nav class="pagination" aria-label="Phân trang lịch sử">
+                <button
+                  class="button secondary"
+                  type="button"
+                  [disabled]="historyPage === 0"
+                  (click)="loadHistory(historyPage - 1)"
+                >
+                  Lịch sử trước</button
+                ><button
+                  class="button secondary"
+                  type="button"
+                  [disabled]="(historyPage + 1) * 20 >= history.total"
+                  (click)="loadHistory(historyPage + 1)"
+                >
+                  Lịch sử sau
+                </button>
+              </nav>
+            }
+          </section>
+        }
       }
-    }
-    @if ((error() || denied()) && !unknown()) {
-      <button
-        class="button secondary"
-        type="button"
-        [disabled]="loading() || busy()"
-        (click)="load()"
+      @if ((error() || denied()) && !unknown()) {
+        <button
+          class="button secondary"
+          type="button"
+          [disabled]="loading() || busy()"
+          (click)="load()"
+        >
+          Thử lại
+        </button>
+      }
+      @if (!result()) {
+        <a
+          class="button secondary"
+          [routerLink]="[
+            '/workspace',
+            id,
+            'members',
+            accountId,
+            'approval-grants',
+          ]"
+          >Hủy</a
+        >
+      }
+      <a class="button secondary" [routerLink]="['/workspace', id, 'members']"
+        >Về thành viên & quyền</a
       >
-        Thử lại
-      </button>
     }
-    @if (!result()) {
-      <a
-        class="button secondary"
-        [routerLink]="[
-          '/workspace',
-          id,
-          'members',
-          accountId,
-          'approval-grants',
-        ]"
-        >Hủy</a
-      >
-    }
-    <a class="button secondary" [routerLink]="['/workspace', id, 'members']"
-      >Về thành viên & quyền</a
-    >
   </section>
 </main>

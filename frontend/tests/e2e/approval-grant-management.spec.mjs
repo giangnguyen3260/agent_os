@@ -323,11 +323,34 @@ test.describe('real approval grant management', () => {
     await open(p, n + 10);
     await expect(reason(p)).toHaveValue('');
     await fill(p, {text: 'Synthetic route-reuse reason'});
-    // Browser history reuses the new-grant component when only accountId changes.
-    await p.goBack();
-    await p.goForward();
+    // Keep the actual panel node: both account routes must reuse this component.
+    await p.locator('section[aria-labelledby="grant-title"]').evaluate(el => { el.dataset.agmReuse = 'B05'; });
+    dialogAction.set(p, 'dismiss');
+    const reuseCanceled = p.waitForEvent('dialog');
+    await spa(p, issueRoute(n));
+    expect((await reuseCanceled).message()).toContain('chưa lưu');
     await expect(p).toHaveURL(new RegExp(`${issueRoute(n + 10)}$`));
+    await expect(reason(p)).toHaveValue('Synthetic route-reuse reason');
+    await expect(p.getByTestId('grant-recipient')).toContainText(`Grant Management Target ${n + 10}`);
+    await expect(p.locator('section[aria-labelledby="grant-title"]')).toHaveAttribute('data-agm-reuse', 'B05');
+    expect(writes).toHaveLength(0);
+
+    dialogAction.set(p, 'accept');
+    const reuseAccepted = p.waitForEvent('dialog');
+    const changed = await read(p, contextPath(n), () => spa(p, issueRoute(n)));
+    expect((await reuseAccepted).message()).toContain('chưa lưu');
+    expect(changed.status()).toBe(200);
+    await expect(p).toHaveURL(new RegExp(`${issueRoute(n)}$`));
+    await expect(p.getByTestId('grant-recipient')).toContainText(`Grant Management Target ${n}`);
+    await expect(p.locator('section[aria-labelledby="grant-title"]')).toHaveAttribute('data-agm-reuse', 'B05');
     await expect(reason(p)).toHaveValue('');
+    await expect(risk(p)).toHaveValue('');
+    await expect(duration(p)).toHaveValue('');
+    await expect(ack(p)).toHaveCount(0);
+    await expect(p.locator('button[aria-pressed="true"]')).toHaveCount(0);
+    await expect(p.locator('main')).not.toContainText('Synthetic route-reuse reason');
+    await expect(p.locator('main')).not.toContainText(`Grant Management Target ${n + 10}`);
+    dialogAction.set(p, 'dismiss');
     expect(writes).toHaveLength(0);
   });
 
@@ -498,8 +521,13 @@ test.describe('real approval grant management', () => {
       await expect(sibling).toHaveURL(/\/login$/);
       await login(sibling, 'admin');
       // Focus is an explicit identity-revalidation boundary after shared-session change.
+      const revalidated = responseFor(p, '/api/v1/auth/session');
       await p.bringToFront();
       await p.evaluate(() => window.dispatchEvent(new Event('focus')));
+      const session = await revalidated;
+      expect(session.status()).toBe(200);
+      expect((await session.json()).data.id).not.toBe(persisted.actorId);
+      await noPrivate(p, [secret, `Grant Management Target ${n}`, persisted.eventId]);
       release.resolve();
       await finished.promise;
       await noPrivate(p, [secret, `Grant Management Target ${n}`, persisted.eventId]);

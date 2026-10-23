@@ -11,7 +11,7 @@ import {
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {FormsModule} from '@angular/forms';
 import {ActivatedRoute, Router, RouterLink} from '@angular/router';
-import {Subscription, firstValueFrom} from 'rxjs';
+import {Subscription, firstValueFrom, from, timeout} from 'rxjs';
 import {AuthService, Workspace} from '../../core/auth/auth.service';
 import {
   DirectoryItem,
@@ -76,6 +76,7 @@ export class GrantManagementComponent {
   private teamEpoch = 0;
   private historyEpoch = 0;
   private actor = this.auth.user()?.id;
+  readonly identityChecking = signal(false);
   private allowedNavigation = 0;
   private pending: Pending | null = null;
   private unresolved: Correlation | null = null;
@@ -141,6 +142,7 @@ export class GrantManagementComponent {
   }
   private active(epoch: number, actor: string | undefined) {
     return (
+      !this.identityChecking() &&
       !this.destroy.destroyed &&
       epoch === this.epoch &&
       actor === this.auth.user()?.id
@@ -197,8 +199,7 @@ export class GrantManagementComponent {
   }
   private deny() {
     const p = this.correlation();
-    const unknown =
-      this.unknown() || !!this.pending?.ambiguous || !!this.unresolved;
+    const unknown = this.unknown() || !!this.pending || !!this.unresolved;
     this.unresolved = unknown && p ? this.opaque(p) : null;
     this.pending = null;
     this.clearPrivate();
@@ -213,6 +214,17 @@ export class GrantManagementComponent {
   private failure(e: unknown) {
     if (e instanceof HttpErrorResponse && [401, 403, 404].includes(e.status)) {
       this.deny();
+      return;
+    }
+    const correlation = this.correlation();
+    if (correlation) {
+      this.unresolved = this.opaque(correlation);
+      this.pending = null;
+      this.clearPrivate();
+      this.unknown.set(true);
+      this.notice.set(
+        'Không thể xác thực dữ liệu. Kết quả thao tác cũ chưa xác định; chỉ kiểm tra biên nhận chính xác.',
+      );
       return;
     }
     this.clearPrivate();
@@ -239,7 +251,7 @@ export class GrantManagementComponent {
     return r;
   }
   async load() {
-    if (this.busy()) return;
+    if (this.busy() || this.identityChecking()) return;
     this.clearPrivate();
     this.denied.set(false);
     if (
@@ -275,6 +287,11 @@ export class GrantManagementComponent {
         this.notice.set(
           'Chưa tìm thấy biên nhận chính xác. Kết quả vẫn chưa xác định; không tạo thao tác thay thế.',
         );
+        if (!this.pending) {
+          this.workspace.set(w);
+          this.loading.set(false);
+          return;
+        }
       }
       const r = this.grantId
         ? await firstValueFrom(
@@ -305,6 +322,7 @@ export class GrantManagementComponent {
   }
   async loadTeams(page = 0) {
     if (
+      this.identityChecking() ||
       this.busy() ||
       this.unknown() ||
       this.grantId ||
@@ -345,6 +363,7 @@ export class GrantManagementComponent {
   }
   chooseTeam(team: DirectoryItem) {
     if (
+      this.identityChecking() ||
       this.unknown() ||
       this.busy() ||
       this.stage() !== 'edit' ||
@@ -357,6 +376,7 @@ export class GrantManagementComponent {
   }
   canReview() {
     return (
+      !this.identityChecking() &&
       !this.busy() &&
       !this.loading() &&
       !this.unknown() &&
@@ -372,6 +392,7 @@ export class GrantManagementComponent {
   }
   async review() {
     if (
+      this.identityChecking() ||
       this.busy() ||
       this.loading() ||
       this.unknown() ||
@@ -466,6 +487,7 @@ export class GrantManagementComponent {
   }
   send() {
     if (
+      this.identityChecking() ||
       this.busy() ||
       this.loading() ||
       this.unknown() ||
@@ -522,6 +544,7 @@ export class GrantManagementComponent {
   }
   canRetry() {
     return (
+      !this.identityChecking() &&
       !!this.pending &&
       this.unknown() &&
       !this.denied() &&
@@ -574,6 +597,7 @@ export class GrantManagementComponent {
     const p = this.pending;
     if (
       !p ||
+      this.identityChecking() ||
       this.busy() ||
       this.denied() ||
       p.actor !== this.auth.user()?.id ||
@@ -639,6 +663,7 @@ export class GrantManagementComponent {
   }
   async loadHistory(page: number) {
     if (
+      this.identityChecking() ||
       !this.grantId ||
       !this.revoke() ||
       this.busy() ||
@@ -691,6 +716,70 @@ export class GrantManagementComponent {
       !!this.duration ||
       !!reasonText(this.reason)
     );
+  }
+  @HostListener('window:focus') async revalidateIdentity() {
+    if (this.identityChecking() || this.destroy.destroyed) return;
+    this.identityChecking.set(true);
+    const actor = this.auth.user()?.id;
+    const pending = this.pending;
+    const org = this.id;
+    const interrupted =
+      this.loading() ||
+      this.busy() ||
+      this.teamLoading() ||
+      this.historyLoading();
+    if (pending) {
+      // Dispatched writes can commit even after cancellation. Keep exact recovery
+      // while invalidating every old callback before checking a shared session.
+      pending.ambiguous = true;
+      this.clearPrivate();
+      this.unknown.set(true);
+    }
+    const epoch = this.epoch;
+    try {
+      const user = await firstValueFrom(
+        from(this.auth.session()).pipe(timeout(30000)),
+      );
+      if (this.destroy.destroyed) return;
+      if (user.id !== actor || this.auth.user()?.id !== actor) {
+        this.identityChecking.set(false);
+        this.reset();
+        this.denied.set(true);
+        return;
+      }
+      const checkedOrg = this.id;
+      const w = (await firstValueFrom(this.api.workspace(checkedOrg)))?.data;
+      if (this.destroy.destroyed) return;
+      if (this.auth.user()?.id !== actor) {
+        this.identityChecking.set(false);
+        this.reset();
+        this.denied.set(true);
+        return;
+      }
+      if (this.id !== checkedOrg) {
+        this.identityChecking.set(false);
+        this.clearPrivate();
+        void this.load();
+        return;
+      }
+      if (
+        !exact(w, 'id name role') ||
+        w?.id !== checkedOrg ||
+        w?.role !== 'ADMIN'
+      ) {
+        this.identityChecking.set(false);
+        this.deny();
+        return;
+      }
+      this.identityChecking.set(false);
+      if (pending || interrupted || epoch !== this.epoch || org !== this.id) {
+        this.clearPrivate();
+        void this.load();
+      }
+    } catch {
+      this.identityChecking.set(false);
+      if (!this.destroy.destroyed) this.deny();
+    }
   }
   @HostListener('window:beforeunload', ['$event']) beforeUnload(
     e: BeforeUnloadEvent,
