@@ -107,3 +107,5 @@ Approval Center independent source review: [review](docs/qc/APPROVAL_CENTER_REVI
 Approval Detail and bounded preview decisions: [contract](docs/engineering/APPROVAL_DETAIL_CONTRACT.md), [migration scope](backend/APPROVAL_DECISION_MIGRATION.md), [QC](docs/qc/APPROVAL_DETAIL_QC_REPORT.md), [independent review](docs/qc/APPROVAL_DETAIL_REVIEW.md). Explicit grants and immutable recorded decisions do not start execution.
 
 Approval information exchange: [contract](docs/engineering/APPROVAL_INFORMATION_CONTRACT.md), [QC evidence](docs/qc/APPROVAL_INFORMATION_QC_REPORT.md), [independent review](docs/qc/APPROVAL_INFORMATION_REVIEW.md).
+
+V012 rollout: [Approval information migration](backend/APPROVAL_INFORMATION_MIGRATION.md).

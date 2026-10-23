@@ -378,3 +378,13 @@ V011 extends the V010 ledger without rewriting it or inserting production reques
 | approval_receipts | Org/actor/key uniqueness, command fingerprint and original decision reference |
 
 Application checks enforce all cross-binding and current same-org requester membership. Global human FKs alone are not authorization. There are no snapshot/grant producer APIs, immutable-DB triggers or runtime/execution tables in this slice. Privileged direct SQL is outside API immutability. See [migration contract](backend/APPROVAL_DECISION_MIGRATION.md).
+
+## Delivered V012 information subset (draft PR21)
+
+| Storage | Responsibility |
+|---|---|
+| approval_requests.information_revision | Default0 for old requests; increases with each accepted question or answer |
+| approval_information_entries | Immutable-by-API plain-text question/answer/evidence, actor snapshot, time, sequential revision and answered question ID |
+| approval_information_receipts | Org/actor/key uniqueness across information operations; fingerprint, original scope and immutable transition result |
+
+Unique approval/revision and transactional org-first locks serialize ask, reply and approve/reject. Public service validates same-approval question binding and ordered alternating history; maximum20 rounds/40 entries. Shared Java/JS normalization precedes storage/fingerprinting, blank optional evidence becomes null. No production seed, attachment storage, action parameter rewrite or execution tables. Decision receipts retain the prior table and revision0 fingerprint compatibility. Tables provide API immutability, not malicious-DB-owner protection.
