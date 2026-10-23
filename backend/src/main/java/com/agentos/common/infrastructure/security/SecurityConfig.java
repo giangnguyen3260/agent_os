@@ -86,7 +86,7 @@ public class SecurityConfig {
                                         .getRequest()
                                         .getRequestURI()
                                         .matches(
-                                            "/api/v1/organizations/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/approvals/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/(approve|reject)");
+                                            "/api/v1/organizations/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/approvals/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/(approve|reject|request-information|reply)");
                             boolean read =
                                 method.equals("GET")
                                     || method.equals("HEAD")

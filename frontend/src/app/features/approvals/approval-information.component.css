@@ -1,0 +1,28 @@
+.field {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.field input,
+.field textarea {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--surface);
+  color: var(--text);
+}
+.field textarea {
+  min-height: 68px;
+}
+article {
+  display: grid;
+  gap: 8px;
+  overflow-wrap: anywhere;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
+}
+article:last-child {
+  border-bottom: 0;
+}

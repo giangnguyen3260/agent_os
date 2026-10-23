@@ -1,3 +1,6 @@
+<!-- Approval information delivery checkpoint -->
+On `feature/approval-information`, persisted request-information/reply, full conversation readback and revision-bound decision acknowledgement are integrated. Exact receipt recovery preserves uncertain outcomes safely. Source/CI/visual acceptance pending; no execution or producer/grant-management capability. See [contract](docs/engineering/APPROVAL_INFORMATION_CONTRACT.md) and [QC](docs/qc/APPROVAL_INFORMATION_QC_REPORT.md).
+
 # Implementation status — 22 October 2026
 
 ## Current branch outcome

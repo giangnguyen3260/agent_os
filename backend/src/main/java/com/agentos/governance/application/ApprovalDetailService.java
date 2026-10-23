@@ -41,7 +41,7 @@ public class ApprovalDetailService {
     this.json = json;
   }
 
-  private void authorize(UUID org, HumanIdentity human, boolean lock) {
+  void authorize(UUID org, HumanIdentity human, boolean lock) {
     if (human == null) throw new AccessDeniedException("Request denied");
     // Match existing create services: serialize organization writes before actor locks.
     // This deliberately serializes decisions (including replay) within an organization.
@@ -65,7 +65,7 @@ public class ApprovalDetailService {
       throw new AccessDeniedException("Request denied");
   }
 
-  private Map<String, Object> request(UUID org, UUID id, boolean lock) {
+  Map<String, Object> request(UUID org, UUID id, boolean lock) {
     var rows =
         jdbc.queryForList(
             "select * from approval_requests where organization_id=? and id=?"
@@ -76,11 +76,11 @@ public class ApprovalDetailService {
     return rows.getFirst();
   }
 
-  private Map<String, Object> snapshot(UUID id) {
+  Map<String, Object> snapshot(UUID id) {
     return snapshot(id, false);
   }
 
-  private Map<String, Object> snapshot(UUID id, boolean lock) {
+  Map<String, Object> snapshot(UUID id, boolean lock) {
     var rows =
         jdbc.queryForList(
             "select * from approval_snapshots where approval_id=?" + (lock ? " for update" : ""),
@@ -96,7 +96,7 @@ public class ApprovalDetailService {
     return Objects.toString(row.get(key), null);
   }
 
-  private static Instant time(Map<String, Object> row, String key) {
+  static Instant time(Map<String, Object> row, String key) {
     Object value = row.get(key);
     if (value == null) return null;
     if (value instanceof OffsetDateTime t) return t.toInstant();
@@ -114,7 +114,7 @@ public class ApprovalDetailService {
     }
   }
 
-  private List<Map<String, Object>> grants(
+  List<Map<String, Object>> grants(
       UUID org, HumanIdentity human, Map<String, Object> r, boolean lock) {
     return jdbc.queryForList(
         "select * from approval_grants where organization_id=? and account_id=? and team_id=? and"
@@ -127,7 +127,7 @@ public class ApprovalDetailService {
         r.get("risk_level"));
   }
 
-  private boolean granted(List<Map<String, Object>> rows, Instant now) {
+  boolean granted(List<Map<String, Object>> rows, Instant now) {
     return rows.stream()
         .anyMatch(g -> g.get("revoked_at") == null && time(g, "expires_at").isAfter(now));
   }
@@ -136,7 +136,7 @@ public class ApprovalDetailService {
   // are explicit; prose alone is never an action binding. New action schemas require review.
   // There is deliberately no public producer and no provider/credential payload field.
   // Historical display checks the seal independently of mutable current-head authority.
-  private Snapshot verified(Map<String, Object> r, Map<String, Object> s) {
+  Snapshot verified(Map<String, Object> r, Map<String, Object> s) {
     if (s == null) return null;
     try {
       String raw = str(s, "canonical_payload"), digest = sha256(raw);
@@ -228,7 +228,7 @@ public class ApprovalDetailService {
             == ((Number) h.get("revision")).longValue();
   }
 
-  private Map<String, Object> head(Map<String, Object> s, boolean lock) {
+  Map<String, Object> head(Map<String, Object> s, boolean lock) {
     if (s == null) return null;
     var rows =
         jdbc.queryForList(
@@ -237,7 +237,7 @@ public class ApprovalDetailService {
     return rows.isEmpty() ? null : rows.getFirst();
   }
 
-  private List<String> blockers(
+  List<String> blockers(
       Map<String, Object> r,
       Map<String, Object> s,
       Map<String, Object> h,
@@ -302,7 +302,7 @@ public class ApprovalDetailService {
     return b.stream().distinct().toList();
   }
 
-  private Decision decision(UUID id) {
+  Decision decision(UUID id) {
     var rows = jdbc.queryForList("select * from approval_decisions where approval_id=?", id);
     if (rows.isEmpty()) return null;
     var d = rows.getFirst();
@@ -382,7 +382,13 @@ public class ApprovalDetailService {
     Instant now = Instant.now();
     var b = blockers(r, s, h, v, human, granted(grants(org, human, r, false), now), now, false);
     return new ApprovalDetailResponse(
-        now, item(r), v, new Eligibility(b.isEmpty(), b.isEmpty(), b), decision(id), false);
+        now,
+        item(r),
+        v,
+        new Eligibility(b.isEmpty(), b.isEmpty(), b),
+        decision(id),
+        ((Number) r.get("information_revision")).longValue(),
+        false);
   }
 
   @Transactional
@@ -390,6 +396,9 @@ public class ApprovalDetailService {
       UUID org, UUID id, HumanIdentity human, UUID key, boolean approve, Command body) {
     if (key == null
         || body == null
+        || body.informationRevision() == null
+        || body.informationRevision() < 0
+        || body.informationRevision() > 9007199254740991L
         || body.snapshotVersion() == null
         || body.snapshotVersion() < 1
         || body.snapshotSha256() == null
@@ -406,13 +415,16 @@ public class ApprovalDetailService {
       fingerprint =
           sha256(
               json.writeValueAsString(
-                  Arrays.asList(
-                      id.toString(),
-                      approve,
-                      body.snapshotVersion(),
-                      body.snapshotSha256(),
-                      body.acknowledgement(),
-                      reason)));
+                      Arrays.asList(
+                          id.toString(),
+                          approve,
+                          body.snapshotVersion(),
+                          body.snapshotSha256(),
+                          body.acknowledgement(),
+                          reason))
+                  + (body.informationRevision() == 0
+                      ? ""
+                      : ":informationRevision:" + body.informationRevision()));
     } catch (Exception ex) {
       throw new IllegalStateException(ex);
     }
@@ -447,7 +459,8 @@ public class ApprovalDetailService {
     if (b.contains("SELF_DECISION")
         || b.contains("MISSING_REQUESTER")
         || b.contains("REQUESTER_OUT_OF_SCOPE")) throw new AccessDeniedException("Request denied");
-    if (!b.isEmpty()
+    if (body.informationRevision() != ((Number) r.get("information_revision")).longValue()
+        || !b.isEmpty()
         || !time(s, "expires_at").isAfter(Instant.now())
         || v.version() != body.snapshotVersion()
         || !v.payloadSha256().equals(body.snapshotSha256()))
