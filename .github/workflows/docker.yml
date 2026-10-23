@@ -179,6 +179,9 @@ jobs:
         working-directory: frontend
         run: |
           npm ci
+          # The Azure Ubuntu mirror transferred 20 MB at 28.6 kB/s in run40001723419.
+          # Keep the signed Ubuntu packages; change only this disposable runner's mirror.
+          sudo sed -i -E 's|https?://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
           npx playwright install --with-deps chromium
       - name: Real backend browser login across three viewports
         working-directory: frontend

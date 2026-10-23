@@ -438,16 +438,18 @@ test.describe('real approval grant management', () => {
       await expect(p.locator('main')).toContainText(/Kết quả vẫn chưa\s+xác định/);
       await expect(success(p)).toHaveCount(0);
       await expect(button(p, 'Gửi lại đúng yêu cầu này')).toBeEnabled();
+      // Focus may legitimately recover by GET while Playwright clicks the retry.
+      // Keep receipts null until the identical real POST replay has completed.
+      const retry = responseFor(p, endpoint, 'POST');
+      await button(p, 'Gửi lại đúng yêu cầu này').click();
+      const r = await retry;
+      expect(r.status()).toBe(200);
+      expect(r.request().postData()).toBe(captured.body);
+      expect(r.request().headers()['idempotency-key']).toBe(captured.key);
+      expect((await r.json()).data).toEqual(persisted);
+      await expect(success(p)).toBeVisible();
+      expect((await history(p, n, persisted.grantId)).total).toBe(2);
     } finally { await p.unroute(receiptPattern); }
-    const retry = responseFor(p, endpoint, 'POST');
-    await button(p, 'Gửi lại đúng yêu cầu này').click();
-    const r = await retry;
-    expect(r.status()).toBe(200);
-    expect(r.request().postData()).toBe(captured.body);
-    expect(r.request().headers()['idempotency-key']).toBe(captured.key);
-    expect((await r.json()).data).toEqual(persisted);
-    await expect(success(p)).toBeVisible();
-    expect((await history(p, n, persisted.grantId)).total).toBe(2);
   });
 
   test('AGM-B08 denied ambiguous replay erases private data; restored ADMIN recovers by GET only', async ({page: p}, info) => {
