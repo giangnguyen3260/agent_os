@@ -1,4 +1,6 @@
-# Approval grant management — decision-ready proposal
+# Approval grant management — reviewed proposal (historical)
+
+**Decision update23 October2026:** user selected option A, including7-day lifetime/HIGH risk ceiling. The accepted [implementation contract](APPROVAL_GRANT_MANAGEMENT_CONTRACT.md) supersedes the open-policy statements below; this proposal is retained for review history.
 
 Status: PROPOSED, not an approved authorization policy or delivered feature. Branch `feature/approval-grant-management`, baseline Member access PR22 HEAD `5f40a6be7a6d05877adef12c9ec1bc1473570dc9`. This document makes the missing product decision concrete. It does not enable a grant writer, change database authority or close O03 by implication. Existing production behavior remains the verified read-only inventory and explicitly scoped approval decisions.
 

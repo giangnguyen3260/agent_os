@@ -35,7 +35,7 @@ jobs:
         run: npm run audit:check
       - name: Frontend Google style and type/build checks
         working-directory: frontend
-        run: npm run lint && npm run format:check && npm run test:tooling && node scripts/test-auth-generation.cjs && node scripts/test-member-access-validation.cjs && npm run build
+        run: npm run lint && npm run format:check && npm run test:tooling && node scripts/test-auth-generation.cjs && node scripts/test-member-access-validation.cjs && node scripts/test-approval-grant-management-validation.cjs && npm run build
       - uses: actions/upload-artifact@v4
         if: always()
         with:
