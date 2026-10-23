@@ -46,15 +46,20 @@
         <p>Grant: {{ r.grantId }}</p>
         <p>Sự kiện: {{ r.eventId }}</p>
         <p>Người thao tác: {{ r.actorName }} · {{ r.actorId }}</p>
-        <p>Ghi nhận: {{ r.recordedAt | date: 'medium' }}</p>
-        <p>Hết hạn: {{ r.expiresAt | date: 'medium' }}</p>
+        <p>
+          Ghi nhận:
+          <time [attr.datetime]="r.recordedAt">{{ r.recordedAt }}</time>
+        </p>
+        <p>
+          Hết hạn: <time [attr.datetime]="r.expiresAt">{{ r.expiresAt }}</time>
+        </p>
         <p>
           Thu hồi:
-          {{
-            r.revokedAt
-              ? (r.revokedAt | date: 'medium')
-              : 'Không áp dụng cho biên nhận cấp'
-          }}
+          @if (r.revokedAt) {
+            <time [attr.datetime]="r.revokedAt">{{ r.revokedAt }}</time>
+          } @else {
+            Không áp dụng cho biên nhận cấp
+          }
         </p>
       </article>
       <a

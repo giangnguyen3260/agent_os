@@ -324,13 +324,17 @@ def main():
     # question and decision waiting on that revoke writer, then release and require denial.
     c=admin.data(root(901)+f'/{result["grantId"]}/revocation-context')
     revoke_key=str(uuid.uuid4())
+    # Authenticate competitors before deliberately locking their account: login itself
+    # takes that account lock and would block test setup rather than the target writes.
+    question_client, decision_client = Client('target-901'), Client('target-901')
+    pending_decision = dict(decision, snapshotSha256=recipient.data(decisions+ident('6050',902))['snapshot']['payloadSha256'])
     holder=Holder(f"SELECT id FROM human_accounts WHERE id='{ident('6080',901)}' FOR UPDATE")
     pool=concurrent.futures.ThreadPoolExecutor(3)
     try:
         revoking=pool.submit(admin.request,root(901)+f'/{result["grantId"]}/revoke',revoke(c),revoke_key)
         revoke_pid=blocked_by(holder.pid,'human_accounts')[0]
-        question=pool.submit(Client('target-901').request,decisions+ident('6050',901)+'/request-information',{'revision':0,'question':'Question after revoke'},str(uuid.uuid4()))
-        deciding=pool.submit(Client('target-901').request,decisions+ident('6050',902)+'/approve',dict(decision,snapshotSha256=recipient.data(decisions+ident('6050',902))['snapshot']['payloadSha256']),str(uuid.uuid4()))
+        question=pool.submit(question_client.request,decisions+ident('6050',901)+'/request-information',{'revision':0,'question':'Question after revoke'},str(uuid.uuid4()))
+        deciding=pool.submit(decision_client.request,decisions+ident('6050',902)+'/approve',pending_decision,str(uuid.uuid4()))
         blocked_by(revoke_pid,'organizations',minimum=2)
         holder.send("COMMIT; SELECT 'REVOKE_TARGET_RELEASED';")
         holder.expect_marker('REVOKE_TARGET_RELEASED')

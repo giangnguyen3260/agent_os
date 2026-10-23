@@ -52,3 +52,16 @@ Collection-only check: Node v24.19.0; `cd frontend && ./node_modules/.bin/playwr
 - Java import rules, Python probe syntax and browser spec syntax passed.
 - AGM-R01 source now uses optional membership locking followed by fresh authorization. The native PostgreSQL probe includes an observed actor-lock wait with concurrent membership removal and requires 403. Runtime confirmation remains pending.
 - Local environment has no Maven or Docker executable. Backend tests, PostgreSQL concurrency and real browser cases remain CI acceptance gates; no runtime pass is claimed by this checkpoint.
+
+## First runtime candidate findings
+
+Candidate `9d244f6ffbf96ff4695da190d22fb8c6da0a8147`: Code quality run39997316702/job120564106259 executed176 backend tests:174 passed,2 failed. Docker run39997316683 failed at the same backend test gate before runtime stack acceptance.
+
+- Canonical UTF-8 hash: Jackson byte serialization escaped supplementary Unicode as surrogate sequences, producing a different digest from the accepted literal UTF-8 vector. The service now serializes the canonical TreeMap to a JSON string then encodes UTF-8; the independent vector value is unchanged.
+- Result field oracle: the test expected13 fields while the frozen contract defines12. Replaced cardinality-only assertion with an exact field-name set; no wire field was removed and no authorization oracle was relaxed.
+
+Fix candidate `902a8263ff41e59af00dabefd48bde5bdfee73ef` is under CI. Local independent Python canonical vectors, Java formatter/import checks, frontend tooling/auth/member/grant validator probes all passed. Full runtime result remains pending.
+
+Quality run39997798610/job120565756728 succeeded for `902a8263ff41e59af00dabefd48bde5bdfee73ef`:176 backend tests passed (8 management tests), Google Java format/import checks, frontend dependency audit, lint/format/tooling, auth/member/grant validator probes and production build passed. Docker/native PostgreSQL and432 real-browser executions remain pending; Quality success alone is not final acceptance.
+
+Docker run39997798599/job120565756352 applied V013 and reached the native management probe. Earlier issue/replay/concurrent issue/audit rollback/legacy revoke/reversed-account/fresh-issuer-wait assertions completed before the post-revoke waiter setup timed out during login: login correctly requires the deliberately locked recipient account. Move competitor authentication and sealed snapshot reads before acquiring the deliberate account lock. Both observed org-lock waiter and subsequent403 assertions are unchanged. This run did not reach browser execution or final native acceptance. The continuation also renders exact UTC receipt timestamps with semantic time elements, avoiding DatePipe precision loss.
