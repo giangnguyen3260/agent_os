@@ -46,7 +46,11 @@
         <form (ngSubmit)="apply()" class="filters" aria-label="Lọc grant">
           <label
             >Trạng thái grant
-            <select name="status" [(ngModel)]="statusInput">
+            <select
+              aria-label="Trạng thái grant"
+              name="status"
+              [(ngModel)]="statusInput"
+            >
               @for (item of statuses; track item) {
                 <option [value]="item">{{ statusLabel(item) }}</option>
               }
@@ -96,7 +100,11 @@
           </label>
           <label
             >Vai trò tổ chức
-            <select name="role" [(ngModel)]="roleInput">
+            <select
+              aria-label="Vai trò tổ chức"
+              name="role"
+              [(ngModel)]="roleInput"
+            >
               <option value="">Tất cả</option>
               <option value="ADMIN">Quản trị viên tổ chức</option>
               <option value="MEMBER">Thành viên tổ chức</option>
