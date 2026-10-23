@@ -77,6 +77,7 @@ export class ApprovalInformationComponent {
   readonly data = signal<Information | null>(null);
   readonly context = signal<Workspace | null>(null);
   readonly title = signal('Approval information');
+  readonly status = signal('');
   readonly loading = signal(false);
   readonly busy = signal(false);
   readonly denied = signal(false);
@@ -119,6 +120,7 @@ export class ApprovalInformationComponent {
     this.data.set(null);
     this.context.set(null);
     this.title.set('Approval information');
+    this.status.set('');
     this.inputsClear();
     this.loading.set(false);
     this.error.set('');
@@ -198,6 +200,7 @@ export class ApprovalInformationComponent {
               return;
             }
             this.title.set(d.request.title);
+            this.status.set(d.request.status);
             this.data.set(i);
             const recovered = response.receipt?.data;
             if (this.unknown() && correlation && recovered !== null) {

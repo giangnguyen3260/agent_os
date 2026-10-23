@@ -99,6 +99,7 @@ test('AI-B01 persisted ask, requester reply/evidence and fresh human decision', 
     'Confirm internal scope and target workspace.',
   );
   await expect(p.getByLabel('Answer *', {exact: true})).toHaveCount(0);
+  await expect(p.locator('header.heading')).toContainText('NEEDS_INFORMATION');
   await screenshot(p, info, 'waiting');
   const r = await requester(browser, p.viewportSize());
   try {
@@ -131,6 +132,7 @@ test('AI-B01 persisted ask, requester reply/evidence and fresh human decision', 
   await expect(thread(p)).toContainText(
     'Internal review only; no production deployment.',
   );
+  await expect(p.locator('header.heading')).toContainText('PENDING');
   await screenshot(p, info, 'answered');
   await p.getByRole('link', {name: 'Back to approval', exact: true}).click();
   await expect(button(p, 'Approve')).toBeDisabled();
