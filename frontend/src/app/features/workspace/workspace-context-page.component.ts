@@ -67,6 +67,13 @@ import {
             [routerLink]="['/workspace', context.id, 'dashboard']"
             >Mở tổng quan</a
           >
+          @if (context.role === 'ADMIN') {
+            <a
+              class="button secondary auth-action"
+              [routerLink]="['/workspace', context.id, 'members']"
+              >Thành viên & quyền</a
+            >
+          }
         }
         <a class="button secondary auth-action" routerLink="/workspace"
           >Quay lại chọn workspace</a

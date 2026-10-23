@@ -2,6 +2,8 @@
 
 ## Current branch outcome
 
+On `feature/member-access`, ADMIN-only actual membership inventory and per-member approval-grant inspection are verified. Candidate9fdc56f passed168 backend tests (8new),402 real-backend browser instances (24new across3widths), native PostgreSQL rows/scope/freshness/no-business-effects, Docker/restart/logout and coordinator review of12responsive synthetic captures. Independent QC findings are closed. Draft PR22 remains stacked on unmerged PR21. No migration, production seed or grant/role/invitation writer. See [contract](docs/engineering/MEMBER_ACCESS_CONTRACT.md) and [QC](docs/qc/MEMBER_ACCESS_QC_REPORT.md).
+
 On `feature/approval-information`, persisted question/requester answer/evidence, conversation readback, revision-bound acknowledgement and exact unknown-outcome receipt recovery are verified. Candidate2b278af passed160 backend tests (18new),378 real-backend browser instances (24new across3widths), native PostgreSQL transitions/replay/concurrency/revocation/rollback, Docker/restart/logout and review of18responsive synthetic captures. Independent QC source findings are closed. Draft PR21 remains unmerged; no producer/grant management or execution. See [contract](docs/engineering/APPROVAL_INFORMATION_CONTRACT.md), [QC](docs/qc/APPROVAL_INFORMATION_QC_REPORT.md) and [V012 rollout](backend/APPROVAL_INFORMATION_MIGRATION.md).
 
 On `feature/approval-detail`, Forest S15 detail/acknowledge/reject/record flows use V011 sealed PUBLISH_PREVIEW snapshots, exact scoped grants and durable decision receipts. Legacy/other-action/self/stale/expired cases fail closed. Candidate89279de passed142backend tests,354real-backend browser instances (33new across3widths), native PostgreSQL exact decision/replay/concurrency/revocation/rollback probes, Docker/restart/logout and captured-region review of30synthetic screenshots. Independent source review is clear; draft PR20 remains unmerged. No production producer/grant UI, request-information/reply or Task/execution transition. See [contract](docs/engineering/APPROVAL_DETAIL_CONTRACT.md) and [QC](docs/qc/APPROVAL_DETAIL_QC_REPORT.md).
@@ -52,6 +54,7 @@ Prior workspace application revision `4f3e795` passed 33 backend tests and 33 br
 | Agent Studio Draft edits | Development gate verified; 66 backend tests, 117 browser instances and native PostgreSQL version/replay probe |
 | Agent Draft creation | Development gate verified; 57 backend tests and 96 browser instances, plus native PostgreSQL retry probe |
 | Approval detail and information exchange | Bounded PUBLISH_PREVIEW decision and real question/requester reply flows verified; producer, grant management and execution remain unavailable |
+| Member access inventory | ADMIN-only persisted membership/grant-lifecycle inspection verified; role/grant/invitation writes unavailable |
 | Task mutation/execution, team/agent activation, complete effective grant management and administration | Full designed flows incomplete; older static previews remain blocked |
 | Production security/scale | Complete roles/grants, load/failover, full visual/accessibility and release hardening not accepted |
 
