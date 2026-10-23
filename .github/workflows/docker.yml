@@ -168,7 +168,8 @@ jobs:
         env:
           E2E_BASE_URL: http://127.0.0.1:18080
           E2E_MAILPIT_URL: http://127.0.0.1:18025
-        run: npm run test:e2e
+        # Stop on the first regression; success still requires every collected case.
+        run: npm run test:e2e -- --max-failures=1
       - name: Upload synthetic Approval Center visual evidence
         if: always()
         uses: actions/upload-artifact@v4

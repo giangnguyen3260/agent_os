@@ -225,7 +225,7 @@ test('AI-B03 committed lost response retries the identical body and key once', a
     .fill('Recover exact original question');
   await button(p, 'Send information request').click();
   await expect(
-    p.getByRole('region', {name: 'Unconfirmed information', exact: true}),
+    p.getByRole('status', {name: 'Unconfirmed information', exact: true}),
   ).toBeVisible();
   const replay = p.waitForResponse(
     r => new URL(r.url()).pathname === `${api(n)}/request-information`,
@@ -257,7 +257,7 @@ test('AI-B04 revision alone cannot resolve unknown; exact receipt recovers witho
     .getByLabel('Question *', {exact: true})
     .fill('Receipt-bound question');
   await button(p, 'Send information request').click();
-  const warning = p.getByRole('region', {
+  const warning = p.getByRole('status', {
     name: 'Unconfirmed information',
     exact: true,
   });
@@ -295,7 +295,7 @@ test('AI-B05 denied reconciliation clears input and keeps original unknown outco
     .getByLabel('Question *', {exact: true})
     .fill('Private pending question');
   await button(p, 'Send information request').click();
-  const warning = p.getByRole('region', {
+  const warning = p.getByRole('status', {
     name: 'Unconfirmed information',
     exact: true,
   });
@@ -366,14 +366,21 @@ test('AI-B07 dirty navigation, reused route and compact menu guard input', async
     await expect(button(p, 'Menu')).toBeFocused();
   }
   await p.getByLabel('Question *', {exact: true}).fill('Unsaved question');
-  let prompt = p.waitForEvent('dialog');
+  let prompts = 0;
+  p.once('dialog', async dialog => {
+    prompts++;
+    await dialog.dismiss();
+  });
   await p.getByRole('link', {name: 'Back to approval', exact: true}).click();
-  await (await prompt).dismiss();
+  expect(prompts).toBe(1);
   await expect(p).toHaveURL(new RegExp(`${url(n)}$`));
   await expect(p.getByLabel('Question *', {exact: true})).toHaveValue(
     'Unsaved question',
   );
-  prompt = p.waitForEvent('dialog');
+  p.once('dialog', async dialog => {
+    prompts++;
+    await dialog.dismiss();
+  });
   await p.evaluate(
     target => {
       history.pushState({}, '', target);
@@ -381,8 +388,8 @@ test('AI-B07 dirty navigation, reused route and compact menu guard input', async
     },
     url(n + 1),
   );
-  await (await prompt).dismiss();
   await expect(p).toHaveURL(new RegExp(`${url(n)}$`));
+  expect(prompts).toBe(2);
   await expect(p.getByLabel('Question *', {exact: true})).toHaveValue(
     'Unsaved question',
   );
