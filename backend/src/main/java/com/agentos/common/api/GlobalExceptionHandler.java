@@ -2,6 +2,7 @@ package com.agentos.common.api;
 
 import com.agentos.organization.application.NewTeamDraftService.Conflict;
 import jakarta.persistence.EntityNotFoundException;
+import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -59,6 +60,14 @@ public class GlobalExceptionHandler {
         .body(
             ApiErrorResponse.of(
                 status == null ? "REQUEST_ERROR" : status.name(), "Request cannot be completed"));
+  }
+
+  // Resolve failed persistence here rather than sending an error dispatch through security.
+  // SQL/constraint details and private bound values must never enter an API error body.
+  @ExceptionHandler(DataAccessException.class)
+  public ResponseEntity<ApiErrorResponse> handlePersistenceFailure(DataAccessException ex) {
+    return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+        .body(ApiErrorResponse.of("INTERNAL_ERROR", "Request cannot be completed"));
   }
 
   @ExceptionHandler(IllegalArgumentException.class)

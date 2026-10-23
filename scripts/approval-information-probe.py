@@ -155,11 +155,15 @@ def state():
         "SELECT row_to_json(x)::text FROM audit_events x WHERE organization_id='"+ORG+"' ORDER BY id;"+
         "SELECT row_to_json(x)::text FROM approval_information_entries x ORDER BY id;"+
         "SELECT row_to_json(x)::text FROM approval_information_receipts x ORDER BY organization_id,actor_id,idempotency_key;"+
-        "SELECT row_to_json(x)::text FROM approval_decisions x ORDER BY id;")
+        "SELECT row_to_json(x)::text FROM approval_decisions x ORDER BY id;"+
+        "SELECT row_to_json(x)::text FROM approval_receipts x ORDER BY organization_id,actor_id,idempotency_key;")
 
 
 def effects():
-    return sql(''.join('SELECT row_to_json(x)::text FROM '+t+' x ORDER BY id;' for t in ('tasks','missions','agents','approval_snapshots','approval_action_heads')))
+    keys = (('tasks','id'), ('missions','id'), ('agents','id'),
+            ('approval_snapshots','approval_id'), ('approval_action_heads','action_id'))
+    return sql(''.join(f'SELECT row_to_json(x)::text FROM {table} x ORDER BY {key};'
+                       for table, key in keys))
 
 
 def capture_shared_state():
@@ -246,21 +250,35 @@ def main():
     # Exact same-key native duplicate reply has one committed entry, then one replay.
     code,body=ask(916); assert code==201
     q=body['data']['entryId']; key=str(uuid.uuid4())
+    reply_clients=[Client('requester'), Client('requester')]
+    gate=threading.Barrier(2)
+    def duplicate_reply(client):
+        gate.wait(timeout=10)
+        return answer(916,q,1,key,client)
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
-        futures=[pool.submit(answer,916,q,1,key,Client('requester')) for _ in range(2)]
+        futures=[pool.submit(duplicate_reply,client) for client in reply_clients]
         results=[f.result(timeout=45) for f in futures]
     assert sorted(r[0] for r in results)==[200,201],results
     assert results[0][1]['data']==results[1][1]['data']
     assert requester.information(916)['revision']==2
     # Opposite ask/approve requests serialize on the same original revision.
+    ask_client, decision_client=Client('admin'), Client('member')
+    code, detail=decision_client.request(ROOT+ident('4050',917)); assert code==200
+    snap=detail['data']['snapshot']
+    decision_body={'snapshotVersion':snap['version'],'snapshotSha256':snap['payloadSha256'],
+                   'acknowledgement':True,'reason':None,'informationRevision':0}
+    gate=threading.Barrier(2)
+    def race(client,operation,body):
+        gate.wait(timeout=10)
+        return client.mutate(917,operation,body)
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
-        a=pool.submit(ask,917,Client('admin'))
-        b=pool.submit(Client('member').decide,917)
+        a=pool.submit(race,ask_client,'request-information',{'revision':0,'question':'Explain scope'})
+        b=pool.submit(race,decision_client,'approve',decision_body)
         results=[a.result(timeout=45)[0],b.result(timeout=45)[0]]
     assert sorted(results)==[201,409],results
     # PostgreSQL constraint failure must roll back every information write atomically.
     constraint='ai_probe_'+uuid.uuid4().hex
-    sql("ALTER TABLE audit_events ADD CONSTRAINT "+constraint+" CHECK (event_type <> 'APPROVAL_INFORMATION_REQUESTED' OR organization_id <> '"+ORG+"');")
+    sql("ALTER TABLE audit_events ADD CONSTRAINT "+constraint+" CHECK (event_type <> 'APPROVAL_INFORMATION_REQUESTED' OR organization_id <> '"+ORG+"') NOT VALID;")
     try:
         frozen=state(); assert ask(918)[0]==500; assert state()==frozen
     finally:
@@ -282,11 +300,12 @@ def main():
     # Observe the actual grant lock wait before committing revocation (not a sleep inference).
     grant=ident('4070',2)
     original=json.loads(sql("SELECT row_to_json(g) FROM approval_grants g WHERE id='"+grant+"';"))
+    waiting_client=Client('member')
     holder=Holder("UPDATE approval_grants SET revoked_at=now() WHERE id='"+grant+"'")
     pool=concurrent.futures.ThreadPoolExecutor(max_workers=1)
     try:
         frozen=state()
-        pending=pool.submit(ask,921,Client('member'))
+        pending=pool.submit(ask,921,waiting_client)
         await_lock_wait(holder,'approval_grants')
         holder.send("COMMIT; SELECT 'COMMITTED';")
         holder.expect_marker('COMMITTED')

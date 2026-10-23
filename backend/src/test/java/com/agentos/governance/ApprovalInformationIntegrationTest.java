@@ -315,7 +315,7 @@ class ApprovalInformationIntegrationTest {
   }
 
   @Test
-  void auditFailureRollsBackEntryStatusRevisionAndReceipt() {
+  void auditFailureRollsBackEntryStatusRevisionAndReceipt() throws Exception {
     long before =
         jdbc.queryForObject("select count(*) from approval_information_entries", Long.class);
     String constraint = "ai_fail_" + UUID.randomUUID().toString().replace("-", "");
@@ -328,6 +328,23 @@ class ApprovalInformationIntegrationTest {
     try {
       assertThatThrownBy(() -> information.exchange(org, id, human, UUID.randomUUID(), ask(0)))
           .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+      var auth = UsernamePasswordAuthenticationToken.authenticated(human, null, List.of());
+      var response =
+          mvc.perform(
+                  post("/api/v1/organizations/" + org + "/approvals/" + id + "/request-information")
+                      .with(authentication(auth))
+                      .with(csrf())
+                      .header("Idempotency-Key", UUID.randomUUID())
+                      .contentType("application/json")
+                      .content("{\"revision\":0,\"question\":\"Private audit rollback question\"}"))
+              .andExpect(status().isInternalServerError())
+              .andReturn()
+              .getResponse()
+              .getContentAsString();
+      assertThat(response)
+          .doesNotContain("audit_events", constraint, "Private audit rollback question");
+      assertThat(json.readTree(response).path("error").path("code").asText())
+          .isEqualTo("INTERNAL_ERROR");
     } finally {
       jdbc.execute("alter table audit_events drop constraint " + constraint);
     }
