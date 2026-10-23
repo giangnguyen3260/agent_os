@@ -275,9 +275,11 @@ export function validResult(
     return false;
   return operation === 'ISSUE'
     ? v['revokedAt'] === null &&
-        stamp(v['expiresAt'])! > stamp(v['recordedAt'])! &&
+        stamp(v['expiresAt'])! - stamp(v['recordedAt'])! >= 3600000000000n &&
         stamp(v['expiresAt'])! - stamp(v['recordedAt'])! <=
-          168n * 3600000000000n
+          168n * 3600000000000n &&
+        (stamp(v['expiresAt'])! - stamp(v['recordedAt'])!) % 3600000000000n ===
+          0n
     : v['revokedAt'] === v['recordedAt'];
 }
 export function validHistory(

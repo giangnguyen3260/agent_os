@@ -33,7 +33,7 @@ const org=id(1), account=id(2), actor=id(3), key=id(4), grant=id(5);
 const base={operation:'ISSUE',organizationId:org,accountId:account,actorId:actor,actorName:'Synthetic admin',idempotencyKey:key,grantId:grant,eventId:id(6),revision:1,recordedAt:'2026-10-23T00:00:00.123456Z',expiresAt:'2026-10-30T00:00:00.123456Z',revokedAt:null};
 const valid = v => validResult(v,org,account,actor,key,'ISSUE',0);
 assert.equal(valid(base), true);
-for (const changed of [{actorId:id(9)},{accountId:id(9)},{organizationId:id(9)},{idempotencyKey:id(9)},{operation:'REVOKE'},{revision:2},{reason:'private'},{expiresAt:base.recordedAt},{expiresAt:'2026-10-30T00:00:00.123457Z'},{revokedAt:base.recordedAt}]) assert.equal(valid({...base,...changed}), false);
+for (const changed of [{actorId:id(9)},{accountId:id(9)},{organizationId:id(9)},{idempotencyKey:id(9)},{operation:'REVOKE'},{revision:2},{reason:'private'},{expiresAt:base.recordedAt},{expiresAt:'2026-10-23T00:30:00.123456Z'},{expiresAt:'2026-10-23T01:00:00.123457Z'},{expiresAt:'2026-10-30T00:00:00.123457Z'},{revokedAt:base.recordedAt}]) assert.equal(valid({...base,...changed}), false);
 const revoked={...base,operation:'REVOKE',revokedAt:base.recordedAt,expiresAt:'2020-01-01T00:00:00Z'};
 assert.equal(validResult(revoked,org,account,actor,key,'REVOKE',0,grant), true);
 assert.equal(validResult(revoked,org,account,actor,key,'REVOKE',0,id(9)), false);

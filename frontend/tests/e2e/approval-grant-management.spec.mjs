@@ -595,4 +595,93 @@ test.describe('real approval grant management', () => {
       await overflow(p);
     } finally { release.resolve(); await p.unroute(latePattern); }
   });
+  test('AGM-B11 late real history denial preserves dispatched REVOKE receipt recovery', async ({page: p}, info) => {
+    const n = index(info) + 11;
+    const actorId = account(({desktop: 3, tablet: 4, mobile: 5})[info.project.name]);
+    const secret = 'Synthetic late-history-denial private revoke reason';
+    const seeded = await issue(p, n);
+    const historyPath = `${root(n)}/${seeded.result.grantId}/management-history`;
+    const initialHistory = responseFor(p, historyPath);
+    await open(p, n, seeded.result.grantId);
+    expect((await initialHistory).status()).toBe(200);
+    await expect(p.getByTestId('grant-history-event')).toHaveCount(1);
+    await reason(p).fill(secret);
+    const historyArrived = barrier(), releaseHistory = barrier(), historyFinished = barrier();
+    const postCommitted = barrier(), releasePost = barrier(), postFinished = barrier();
+    const historyPattern = `**${historyPath}?*`;
+    const endpoint = `${root(n)}/${seeded.result.grantId}/revoke`;
+    const postPattern = `**${endpoint}`;
+    const writes = observeWrites(p);
+    let persisted;
+    await p.route(historyPattern, async interception => {
+      try {
+        historyArrived.resolve();
+        await releaseHistory.promise;
+        const actual = await interception.fetch();
+        expect(actual.status()).toBe(403);
+        await interception.fulfill({response: actual});
+      } finally { historyFinished.resolve(); }
+    });
+    await p.route(postPattern, async interception => {
+      try {
+        const actual = await interception.fetch();
+        expect(actual.status()).toBe(201);
+        persisted = (await actual.json()).data;
+        postCommitted.resolve();
+        await releasePost.promise;
+        await interception.fulfill({response: actual});
+      } catch (e) {
+        if (!/closed|cancel|invalid interception|already handled/i.test(String(e))) throw e;
+      } finally { postFinished.resolve(); }
+    });
+    try {
+      await review(p, n, seeded.result.grantId);
+      await historyArrived.promise;
+      await ack(p).check();
+      await button(p, 'Thu hồi grant này').click();
+      await postCommitted.promise;
+      expect(persisted).toMatchObject({operation: 'REVOKE', grantId: seeded.result.grantId, actorId});
+      sql(`UPDATE organization_memberships SET role='MEMBER' WHERE organization_id='${org}' AND account_id='${actorId}';`);
+      const denial = responseFor(p, historyPath);
+      releaseHistory.resolve();
+      expect((await denial).status()).toBe(403);
+      await historyFinished.promise;
+      await noPrivate(p, [secret, `Grant Management Target ${n}`, 'Grant Management Active Team']);
+      await expect(unknown(p)).toBeVisible();
+      await expect(button(p, 'Gửi lại đúng yêu cầu này')).toHaveCount(0);
+      expect(writes).toHaveLength(1);
+
+      sql(`UPDATE organization_memberships SET role='ADMIN' WHERE organization_id='${org}' AND account_id='${actorId}';`);
+      const recoveryRequests = [];
+      const recordRecovery = r => {
+        if (new URL(r.url()).pathname.startsWith(root(n))) recoveryRequests.push(r);
+      };
+      p.on('request', recordRecovery);
+      try {
+        const receiptPath = `${root(n)}/management-receipts/${persisted.idempotencyKey}`;
+        const recovered = await read(p, receiptPath, () => unknown(p).click());
+        expect(recovered.status()).toBe(200);
+        expect(new URL(recovered.url()).searchParams.get('operation')).toBe('REVOKE');
+        expect((await recovered.json()).data).toEqual(persisted);
+        await expect(success(p)).toBeVisible();
+        await expect(p.getByTestId('grant-result')).toContainText(persisted.eventId);
+        expect(recoveryRequests.map(r => [r.method(), new URL(r.url()).pathname])).toEqual([['GET', receiptPath]]);
+        releasePost.resolve();
+        await postFinished.promise;
+        await expect(success(p)).toBeVisible();
+        await expect(p.getByTestId('grant-result')).toContainText(persisted.eventId);
+        await expect(unknown(p)).toHaveCount(0);
+        expect(writes).toHaveLength(1);
+      } finally { p.off('request', recordRecovery); }
+    } finally {
+      try {
+        sql(`UPDATE organization_memberships SET role='ADMIN' WHERE organization_id='${org}' AND account_id='${actorId}';`);
+      } finally {
+        releaseHistory.resolve();
+        releasePost.resolve();
+        await p.unroute(historyPattern);
+        await p.unroute(postPattern);
+      }
+    }
+  });
 });

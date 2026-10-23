@@ -30,3 +30,7 @@ Strict wire/authorization/CSRF; no self issue; DRAFT/ACTIVE/HIGH/168; disabled/r
 ## Execution ledger
 
 Pending source/fixture. No executed passes, screenshots, CI results or final acceptance yet. Record command, UTC time, candidate hash, fixture version/reset, environment, per-project counts, failures and artifact/log locations here after execution. Inherited counts must never be presented as verification of these new cases.
+
+### AGM-B11 — dispatched revoke plus late history denial (all three widths)
+
+Use isolated viewport target+11. Create a real grant, hold the real committed201 revoke reply, then demote the issuer and release the in-flight history request to obtain a real403. Require private-data erasure, unknown state and no POST retry. Restore ADMIN and recover only the exact operation/key receipt by GET; late original POST response must not change the recovered result. Role and barrier cleanup are mandatory. Suite now collects435 instances, including33 management cases. Collection is not execution.
