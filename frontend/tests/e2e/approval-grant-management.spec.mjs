@@ -305,16 +305,19 @@ test.describe('real approval grant management', () => {
     const n = index(info) + 5;
     const writes = observeWrites(p);
     await p.goto(`/workspace/${org}/members`);
-    await open(p, n);
+    const initial = await read(p, contextPath(n), () => spa(p, issueRoute(n)));
+    expect(initial.status()).toBe(200);
+    await expect(p.getByRole('heading', {name: 'Cấp quyền duyệt', exact: true})).toBeVisible();
+    await expect(p.locator('section[aria-labelledby="grant-title"]')).toHaveAttribute('aria-busy', 'false');
     await fill(p, {text: 'Synthetic dirty draft must be erased'});
     const canceled = p.waitForEvent('dialog');
-    await p.goBack();
+    await p.evaluate(() => history.back());
     expect((await canceled).message()).toContain('chưa lưu');
     await expect(p).toHaveURL(new RegExp(`${issueRoute(n)}$`));
     await expect(reason(p)).toHaveValue('Synthetic dirty draft must be erased');
     // Native beforeunload exists before reloading and dismiss preserves the draft.
     const unload = p.waitForEvent('dialog');
-    await p.reload().catch(e => { if (!/aborted|ERR_ABORTED/i.test(String(e))) throw e; });
+    await p.evaluate(() => location.reload());
     expect((await unload).type()).toBe('beforeunload');
     await expect(reason(p)).toHaveValue('Synthetic dirty draft must be erased');
     dialogAction.set(p, 'accept');
