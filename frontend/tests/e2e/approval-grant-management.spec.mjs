@@ -304,8 +304,8 @@ test.describe('real approval grant management', () => {
   test('AGM-B05 dirty Back cancellation, accepted route reuse and blank return never POST', async ({page: p}, info) => {
     const n = index(info) + 5;
     const writes = observeWrites(p);
-    await p.goto(`/workspace/${org}/members`);
-    const initial = await read(p, contextPath(n), () => spa(p, issueRoute(n)));
+    await p.goto(route(n));
+    const initial = await read(p, contextPath(n), () => p.getByRole('link', {name: 'Cấp quyền duyệt', exact: true}).click());
     expect(initial.status()).toBe(200);
     await expect(p.getByRole('heading', {name: 'Cấp quyền duyệt', exact: true})).toBeVisible();
     await expect(p.locator('section[aria-labelledby="grant-title"]')).toHaveAttribute('aria-busy', 'false');
@@ -321,7 +321,7 @@ test.describe('real approval grant management', () => {
     expect((await unload).type()).toBe('beforeunload');
     await expect(reason(p)).toHaveValue('Synthetic dirty draft must be erased');
     dialogAction.set(p, 'accept');
-    await p.goBack();
+    await p.getByRole('link', {name: 'Về thành viên & quyền', exact: true}).click();
     await expect(p).toHaveURL(new RegExp(`/workspace/${org}/members$`));
     await open(p, n + 10);
     await expect(reason(p)).toHaveValue('');
