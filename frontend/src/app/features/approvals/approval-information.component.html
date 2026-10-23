@@ -1,0 +1,227 @@
+<div class="forest-shell">
+  <aside class="desktop-sidebar">
+    <div class="brand">agentos</div>
+    <nav aria-label="Điều hướng workspace">
+      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a
+      ><button disabled>Organization map</button
+      ><a [routerLink]="['/workspace', id, 'teams']">Teams</a
+      ><a [routerLink]="['/workspace', id, 'agents']">Agents</a
+      ><a [routerLink]="['/workspace', id, 'missions']">Missions</a
+      ><span class="selected" aria-current="page">Approvals</span
+      ><button disabled>Trace</button
+      ><a routerLink="/workspace">Change workspace</a>
+    </nav>
+  </aside>
+  <header class="compact-header">
+    <span class="brand">agentos</span
+    ><button
+      class="button secondary"
+      type="button"
+      aria-haspopup="dialog"
+      aria-controls="information-menu"
+      [attr.aria-expanded]="menuOpen()"
+      (click)="toggleMenu()"
+    >
+      Menu
+    </button>
+  </header>
+  <dialog
+    id="information-menu"
+    aria-label="Workspace navigation"
+    (cancel)="closeMenu()"
+    (close)="closeMenu()"
+  >
+    <button type="button" class="button secondary" (click)="closeMenu()">
+      Close menu
+    </button>
+    <nav>
+      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a
+      ><a [routerLink]="['/workspace', id, 'teams']">Teams</a
+      ><a [routerLink]="['/workspace', id, 'agents']">Agents</a
+      ><a [routerLink]="['/workspace', id, 'missions']">Missions</a
+      ><a routerLink="/workspace">Change workspace</a>
+    </nav>
+  </dialog>
+  <main
+    data-testid="approval-information"
+    [attr.aria-busy]="loading() || busy()"
+  >
+    <div class="breadcrumb">
+      <span>{{ context()?.name || 'Workspace' }} / Approvals</span
+      ><span>{{ auth.user()?.displayName }}</span>
+    </div>
+    <header class="heading">
+      <h1>
+        {{
+          data()?.canRequest
+            ? 'Request information'
+            : data()?.canReply
+              ? 'Needs information'
+              : title()
+        }}
+      </h1>
+      <p>{{ title() }} · {{ status() }}</p>
+    </header>
+    @if (loading()) {
+      <p role="status">Loading conversation…</p>
+    }
+    @if (denied()) {
+      <p role="alert">Access to this conversation is unavailable.</p>
+    }
+    @if (error()) {
+      <p role="alert">{{ error() }}</p>
+    }
+    @if (notice()) {
+      <section
+        class="panel notice"
+        [attr.aria-label]="
+          unknown() ? 'Unconfirmed information' : 'Information status'
+        "
+        role="status"
+      >
+        <p>{{ notice() }}</p>
+      </section>
+    }
+    @if (unknown()) {
+      <div class="actions">
+        @if (canRetry()) {
+          <button
+            class="button"
+            [disabled]="busy() || loading()"
+            (click)="retry()"
+          >
+            Retry same submission
+          </button>
+        }
+        <button
+          class="button secondary"
+          [disabled]="busy() || loading()"
+          (click)="load()"
+        >
+          Check conversation
+        </button>
+      </div>
+    }
+    @if (data(); as d) {
+      @if (!unknown() && (d.canRequest || d.canReply)) {
+        <section class="panel" aria-label="Information form">
+          @if (d.canRequest) {
+            <label class="field" for="information-question"
+              >Question *<textarea
+                id="information-question"
+                name="question"
+                [(ngModel)]="question"
+                maxlength="2000"
+                required
+                [disabled]="busy()"
+              ></textarea>
+            </label>
+          } @else {
+            <label class="field" for="information-answer"
+              >Answer *<textarea
+                id="information-answer"
+                name="answer"
+                [(ngModel)]="answer"
+                maxlength="2000"
+                required
+                [disabled]="busy()"
+              ></textarea>
+            </label>
+            <label class="field" for="information-evidence"
+              >Evidence<input
+                id="information-evidence"
+                name="evidence"
+                [(ngModel)]="evidence"
+                maxlength="1000"
+                [disabled]="busy()"
+            /></label>
+          }
+          <p class="caption">
+            Do not include credentials or private payloads. Evidence is plain
+            text; links are not opened or fetched.
+          </p>
+        </section>
+      }
+      @if (d.entries.length) {
+        <section class="panel" aria-labelledby="conversation-title">
+          <h2 id="conversation-title">Conversation</h2>
+          @for (entry of d.entries; track entry.id) {
+            <article>
+              <p>
+                <strong
+                  >{{ entry.kind === 'QUESTION' ? 'Question' : 'Answer' }} ·
+                  {{ entry.actorName }}</strong
+                >
+                · {{ entry.createdAt | date: 'medium' }}
+              </p>
+              <p class="reason">{{ entry.text }}</p>
+              @if (entry.evidence) {
+                <p class="reason">Evidence: {{ entry.evidence }}</p>
+              }
+            </article>
+          }
+        </section>
+      }
+      @if (!unknown()) {
+        <div class="actions">
+          @if (d.canRequest) {
+            <button
+              class="button"
+              [disabled]="
+                busy() || !normalized(question) || question.length > 2000
+              "
+              (click)="send('request-information')"
+            >
+              Send information request
+            </button>
+          }
+          @if (d.canReply) {
+            <button
+              class="button"
+              [disabled]="
+                busy() ||
+                !normalized(answer) ||
+                answer.length > 2000 ||
+                evidence.length > 1000
+              "
+              (click)="send('reply')"
+            >
+              Submit information
+            </button>
+          }
+          <button
+            class="button secondary"
+            [disabled]="busy()"
+            (click)="cancel()"
+          >
+            {{ d.canRequest ? 'Cancel' : 'Back' }}
+          </button>
+        </div>
+      }
+      <p class="caption">
+        {{
+          d.canReply
+            ? 'Submit returns this request to PENDING. The approver must review it again.'
+            : d.canRequest
+              ? 'Sending changes this request to NEEDS_INFORMATION. The requester replies in this conversation.'
+              : 'No information submission is currently permitted. Review the conversation or refresh current permissions.'
+        }}
+      </p>
+      <p class="caption">
+        Information exchange does not change action parameters or start
+        execution.
+      </p>
+    }
+    <div class="actions">
+      <button
+        class="button secondary"
+        [disabled]="loading() || busy()"
+        (click)="load()"
+      >
+        Refresh conversation</button
+      ><a [routerLink]="['/workspace', id, 'approvals', approvalId]"
+        >Back to approval</a
+      >
+    </div>
+  </main>
+</div>

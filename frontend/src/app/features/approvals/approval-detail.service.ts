@@ -41,8 +41,10 @@ export interface ApprovalDetail {
   eligibility: {canApprove: boolean; canReject: boolean; blockers: string[]};
   decision: Decision | null;
   executionAvailable: false;
+  informationRevision: number;
 }
 export interface DecisionBody {
+  informationRevision: number;
   snapshotVersion: number;
   snapshotSha256: string;
   acknowledgement: boolean;
@@ -96,11 +98,13 @@ export function validDetail(
     !d ||
     !exact(
       d,
-      'generatedAt request snapshot eligibility decision executionAvailable',
+      'generatedAt request snapshot eligibility decision executionAvailable informationRevision',
     ) ||
     !d.request ||
     d.request.id !== id ||
-    d.executionAvailable !== false
+    d.executionAvailable !== false ||
+    !Number.isSafeInteger(d.informationRevision) ||
+    d.informationRevision < 0
   )
     return false;
   const group: Group =

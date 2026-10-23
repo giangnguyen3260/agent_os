@@ -34,6 +34,20 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'workspace/:id/approvals/:approvalId/information',
+    canActivate: [authGuard, approvalDetailNavigationGuard],
+    runGuardsAndResolvers: 'always',
+    canDeactivate: [
+      (
+        component: import('./features/approvals/approval-information.component').ApprovalInformationComponent,
+      ) => component.canLeave(),
+    ],
+    loadComponent: () =>
+      import('./features/approvals/approval-information.component').then(
+        module => module.ApprovalInformationComponent,
+      ),
+  },
+  {
     path: 'workspace/:id/approvals/:approvalId',
     canActivate: [authGuard, approvalDetailNavigationGuard],
     runGuardsAndResolvers: 'always',

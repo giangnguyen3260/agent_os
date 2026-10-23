@@ -108,6 +108,38 @@
       </section>
     }
     @if (result(); as data) {
+      @if (conversation(); as information) {
+        <section class="panel" aria-labelledby="supplemental-information">
+          <h2 id="supplemental-information">
+            Supplemental information · revision {{ information.revision }}
+          </h2>
+          @for (entry of information.entries; track entry.id) {
+            <p class="reason">
+              <strong
+                >{{ entry.kind === 'QUESTION' ? 'Question' : 'Answer' }} ·
+                {{ entry.actorName }}</strong
+              >: {{ entry.text }}
+              @if (entry.evidence) {
+                <span> · Evidence: {{ entry.evidence }}</span>
+              }
+            </p>
+          }
+          <p>
+            Review this conversation together with the target and scope before
+            recording a decision.
+          </p>
+          <a
+            [routerLink]="[
+              '/workspace',
+              id,
+              'approvals',
+              approvalId,
+              'information',
+            ]"
+            >Open conversation</a
+          >
+        </section>
+      }
       @if (stage() === 'verify') {
         <section class="panel" aria-labelledby="verify-title">
           <h2 id="verify-title">Review before approving</h2>
@@ -268,10 +300,15 @@
           </button>
           <button
             class="button secondary"
-            disabled
-            aria-describedby="information-unavailable"
+            [disabled]="busy() || uncertain()"
+            (click)="information()"
           >
-            Request information
+            {{
+              data.informationRevision > 0 ||
+              data.request.status === 'NEEDS_INFORMATION'
+                ? 'View conversation'
+                : 'Request information'
+            }}
           </button>
           <a
             class="button secondary"
@@ -294,7 +331,8 @@
           </button>
         </div>
         <p id="information-unavailable" class="caption">
-          Information requests and replies are not available yet.
+          Open the conversation to request information or reply as the
+          requester.
         </p>
         <div class="actions">
           @if (data.request.missionId) {

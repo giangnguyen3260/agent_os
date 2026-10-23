@@ -22,15 +22,27 @@ public final class ApprovalDecisionCommandDeserializer
     JsonNode node = parser.getCodec().readTree(parser);
     if (!node.isObject()) throw JsonMappingException.from(parser, "Invalid decision");
     var names = node.fieldNames();
-    Set<String> allowed = Set.of("snapshotVersion", "snapshotSha256", "acknowledgement", "reason");
+    Set<String> allowed =
+        Set.of(
+            "snapshotVersion",
+            "snapshotSha256",
+            "acknowledgement",
+            "reason",
+            "informationRevision");
     while (names.hasNext())
       if (!allowed.contains(names.next()))
         throw JsonMappingException.from(parser, "Invalid decision");
     JsonNode version = node.get("snapshotVersion"),
         hash = node.get("snapshotSha256"),
         ack = node.get("acknowledgement"),
-        reason = node.get("reason");
-    if (version == null
+        reason = node.get("reason"),
+        revision = node.get("informationRevision");
+    if (revision != null
+            && (!revision.isIntegralNumber()
+                || !revision.canConvertToLong()
+                || revision.longValue() < 0
+                || revision.longValue() > 9007199254740991L)
+        || version == null
         || !version.isIntegralNumber()
         || !version.canConvertToLong()
         || hash == null
@@ -43,6 +55,7 @@ public final class ApprovalDecisionCommandDeserializer
         version.longValue(),
         hash.textValue(),
         ack.booleanValue(),
-        reason == null || reason.isNull() ? null : reason.textValue());
+        reason == null || reason.isNull() ? null : reason.textValue(),
+        revision == null ? 0L : revision.longValue());
   }
 }

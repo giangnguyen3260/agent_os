@@ -19,6 +19,11 @@ import {
   Workspace,
 } from '../../core/auth/auth.service';
 import {uuid} from '../teams/team.service';
+import {
+  ApprovalInformationService,
+  Information,
+  validInformation,
+} from './approval-information.service';
 import {ApprovalNavigationState} from './approval-navigation.guard';
 import {
   ApprovalDetailService,
@@ -42,6 +47,8 @@ import {
 export class ApprovalDetailComponent {
   readonly auth = inject(AuthService);
   private readonly api = inject(ApprovalDetailService);
+  private readonly informationApi = inject(ApprovalInformationService);
+  readonly conversation = signal<Information | null>(null);
   private readonly navigation = inject(ApprovalNavigationState);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
@@ -126,6 +133,7 @@ export class ApprovalDetailComponent {
     this.requests.unsubscribe();
     this.requests = new Subscription();
     this.result.set(null);
+    this.conversation.set(null);
     this.context.set(null);
     this.loading.set(false);
     this.error.set('');
@@ -176,35 +184,32 @@ export class ApprovalDetailComponent {
               );
               return;
             }
-            this.result.set(response.data);
-            if (this.uncertain() && response.data.decision) {
-              this.frozen = null;
-              this.unresolvedIdentity = null;
-              this.retryBlocked = false;
-              this.uncertain.set(false);
-              this.outcome.set(
-                'A decision record is available. Review the recorded result; execution has not started.',
+            const data = response.data;
+            if (data.informationRevision > 0) {
+              this.loading.set(true);
+              this.requests.add(
+                this.informationApi.get(this.id, this.approvalId).subscribe({
+                  next: thread => {
+                    if (!active()) return;
+                    this.loading.set(false);
+                    if (
+                      !validInformation(thread?.data, this.approvalId) ||
+                      thread.data.revision !== data.informationRevision
+                    ) {
+                      this.error.set(
+                        'Unable to verify supplemental information. Refresh before deciding.',
+                      );
+                      return;
+                    }
+                    this.conversation.set(thread.data);
+                    this.accept(data, account);
+                  },
+                  error: e => {
+                    if (active()) this.failure(e);
+                  },
+                }),
               );
-            }
-            const saved = response.data.decision;
-            if (
-              this.frozen &&
-              saved &&
-              saved.actorId === account &&
-              saved.status ===
-                (this.frozen.operation === 'approve'
-                  ? 'APPROVED'
-                  : 'REJECTED') &&
-              saved.snapshotVersion === this.frozen.body.snapshotVersion &&
-              saved.snapshotSha256 === this.frozen.body.snapshotSha256 &&
-              (saved.reason ?? '') === this.frozen.body.reason
-            ) {
-              this.frozen = null;
-              this.unresolvedIdentity = null;
-              this.retryBlocked = false;
-              this.uncertain.set(false);
-              this.outcome.set('Decision recorded. Execution has not started.');
-            }
+            } else this.accept(data, account);
           },
           error: error => {
             if (active()) this.failure(error);
@@ -215,8 +220,38 @@ export class ApprovalDetailComponent {
       if (active()) this.failure(error);
     }
   }
+  private accept(data: ApprovalDetail, account: string | undefined): void {
+    this.result.set(data);
+    if (this.uncertain() && data.decision) {
+      this.frozen = null;
+      this.unresolvedIdentity = null;
+      this.retryBlocked = false;
+      this.uncertain.set(false);
+      this.outcome.set(
+        'A decision record is available. Review the recorded result; execution has not started.',
+      );
+    }
+    const saved = data.decision;
+    if (
+      this.frozen &&
+      saved &&
+      saved.actorId === account &&
+      saved.status ===
+        (this.frozen.operation === 'approve' ? 'APPROVED' : 'REJECTED') &&
+      saved.snapshotVersion === this.frozen.body.snapshotVersion &&
+      saved.snapshotSha256 === this.frozen.body.snapshotSha256 &&
+      (saved.reason ?? '') === this.frozen.body.reason
+    ) {
+      this.frozen = null;
+      this.unresolvedIdentity = null;
+      this.retryBlocked = false;
+      this.uncertain.set(false);
+      this.outcome.set('Decision recorded. Execution has not started.');
+    }
+  }
   private failure(error: unknown): void {
     this.result.set(null);
+    this.conversation.set(null);
     this.context.set(null);
     this.loading.set(false);
     if (
@@ -239,6 +274,16 @@ export class ApprovalDetailComponent {
     if (!this.result()?.eligibility.canApprove || this.frozen) return;
     this.acknowledged.set(true);
     this.stage.set('detail');
+  }
+  information(): void {
+    if (this.busy() || this.uncertain()) return;
+    void this.router.navigate([
+      '/workspace',
+      this.id,
+      'approvals',
+      this.approvalId,
+      'information',
+    ]);
   }
   reject(): void {
     if (!this.result()?.eligibility.canReject || this.busy() || this.frozen)
@@ -276,6 +321,7 @@ export class ApprovalDetailComponent {
       key: crypto.randomUUID(),
       operation,
       body: Object.freeze({
+        informationRevision: data.informationRevision,
         snapshotVersion: data.snapshot.version,
         snapshotSha256: data.snapshot.payloadSha256,
         acknowledgement: operation === 'approve',
@@ -399,6 +445,7 @@ export class ApprovalDetailComponent {
     );
   }
   private eraseDeniedSubmission(): void {
+    this.conversation.set(null);
     const pending = this.frozen;
     const unknown =
       this.uncertain() || !!pending?.ambiguous || !!this.unresolvedIdentity;

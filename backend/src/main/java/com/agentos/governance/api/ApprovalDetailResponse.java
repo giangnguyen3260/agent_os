@@ -10,6 +10,7 @@ public record ApprovalDetailResponse(
     Snapshot snapshot,
     Eligibility eligibility,
     Decision decision,
+    long informationRevision,
     boolean executionAvailable) {
   public record Snapshot(
       UUID actionId,
@@ -42,7 +43,16 @@ public record ApprovalDetailResponse(
   @com.fasterxml.jackson.databind.annotation.JsonDeserialize(
       using = ApprovalDecisionCommandDeserializer.class)
   public record Command(
-      Long snapshotVersion, String snapshotSha256, Boolean acknowledgement, String reason) {}
+      Long snapshotVersion,
+      String snapshotSha256,
+      Boolean acknowledgement,
+      String reason,
+      Long informationRevision) {
+    public Command(
+        Long snapshotVersion, String snapshotSha256, Boolean acknowledgement, String reason) {
+      this(snapshotVersion, snapshotSha256, acknowledgement, reason, 0L);
+    }
+  }
 
   public record Result(Decision decision, boolean replay) {}
 }
