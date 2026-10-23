@@ -573,14 +573,18 @@ test.describe('real approval grant management', () => {
     await read(p, contextPath(n + 10), () => spa(p, issueRoute(n + 10)));
     await expect(p).toHaveURL(new RegExp(`${issueRoute(n + 10)}$`));
     await expect(reason(p)).toBeVisible();
-    await p.goBack();
+    const back = await read(p, contextPath(n), () => p.evaluate(() => history.back()));
+    expect(back.status()).toBe(200);
     await expect(p).toHaveURL(new RegExp(`${issueRoute(n)}$`));
-    const arrived = barrier(), release = barrier(), finished = barrier();
+    await expect(reason(p)).toBeVisible();
+    await expect(p.locator('section[aria-labelledby="grant-title"]')).toHaveAttribute('aria-busy', 'false');
+    let receivedLateResponse = false;
+    const release = barrier(), finished = barrier();
     const latePattern = `**${contextPath(n + 10)}*`;
     await p.route(latePattern, async interception => {
       try {
         const actual = await interception.fetch();
-        arrived.resolve();
+        receivedLateResponse = true;
         await release.promise;
         await interception.fulfill({response: actual});
       } catch (e) {
@@ -588,9 +592,10 @@ test.describe('real approval grant management', () => {
       } finally { finished.resolve(); }
     });
     try {
-      await p.goForward();
-      await arrived.promise;
-      await p.goBack();
+      await p.evaluate(() => history.forward());
+      await expect.poll(() => receivedLateResponse, {timeout: 15000, message: 'Forward route must reach the real delayed context response'}).toBe(true);
+      const restored = await read(p, contextPath(n), () => p.evaluate(() => history.back()));
+      expect(restored.status()).toBe(200);
       await expect(p).toHaveURL(new RegExp(`${issueRoute(n)}$`));
       await expect(p.locator('main')).toContainText(`Grant Management Target ${n}`);
       release.resolve();
