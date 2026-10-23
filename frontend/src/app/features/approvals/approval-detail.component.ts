@@ -445,6 +445,7 @@ export class ApprovalDetailComponent {
     );
   }
   private eraseDeniedSubmission(): void {
+    this.conversation.set(null);
     const pending = this.frozen;
     const unknown =
       this.uncertain() || !!pending?.ambiguous || !!this.unresolvedIdentity;
