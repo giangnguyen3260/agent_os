@@ -120,6 +120,8 @@ test('validation, keyboard Back and dismissed/accepted Cancel never write early'
   await field(p, 'Title').fill('   ');
   await button(p, 'Continue').click();
   await expect(field(p, 'Title')).toBeVisible();
+  await expect(field(p, 'Title')).toHaveAttribute('aria-invalid', 'true');
+  await expect(field(p, 'Title')).toBeFocused();
   await expect(create(p)).toHaveCount(0);
   const title = `Cancel ${info.project.name}`;
   await goal(p, title);
@@ -127,6 +129,8 @@ test('validation, keyboard Back and dismissed/accepted Cancel never write early'
   await field(p, 'Budget limit (USD)').fill('1000000.01');
   await button(p, 'Continue').click();
   await expect(field(p, 'Budget limit (USD)')).toBeVisible();
+  await expect(field(p, 'Budget limit (USD)')).toHaveAttribute('aria-invalid', 'true');
+  await expect(field(p, 'Budget limit (USD)')).toBeFocused();
   await field(p, 'Budget limit (USD)').fill('12.34');
   await field(p, 'Context').fill('  Keep exact\ncontext  ');
   await button(p, 'Back').focus();
