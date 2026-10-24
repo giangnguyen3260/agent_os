@@ -61,6 +61,11 @@ public class SecurityConfig {
         .authorizeHttpRequests(
             auth ->
                 auth.requestMatchers(
+                        org.springframework.http.HttpMethod.POST,
+                        "/api/v1/auth/invitations/inspect",
+                        "/api/v1/auth/invitations/accept")
+                    .permitAll()
+                    .requestMatchers(
                         "/api/v1/auth/csrf",
                         "/api/v1/auth/login",
                         "/api/v1/auth/recovery/request",

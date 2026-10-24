@@ -1,0 +1,380 @@
+<main class="invitation-wrapper">
+  <header class="invitation-brand">
+    <a routerLink="/workspace">agentos</a>
+    <p>Không gian làm việc cho đội ngũ AI</p>
+  </header>
+  @switch (phase()) {
+    @case ('loading') {
+      <section
+        class="invitation-panel"
+        aria-label="Kiểm tra quyền truy cập"
+        aria-busy="true"
+      >
+        <p role="status">Đang kiểm tra quyền truy cập…</p>
+      </section>
+    }
+    @case ('denied') {
+      <section class="invitation-panel" aria-label="Quyền truy cập lời mời">
+        <h1>Lời mời thành viên</h1>
+        <p role="alert">
+          Bạn không có quyền quản lý lời mời trong tổ chức này.
+        </p>
+        @if (canRecover) {
+          <button
+            class="button"
+            type="button"
+            [disabled]="busy"
+            (click)="recover()"
+          >
+            Kiểm tra biên nhận
+          </button>
+        }
+        <button
+          class="button secondary"
+          type="button"
+          [disabled]="busy"
+          (click)="load()"
+        >
+          Thử lại
+        </button>
+        <a class="button secondary" routerLink="/workspace">Về workspace</a>
+      </section>
+    }
+    @case ('unknown') {
+      <section
+        class="invitation-panel"
+        data-testid="invitation-unknown"
+        aria-labelledby="unknown-title"
+      >
+        <h1 id="unknown-title">Chưa xác định kết quả</h1>
+        <p>
+          Chưa nhận được xác nhận cho thao tác vừa thực hiện. Không tạo yêu cầu
+          mới.
+        </p>
+        <p>
+          Bạn có thể kiểm tra biên nhận. Chưa có biên nhận không có nghĩa là
+          thao tác thất bại.
+        </p>
+        <button
+          class="button"
+          type="button"
+          [disabled]="busy"
+          (click)="recover()"
+        >
+          Kiểm tra biên nhận
+        </button>
+        @if (canRetry) {
+          <button
+            class="button secondary"
+            type="button"
+            [disabled]="busy"
+            (click)="submit()"
+          >
+            Gửi lại đúng yêu cầu này
+          </button>
+        }
+        <p class="caption">
+          Chỉ thực hiện sau khi quyền quản trị hiện tại được xác minh.
+        </p>
+        @if (message()) {
+          <p role="status">{{ message() }}</p>
+        }
+      </section>
+    }
+    @case ('result') {
+      @if (receipt(); as result) {
+        <section
+          class="invitation-panel"
+          data-testid="invitation-result"
+          aria-labelledby="result-title"
+        >
+          <h1 id="result-title">
+            {{
+              result.operation === 'CREATE_INVITATION'
+                ? 'Đã ghi nhận lời mời'
+                : result.operation === 'RESEND_INVITATION'
+                  ? 'Đã ghi nhận yêu cầu gửi lại'
+                  : 'Đã thu hồi lời mời'
+            }}
+          </h1>
+          <p>Email người nhận: {{ result.email }}</p>
+          <h2>Vai trò được mời: MEMBER</h2>
+          @if (result.operation !== 'REVOKE_INVITATION') {
+            <p>
+              Email đang chờ gửi. Trạng thái này chưa xác nhận email đã được gửi
+              hoặc đến tay người nhận.
+            </p>
+          }
+          <p>
+            Đây là biên nhận lịch sử, không xác nhận trạng thái lời mời hiện
+            tại.
+          </p>
+          <div class="metadata">
+            <p>Hết hạn: {{ result.expiresAt }}</p>
+            <p>Tác nhân: {{ result.actorName }} · {{ result.actorId }}</p>
+            <p>Sự kiện: {{ result.eventId }}</p>
+            <p>Ghi nhận: {{ result.recordedAt }}</p>
+            <p>Phiên bản: {{ result.revision }}</p>
+          </div>
+          <a
+            class="button"
+            [routerLink]="[
+              '/workspace',
+              org,
+              'invitations',
+              result.invitationId,
+            ]"
+            (click)="refreshDetail(result.invitationId)"
+            >Xem chi tiết</a
+          >
+          <a
+            class="button secondary"
+            [routerLink]="['/workspace', org, 'invitations']"
+            >Về lời mời thành viên</a
+          >
+        </section>
+      }
+    }
+    @case ('review') {
+      @if (workspace(); as workspace) {
+        <section
+          class="invitation-panel"
+          data-testid="invitation-review"
+          aria-labelledby="review-title"
+          [attr.aria-busy]="busy"
+        >
+          <h1 id="review-title">
+            {{
+              operation === 'CREATE_INVITATION'
+                ? 'Xem lại lời mời'
+                : operation === 'RESEND_INVITATION'
+                  ? 'Xem lại gửi lại'
+                  : 'Xem lại thu hồi'
+            }}
+          </h1>
+          <p>Email người nhận: {{ recipient }}</p>
+          <app-invitation-scope [organizationName]="workspace.name" />
+          @if (operation === 'CREATE_INVITATION') {
+            <p>
+              Lời mời có hiệu lực 72 giờ từ lúc tạo. Vai trò thành viên hiện có
+              được giữ nguyên.
+            </p>
+          }
+          @if (operation === 'RESEND_INVITATION') {
+            <p>
+              Gửi lại không gia hạn lời mời. Liên kết cũ vẫn có thể dùng đến khi
+              email thay thế được gửi thành công.
+            </p>
+          }
+          @if (operation === 'REVOKE_INVITATION') {
+            <p>
+              Sau khi thu hồi, người nhận không thể dùng lời mời này. Không thay
+              đổi tư cách thành viên hiện có.
+            </p>
+          }
+          @if (detail(); as detail) {
+            <p>
+              Hết hạn: {{ detail.invitation.expiresAt | date: 'medium' }} ·
+              Phiên bản {{ detail.invitation.revision }}
+            </p>
+          }
+          <label class="check"
+            ><input
+              type="checkbox"
+              [(ngModel)]="acknowledged"
+              [disabled]="busy"
+            />Tôi đã kiểm tra email và phạm vi lời mời.</label
+          >
+          <button
+            class="button"
+            type="button"
+            [disabled]="busy || !acknowledged"
+            (click)="submit()"
+          >
+            {{ finalLabel }}
+          </button>
+          <button
+            class="button secondary"
+            type="button"
+            [disabled]="busy"
+            (click)="back()"
+          >
+            Quay lại chỉnh sửa
+          </button>
+          @if (busy) {
+            <p role="status">Đang xử lý…</p>
+          }
+        </section>
+      }
+    }
+    @case ('edit') {
+      @if (workspace(); as workspace) {
+        @if (creating) {
+          <section class="invitation-panel" aria-labelledby="create-title">
+            <h1 id="create-title">Mời thành viên</h1>
+            <p>Nhập email người nhận rồi xem lại trước khi gửi.</p>
+            <form (ngSubmit)="review('CREATE_INVITATION')" novalidate>
+              <label
+                >Email người nhận<input
+                  name="email"
+                  type="email"
+                  autocomplete="off"
+                  [(ngModel)]="recipient"
+                  [disabled]="busy"
+                  aria-describedby="email-error"
+              /></label>
+              @if (recipient && !validEmail) {
+                <p id="email-error" class="error">
+                  Nhập một địa chỉ email hợp lệ.
+                </p>
+              }
+              <app-invitation-scope [organizationName]="workspace.name" />
+              <p>
+                Lời mời có hiệu lực 72 giờ từ lúc tạo. Không cần nhập lý do.
+              </p>
+              <button
+                class="button"
+                type="submit"
+                [disabled]="busy || !validEmail"
+              >
+                Xem lại lời mời
+              </button>
+            </form>
+            <a
+              class="button secondary"
+              [routerLink]="['/workspace', org, 'invitations']"
+              >Hủy</a
+            >
+          </section>
+        } @else if (detail(); as detail) {
+          <section
+            class="invitation-panel"
+            data-testid="invitation-detail"
+            aria-labelledby="detail-title"
+          >
+            <h1 id="detail-title">Chi tiết lời mời</h1>
+            <p>Email người nhận: {{ detail.invitation.email }}</p>
+            <app-invitation-scope [organizationName]="workspace.name" />
+            <div class="metadata">
+              <p>
+                Trạng thái: {{ statusLabel(detail.invitation.status) }} ·
+                {{ detail.invitation.status }}
+              </p>
+              <p>Email: {{ statusLabel(detail.invitation.deliveryStatus) }}</p>
+              <p>Tạo lúc: {{ detail.invitation.createdAt | date: 'medium' }}</p>
+              <p>Hết hạn: {{ detail.invitation.expiresAt | date: 'medium' }}</p>
+              @if (detail.invitation.acceptedAt) {
+                <p>
+                  Đã chấp nhận:
+                  {{ detail.invitation.acceptedAt | date: 'medium' }}
+                </p>
+              }
+              @if (detail.invitation.revokedAt) {
+                <p>
+                  Đã thu hồi: {{ detail.invitation.revokedAt | date: 'medium' }}
+                </p>
+              }
+            </div>
+            <p>
+              Hiệu lực 72 giờ từ lúc tạo. Có thể gửi lại sau 60 giây kể từ lần
+              yêu cầu gửi gần nhất.
+            </p>
+            @if (detail.invitation.status === 'PENDING') {
+              <button
+                class="button"
+                type="button"
+                [disabled]="busy || !detail.canResend"
+                (click)="review('RESEND_INVITATION')"
+              >
+                Gửi lại lời mời
+              </button>
+              <button
+                class="button secondary"
+                type="button"
+                [disabled]="busy || !detail.canRevoke"
+                (click)="review('REVOKE_INVITATION')"
+              >
+                Thu hồi lời mời
+              </button>
+            }
+            <button
+              class="button secondary"
+              type="button"
+              [disabled]="busy"
+              (click)="load()"
+            >
+              Làm mới
+            </button>
+            <a
+              class="button secondary"
+              [routerLink]="['/workspace', org, 'invitations']"
+              >Về lời mời thành viên</a
+            >
+          </section>
+        } @else if (list(); as result) {
+          <section class="invitation-panel" aria-labelledby="list-title">
+            <h1 id="list-title">Lời mời thành viên</h1>
+            <p>Tổ chức: {{ workspace.name }} · Chỉ quản trị viên</p>
+            <a
+              class="button"
+              [routerLink]="['/workspace', org, 'invitations', 'new']"
+              >Mời thành viên</a
+            >
+            <label
+              >Trạng thái<select
+                [ngModel]="status"
+                (ngModelChange)="filter($event)"
+              >
+                @for (status of statuses; track status) {
+                  <option [value]="status">{{ statusLabel(status) }}</option>
+                }
+              </select></label
+            >
+            @for (item of result.items; track item.id) {
+              <article class="invitation-row" data-testid="invitation-row">
+                <h2>{{ item.email }}</h2>
+                <p>
+                  MEMBER · {{ statusLabel(item.status) }} · {{ item.status }}
+                </p>
+                <p>Email: {{ statusLabel(item.deliveryStatus) }}</p>
+                <p>Hết hạn: {{ item.expiresAt | date: 'medium' }}</p>
+                <a
+                  class="button secondary"
+                  [routerLink]="['/workspace', org, 'invitations', item.id]"
+                  >Xem chi tiết</a
+                >
+              </article>
+            } @empty {
+              <p>Chưa có lời mời.</p>
+            }
+            <p class="caption">
+              Trang {{ page + 1 }} · {{ result.total }} lời mời
+            </p>
+            <nav class="pagination" aria-label="Phân trang lời mời">
+              <button
+                class="button secondary"
+                type="button"
+                [disabled]="page === 0"
+                (click)="paginate(page - 1)"
+              >
+                Trang trước</button
+              ><button
+                class="button secondary"
+                type="button"
+                [disabled]="(page + 1) * 20 >= result.total"
+                (click)="paginate(page + 1)"
+              >
+                Trang tiếp
+              </button>
+            </nav>
+            <a
+              class="button secondary"
+              [routerLink]="['/workspace', org, 'members']"
+              >Về thành viên &amp; quyền</a
+            >
+          </section>
+        }
+      }
+    }
+  }
+</main>

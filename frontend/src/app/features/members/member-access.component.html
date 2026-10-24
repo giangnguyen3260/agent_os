@@ -31,6 +31,9 @@
         {{ context()?.name }} · Vai trò tổ chức và quyền duyệt là các phạm vi
         riêng.
       </p>
+      <a class="button" [routerLink]="['/workspace', id, 'invitations']"
+        >Lời mời thành viên</a
+      >
       @if (grants(); as result) {
         <article class="access-card" data-testid="grant-member">
           <h2>
@@ -231,9 +234,9 @@
             thời điểm duyệt.
           </p>
           <p>
-            Vai trò team và Owner chưa được hỗ trợ. Mời thành viên đang được
-            phát triển. Sửa vai trò tổ chức cần kiểm tra quyền quản trị mới.
-            Cấp/thu hồi grant cần kiểm tra quyền quản trị mới.
+            Vai trò team và Owner chưa được hỗ trợ. Sửa vai trò tổ chức cần kiểm
+            tra quyền quản trị mới. Cấp/thu hồi grant cần kiểm tra quyền quản
+            trị mới.
           </p>
           <p>
             Grant không cấp quyền công cụ cho Agent và không cho phép tự duyệt

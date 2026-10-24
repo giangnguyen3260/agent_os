@@ -1,0 +1,261 @@
+<main class="invitation-wrapper">
+  <header class="invitation-brand">
+    <a routerLink="/workspace">agentos</a>
+    <p>Không gian làm việc cho đội ngũ AI</p>
+  </header>
+  @switch (phase()) {
+    @case ('loading') {
+      <section
+        class="invitation-panel"
+        aria-label="Kiểm tra lời mời"
+        aria-busy="true"
+      >
+        <p role="status">Đang tải lời mời…</p>
+      </section>
+    }
+    @case ('unavailable') {
+      <section class="invitation-panel" aria-labelledby="unavailable-title">
+        <h1 id="unavailable-title">Chưa thể kiểm tra lời mời</h1>
+        <p>Không thể kiểm tra lúc này. Vui lòng thử lại.</p>
+        <button
+          class="button"
+          type="button"
+          [disabled]="busy"
+          (click)="inspect()"
+        >
+          Thử lại
+        </button>
+      </section>
+    }
+    @case ('invalid') {
+      <section class="invitation-panel" aria-labelledby="invalid-title">
+        <h1 id="invalid-title">Lời mời không còn hiệu lực</h1>
+        <p>
+          Không thể dùng lời mời này. Lời mời có thể đã hết hạn, bị thu hồi hoặc
+          đã được sử dụng.
+        </p>
+        <p>
+          Mở lại liên kết trong email gốc. Nếu vẫn không được, liên hệ người mời
+          để kiểm tra hoặc nhận lời mời mới.
+        </p>
+        <a class="button" routerLink="/login">Về đăng nhập</a>
+      </section>
+    }
+    @case ('unknown') {
+      <section
+        class="invitation-panel"
+        data-testid="invitation-unknown"
+        aria-labelledby="unknown-title"
+      >
+        <h1 id="unknown-title">Chưa xác định kết quả</h1>
+        <p>
+          Chưa thể xác nhận bạn đã tham gia. Đừng gửi lại bước tạo tài khoản
+          hoặc coi lời mời đã hết hạn.
+        </p>
+        <p>
+          Đăng nhập để kiểm tra tổ chức bạn thực sự có thể truy cập. Nếu chưa
+          thấy, liên hệ người mời.
+        </p>
+        <a class="button" routerLink="/login">Đăng nhập để kiểm tra</a
+        ><a class="button secondary" routerLink="/workspace"
+          >Kiểm tra tổ chức có thể truy cập</a
+        >
+      </section>
+    }
+    @case ('success') {
+      @if (result(); as result) {
+        <section
+          class="invitation-panel"
+          data-testid="invitation-result"
+          aria-labelledby="success-title"
+        >
+          <h1 id="success-title">Đã tham gia tổ chức</h1>
+          @if (result.requiresLogin) {
+            <p>Tài khoản đã được tạo và bạn đã tham gia tổ chức.</p>
+            <p>Đăng nhập để tiếp tục.</p>
+            <a class="button" routerLink="/login">Đăng nhập</a>
+          } @else {
+            <p>
+              Bạn có thể mở tổ chức bằng tài khoản hiện tại. Nếu đã là thành
+              viên, vai trò hiện tại được giữ nguyên.
+            </p>
+            <a
+              class="button"
+              [routerLink]="['/workspace', result.organizationId]"
+              >Vào tổ chức</a
+            >
+          }
+        </section>
+      }
+    }
+    @case ('review') {
+      @if (context(); as context) {
+        @if (context.state === 'MISMATCH') {
+          <section class="invitation-panel" aria-labelledby="mismatch-title">
+            <h1 id="mismatch-title">Tài khoản chưa khớp lời mời</h1>
+            <p>
+              Lời mời dành cho {{ context.emailHint }}. Hãy đăng xuất rồi đăng
+              nhập bằng đúng email nhận lời mời.
+            </p>
+            <button
+              class="button"
+              type="button"
+              [disabled]="busy"
+              (click)="logout()"
+            >
+              Đăng xuất để đổi tài khoản
+            </button>
+          </section>
+        } @else {
+          <section
+            class="invitation-panel"
+            data-testid="invitation-accept-review"
+            aria-labelledby="accept-title"
+            [attr.aria-busy]="busy"
+          >
+            <h1 id="accept-title">
+              {{
+                context.state === 'READY' ? 'Tham gia tổ chức' : 'Nhận lời mời'
+              }}
+            </h1>
+            <p>
+              Dành cho {{ context.emailHint }} · Hết hạn
+              {{ context.expiresAt | date: 'medium' }}
+            </p>
+            <app-invitation-scope
+              [organizationName]="context.organizationName"
+            />
+            @if (context.state === 'SIGN_IN') {
+              <form (ngSubmit)="login()">
+                <label
+                  >Email<input
+                    name="email"
+                    type="email"
+                    autocomplete="username"
+                    required
+                    [(ngModel)]="loginEmail"
+                    [disabled]="busy"
+                /></label>
+                <label
+                  >Mật khẩu<input
+                    name="password"
+                    type="password"
+                    autocomplete="current-password"
+                    required
+                    [(ngModel)]="loginPassword"
+                    [disabled]="busy"
+                /></label>
+                <button
+                  class="button"
+                  type="submit"
+                  [disabled]="busy || !loginEmail || !loginPassword"
+                >
+                  Đăng nhập
+                </button>
+              </form>
+              <p class="caption">
+                Sau khi đăng nhập, xem lại lời mời rồi chọn Tham gia tổ chức.
+              </p>
+            } @else {
+              <form (ngSubmit)="accept()" novalidate>
+                @if (context.state === 'NEW_ACCOUNT') {
+                  <label
+                    >Họ và tên<input
+                      #nameInput
+                      name="name"
+                      autocomplete="name"
+                      [(ngModel)]="name"
+                      [disabled]="busy"
+                      aria-describedby="name-error"
+                      [attr.aria-invalid]="nameError ? true : null"
+                  /></label>
+                  @if (nameError) {
+                    <p id="name-error" class="error">{{ nameError }}</p>
+                  }
+                  <label
+                    >Mật khẩu mới<input
+                      #passwordInput
+                      name="newPassword"
+                      type="password"
+                      autocomplete="new-password"
+                      [(ngModel)]="newPassword"
+                      [disabled]="busy"
+                      aria-describedby="password-help password-error"
+                      [attr.aria-invalid]="passwordError ? true : null"
+                  /></label>
+                  @if (passwordError) {
+                    <p id="password-error" class="error">{{ passwordError }}</p>
+                  }
+                  <label
+                    >Nhập lại mật khẩu<input
+                      #confirmationInput
+                      name="confirmation"
+                      type="password"
+                      autocomplete="new-password"
+                      [(ngModel)]="confirmation"
+                      [disabled]="busy"
+                      aria-describedby="confirmation-error"
+                      [attr.aria-invalid]="confirmationError ? true : null"
+                  /></label>
+                  @if (confirmationError) {
+                    <p id="confirmation-error" class="error">
+                      {{ confirmationError }}
+                    </p>
+                  }
+                  <p id="password-help" class="caption">
+                    Dùng ít nhất 14 ký tự. Mật khẩu dài có dấu có thể vượt giới
+                    hạn cho phép.
+                  </p>
+                } @else {
+                  <p>
+                    Nếu bạn đã là thành viên, vai trò hiện tại được giữ nguyên.
+                  </p>
+                }
+                <label class="check"
+                  ><input
+                    type="checkbox"
+                    name="acknowledgement"
+                    [(ngModel)]="acknowledged"
+                    [disabled]="busy"
+                  />Tôi đã xem lại tổ chức và phạm vi tham gia.</label
+                >
+                <button
+                  class="button"
+                  type="submit"
+                  [disabled]="busy || !acknowledged"
+                >
+                  {{
+                    context.state === 'NEW_ACCOUNT'
+                      ? 'Tạo tài khoản và tham gia'
+                      : 'Tham gia tổ chức'
+                  }}
+                </button>
+              </form>
+              @if (context.state === 'NEW_ACCOUNT') {
+                <p class="caption">
+                  Chỉ tạo tài khoản khi bạn chọn tham gia. Sau đó, vui lòng đăng
+                  nhập.
+                </p>
+              } @else {
+                <button
+                  class="button secondary"
+                  type="button"
+                  [disabled]="busy"
+                  (click)="logout()"
+                >
+                  Đăng xuất để đổi tài khoản
+                </button>
+              }
+            }
+            @if (message()) {
+              <p role="alert" class="error">{{ message() }}</p>
+            }
+            @if (busy) {
+              <p role="status">Đang xử lý…</p>
+            }
+          </section>
+        }
+      }
+    }
+  }
+</main>

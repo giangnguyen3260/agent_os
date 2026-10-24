@@ -74,3 +74,7 @@ SHA256 `ff65bf6d78ea6d5a116bc50ac85e767281a78b60aa53af29697f48028b3e7279`.
 `{"acknowledgement":true,"actorId":"90900000-0000-4000-8000-000000000001","domain":"MEMBER_INVITATIONS","email":null,"expectedRevision":2,"invitationId":"90910000-0000-4000-8000-000000000101","operation":"REVOKE_INVITATION","organizationId":"90909090-9090-4090-8090-909090909090","version":1}`
 
 SHA256 `41980eca49a300e04909063913b2757609beea5e555961501c0796f7b1ef42c8`.
+
+### Transport resource bounds
+
+Invitation JSON request bodies are limited to8192 UTF8 bytes before JSON parsing. When invitations are enabled, SMTP connection/read/write timeout overrides must each be100..5000milliseconds (default5000); zero/unlimited values are invalid. CI uses a disposable exclusive Mailpit stop/start probe with1-second retry delay to observe five-attempt exhaustion; this is not the production60-second retry setting.
