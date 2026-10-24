@@ -67,3 +67,7 @@ Only this review file is owned/changed by this reviewer. No edits to the proposa
 - Revalidate on route entry/reuse, focus or visibility restoration and before review/save/recovery/history actions. Gate private DOM while checking. On any unresolved freshness failure, hide private content and disable actions; on observed denial clear it and retain only allowed GET correlation. Discarded navigation correlation does not turn an unknown outcome into failure.
 
 The appended conditional contract now incorporates these engineering defaults. They remain contingent on A; no implementation or additional user policy approval is implied. No remaining concrete routine protocol issue is identified in this follow-up. Designer/Figma review is separate and pending.
+
+## Designer handoff comparison
+
+A follow-up independent documentation comparison found no semantic mismatch between MEMBER_ROLE_MANAGEMENT_FIGMA.md and the conditional proposal. This was a handoff-document review, not retrieval of Figma nodes or independent repetition of screenshot checks. The designer records15 editable provisional views, visible unapproved labels, preservation of existing nodes, structural readback and sampled screenshot checks; its limits are explicit. A/B remains OPEN and implementation/runtime acceptance remains NOT RUN.

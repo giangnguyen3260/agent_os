@@ -2,6 +2,8 @@
 
 Status: PROPOSED, not an approved authorization policy and not implemented. Branch feature/member-role-management stacks on draft/unmerged PR23 at3da67e2fa03432ad63e28509e53d188ea8bd91a0. The verified application beneath it is838b1d9 (176 backend/435 browser passes). Those counts verify the earlier grant feature, not this proposal.
 
+Review assets: [15 provisional Figma views](https://www.figma.com/design/5wUjDKXg8vtRaJcO9XHfml?node-id=124-7180), [exact frame handoff](MEMBER_ROLE_MANAGEMENT_FIGMA.md), [independent proposal review](../qc/MEMBER_ROLE_MANAGEMENT_PROPOSAL_REVIEW.md), [24 prospective acceptance scenarios](../qc/MEMBER_ROLE_MANAGEMENT_TEST_CASES.md). All Figma views are marked ĐỀ XUẤT — CHƯA DUYỆT; no interactive save or implemented role writer is claimed.
+
 ## Why this is the next bounded slice
 
 Members & permissions already reads actual organization memberships and approval-grant lifecycles. PR23 adds explicit grant issue/revoke. Organization ADMIN/MEMBER changes and invitations remain unavailable. Complete role editing before a separate invitation/onboarding delivery: it reuses current accounts/memberships and requires no email identity/token creation. The earlier approved Option A applies to approval grants only; it does not approve organization role administration. Current schema has ADMIN/MEMBER, not Owner or Team roles.
