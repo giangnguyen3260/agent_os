@@ -1,4 +1,5 @@
 import {Routes} from '@angular/router';
+import {grantNavigationGuard} from './features/members/grant-navigation.guard';
 import {authGuard, previewGuard} from './core/auth/auth.guard';
 import {approvalDetailNavigationGuard} from './features/approvals/approval-navigation.guard';
 
@@ -31,6 +32,34 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./features/workspace/workspace-page.component').then(
         module => module.WorkspacePageComponent,
+      ),
+  },
+  {
+    path: 'workspace/:id/members/:accountId/approval-grants/new',
+    canActivate: [authGuard, grantNavigationGuard],
+    runGuardsAndResolvers: 'always',
+    canDeactivate: [
+      (
+        component: import('./features/members/grant-management.component').GrantManagementComponent,
+      ) => component.canLeave(),
+    ],
+    loadComponent: () =>
+      import('./features/members/grant-management.component').then(
+        module => module.GrantManagementComponent,
+      ),
+  },
+  {
+    path: 'workspace/:id/members/:accountId/approval-grants/:grantId/revoke',
+    canActivate: [authGuard, grantNavigationGuard],
+    runGuardsAndResolvers: 'always',
+    canDeactivate: [
+      (
+        component: import('./features/members/grant-management.component').GrantManagementComponent,
+      ) => component.canLeave(),
+    ],
+    loadComponent: () =>
+      import('./features/members/grant-management.component').then(
+        module => module.GrantManagementComponent,
       ),
   },
   {

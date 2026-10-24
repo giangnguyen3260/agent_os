@@ -43,6 +43,20 @@
             {{ result.member.enabled ? 'Đang hoạt động' : 'Đã vô hiệu hóa' }}
           </p>
         </article>
+        @if (result.member.enabled && !result.member.isSelf) {
+          <a
+            class="button"
+            [routerLink]="[
+              '/workspace',
+              id,
+              'members',
+              result.member.accountId,
+              'approval-grants',
+              'new',
+            ]"
+            >Cấp quyền duyệt</a
+          >
+        }
         <form (ngSubmit)="apply()" class="filters" aria-label="Lọc grant">
           <label
             >Trạng thái grant
@@ -82,6 +96,19 @@
             @if (grant.revokedAt) {
               <p>Đã thu hồi: {{ grant.revokedAt | date: 'medium' }}</p>
             }
+            <a
+              class="button secondary"
+              [routerLink]="[
+                '/workspace',
+                id,
+                'members',
+                result.member.accountId,
+                'approval-grants',
+                grant.id,
+                'revoke',
+              ]"
+              >{{ grant.revokedAt ? 'Xem lịch sử grant' : 'Thu hồi' }}</a
+            >
           </article>
         } @empty {
           <p class="access-card">Chưa có grant phù hợp với bộ lọc.</p>
@@ -181,7 +208,8 @@
           </p>
           <p>
             Vai trò team và Owner chưa được hỗ trợ. Mời thành viên, sửa vai trò
-            và cấp/thu hồi grant đang được phát triển.
+            đang được phát triển. Cấp/thu hồi grant cần kiểm tra quyền quản trị
+            mới.
           </p>
           <p>
             Grant không cấp quyền công cụ cho Agent và không cho phép tự duyệt

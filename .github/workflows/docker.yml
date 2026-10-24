@@ -167,10 +167,21 @@ jobs:
         env:
           E2E_BASE_URL: http://127.0.0.1:18080
         run: python3 scripts/member-access-probe.py
+      - name: Provision isolated Approval Grant Management fixtures
+        run: |
+          docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < scripts/approval-grant-management-ci-fixture.sql
+      - name: PostgreSQL Approval Grant Management mutations and authority
+        timeout-minutes: 5
+        env:
+          E2E_BASE_URL: http://127.0.0.1:18080
+        run: python3 scripts/approval-grant-management-probe.py
       - name: Install browser test dependencies
         working-directory: frontend
         run: |
           npm ci
+          # The Azure Ubuntu mirror transferred 20 MB at 28.6 kB/s in run40001723419.
+          # Keep the signed Ubuntu packages; change only this disposable runner's mirror.
+          sudo sed -i -E 's|https?://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
           npx playwright install --with-deps chromium
       - name: Real backend browser login across three viewports
         working-directory: frontend
@@ -206,6 +217,13 @@ jobs:
         with:
           name: member-access-visuals
           path: frontend/qa-visuals/member-access-*.png
+          if-no-files-found: ignore
+      - name: Upload synthetic Approval Grant Management visual evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: approval-grant-management-visuals
+          path: frontend/qa-visuals/approval-grant-management-*.png
           if-no-files-found: ignore
       - name: PostgreSQL concurrent Agent Draft creation and replay
         timeout-minutes: 2
