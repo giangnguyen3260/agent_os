@@ -59,8 +59,8 @@ Prior workspace application revision `4f3e795` passed 33 backend tests and 33 br
 | Agent activation review | Saved configuration/Team preflight and fail-closed activation boundary; actual activation unavailable |
 | Agent Studio Draft edits | Development gate verified; 66 backend tests, 117 browser instances and native PostgreSQL version/replay probe |
 | Agent Draft creation | Development gate verified; 57 backend tests and 96 browser instances, plus native PostgreSQL retry probe |
-| Approval detail and information exchange | Bounded PUBLISH_PREVIEW decision and real question/requester reply flows verified; producer, grant management and execution remain unavailable |
-| Member access and approval grants | ADMIN-only persisted inventory plus bounded issue/revoke/history/recovery verified; role/invitation writes unavailable |
+| Approval detail and information exchange | Bounded PUBLISH_PREVIEW decision, real question/requester reply and explicit grant issue/revoke/history verified; producer and execution remain unavailable |
+| Member access, organization roles and approval grants | ADMIN-only persisted inventory, bounded grant issue/revoke/history/recovery and organization role editing verified; invitations implemented with final runtime acceptance pending in PR25 |
 | Task mutation/execution, team/agent activation, complete effective grant management and administration | Full designed flows incomplete; older static previews remain blocked |
 | Production security/scale | Complete roles/grants, load/failover, full visual/accessibility and release hardening not accepted |
 

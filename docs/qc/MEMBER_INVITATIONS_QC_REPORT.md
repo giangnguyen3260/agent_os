@@ -4,13 +4,13 @@ Runtime acceptance pending. [PR25](https://github.com/giangnguyen3260/agent_os/p
 
 ## Current candidate
 
-- Application/test candidate: `56ed47134b0d47fa3aa7cb67e8f6f2ed50aa4699`.
-- Tree: `a25a5729a080ee8573f03c47f8c770320162cb6d`.
-- Tested PR merge: `5cd4d42a9e625b28f0335c1260f4e99cddad4368`; base `778ed08911f761eaa3a5397291414a560679248e`.
-- [Quality40108005028](https://github.com/giangnguyen3260/agent_os/actions/runs/40108005028), job120913618495: SUCCESS;271 backend tests,0 failures/errors/skips, audit0 and all frontend/style/tooling/production-validator/build gates passed.
-- [Docker40108005024](https://github.com/giangnguyen3260/agent_os/actions/runs/40108005024), job120913618280: native PostgreSQL/SMTP gates completed; browser stopped at INV-B08 with90passes,1failure,431unrun. Browser522,51captures and restart are not yet accepted.
+- Application/test candidate: `81b2bbf52788290128b8c6b555e1e6e6ec0c8f45`.
+- Tree: `7d89dc8a8fe9924ae85a03334d74e091b2ac275c`.
+- Tested PR merge: `58f82e0a307fb3a94d8a9d4b61b2da2db3ea3ee1`; base `778ed08911f761eaa3a5397291414a560679248e`.
+- [Quality40108825226](https://github.com/giangnguyen3260/agent_os/actions/runs/40108825226), job120916048510: SUCCESS271 tests, audit0 and all quality gates.
+- [Docker40108825247](https://github.com/giangnguyen3260/agent_os/actions/runs/40108825247), job120916048657: native passed; browser7passed/1failed/43unrun, baseline471 and restart unrun.
 
-Expected browser collection522:471 baseline +51 invitation instances (17 cases ×3 widths), with51 invitation captures planned. These are planned/collected counts, not executed passes. Backend271 is an observed Quality result (192 baseline +79 additions:59 @Test methods and20 parameterized inputs).
+Browser gate522:51 invitation instances (17 cases ×3 widths) first, then471 baseline, with51 invitation captures planned. Disjoint collection counts were observed locally; these are not executed passes. Prior candidate5 Quality271/native passed; browser90pass/1fail/431unrun. Full acceptance requires this replacement candidate.
 
 ## Executed local checks
 
@@ -55,3 +55,9 @@ Candidate5 isolates native organizations9292/9393 from browser9090/9191, preserv
 ## CI5 dirty-navigation test correction
 
 CI5 native gates and Quality passed. Browser B01–B07 passed after83 baseline instances. B08 used page.goto to enter the form, so history.back was cross-document beforeunload (empty browser-controlled text), not Angular canDeactivate. The next candidate enters through the real Mời thành viên routerLink and requires confirm type plus the original Vietnamese message, then independently checks reload beforeunload and explicit accepted Back with zero writes. No application guard changed. Workflow ordering runs invitation51 first and baseline471 second, disjoint collection verified locally; all522 are still required, one worker, retries zero and first failure stops the gate.
+
+CI5 partial artifact12564634780 contains9 desktop invitation states, SHA256496ff7ec27c9337f287511226ff9aed343bf84006245c3637185adae3638c845. Coordinator downloaded, verified and inspected all9 (edit/review/recorded/list/detail/resend-review/revoke-review/unknown/denied); readable dark text, clear primary/secondary actions and no observed overlap. These do not substitute for the final51-image responsive gate.
+
+## CI6 history-restoration source finding
+
+B08 reached and passed both the real confirm type/message on rejected Back and beforeunload cancellation, preserving the draft. A subsequent accepted Back went to /workspace instead of the preceding invitation list. Installed Angular StateManager defaults canceledNavigationResolution to replace, replacing the preceding history entry when a popstate navigation is rejected. Main changes router configuration to computed so rejected traversal restores the original history position. Expected destination and zero-write oracle remain unchanged; all baseline navigation tests must rerun because this is global router configuration. Local lint/format/production build passed on the corrected source; runtime remains pending replacement candidate.
