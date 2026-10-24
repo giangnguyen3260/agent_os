@@ -1,0 +1,290 @@
+<main class="role-wrapper">
+  <nav class="role-breadcrumb" aria-label="Đường dẫn">
+    <a routerLink="/workspace">agentos</a><span>/</span
+    ><a [routerLink]="['/workspace', id, 'members']">Thành viên & quyền</a>
+  </nav>
+  @if (identityChecking() || loading()) {
+    <h1>Sửa vai trò tổ chức</h1>
+    <p role="status">Đang xác thực và tải dữ liệu…</p>
+  } @else {
+    <h1>
+      {{
+        result()
+          ? 'Thay đổi đã được ghi nhận'
+          : unknown()
+            ? 'Chưa xác định kết quả'
+            : denied() ||
+                (context() &&
+                  (context()!.member.isSelf || !context()!.member.enabled))
+              ? 'Không thể sửa vai trò'
+              : stage() === 'review'
+                ? 'Xem lại thay đổi'
+                : 'Sửa vai trò tổ chức'
+      }}
+    </h1>
+    @if (workspace(); as w) {
+      <p>Tổ chức: {{ w.name }}</p>
+    }
+    @if (!denied() && context(); as c) {
+      <p data-testid="role-member">Thành viên: {{ c.member.displayName }}</p>
+    }
+    @if (notice()) {
+      <p class="warning" role="status">{{ notice() }}</p>
+    }
+    @if (denied()) {
+      <p class="error" role="alert">
+        Không thể truy cập dữ liệu này. Cần quyền quản trị viên hiện tại trong
+        tổ chức.
+      </p>
+    }
+    @if (error()) {
+      <p class="error" role="alert">{{ error() }}</p>
+    }
+    @if (unknown()) {
+      <section class="role-content" aria-label="Khôi phục kết quả">
+        <p class="warning">
+          Mất hoặc sai phản hồi: yêu cầu có thể đã được ghi nhận. Không suy ra
+          thành công hoặc thất bại.
+        </p>
+        <p>
+          Không tạo yêu cầu thay thế. Chỉ gửi lại giống hệt khi còn nội dung gốc
+          và quyền quản trị mới.
+        </p>
+        @if (canRetry()) {
+          <button class="button secondary" type="button" (click)="retry()">
+            Gửi lại đúng yêu cầu này
+          </button>
+        }
+        <button
+          class="button secondary"
+          type="button"
+          [disabled]="busy()"
+          (click)="load()"
+        >
+          Kiểm tra biên nhận
+        </button>
+        <p class="caption">
+          Chưa có biên nhận hoặc vai trò hiện tại đã thay đổi vẫn không xác định
+          kết quả cũ. Rời trang có thể làm mất khóa khôi phục.
+        </p>
+      </section>
+    } @else if (!denied()) {
+      @if (result(); as r) {
+        <section
+          class="role-content"
+          data-testid="role-result"
+          aria-label="Biên nhận lịch sử"
+        >
+          <p class="caption">Biên nhận lịch sử đã xác thực</p>
+          <h2>{{ r.beforeRole }} → {{ r.afterRole }}</h2>
+          <p>Tác nhân: {{ r.actorName }} · {{ r.actorId }}</p>
+          <p>Tổ chức: {{ r.organizationId }} · Thành viên: {{ r.accountId }}</p>
+          <p>Sự kiện: {{ r.eventId }}</p>
+          <p>
+            Ghi nhận:
+            <time [attr.datetime]="r.recordedAt">{{ r.recordedAt }}</time>
+          </p>
+          <p>Phiên bản ghi nhận: {{ r.revision }}</p>
+          <p>Đây là kết quả lịch sử, không phải vai trò hiện tại.</p>
+          <a
+            class="button secondary"
+            [routerLink]="['/workspace', id, 'members']"
+            >Làm mới thành viên</a
+          >
+          <button
+            class="button secondary"
+            type="button"
+            [disabled]="busy() || historyLoading()"
+            (click)="loadHistory(0)"
+          >
+            Xem lịch sử vai trò
+          </button>
+        </section>
+      } @else if (context(); as c) {
+        <section class="role-content" [attr.aria-busy]="busy()">
+          @if (c.member.isSelf || !c.member.enabled) {
+            <h2>Chỉ xem · không thể sửa vai trò</h2>
+            @for (code of c.blockers; track code) {
+              <p>{{ blocker(code) }}</p>
+            }
+            <p>Luôn bảo vệ ít nhất một ADMIN đang hoạt động.</p>
+            <button class="button secondary" type="button" (click)="load()">
+              Làm mới ngữ cảnh
+            </button>
+          } @else if (stage() === 'review') {
+            <div class="review-summary" data-testid="role-review">
+              <h2>Trước: {{ c.member.currentRole }}</h2>
+              <h2>Sau: {{ c.selectedRole }}</h2>
+              <p class="reason">Lý do: {{ reason }}</p>
+              <p>
+                Đã kiểm tra:
+                <time [attr.datetime]="c.checkedAt">{{ c.checkedAt }}</time>
+              </p>
+              <p>Phiên bản: {{ c.revision }}</p>
+            </div>
+            <p class="warning">
+              Grant duyệt riêng biệt được GIỮ NGUYÊN. Hạ ADMIN xuống MEMBER
+              không thu hồi quyền duyệt đã cấp.
+            </p>
+            <a
+              class="button secondary"
+              [routerLink]="[
+                '/workspace',
+                id,
+                'members',
+                accountId,
+                'approval-grants',
+              ]"
+              >Xem grant của thành viên</a
+            >
+            <p>
+              ADMIN: tăng quyền quản trị. MEMBER: mất quyền quản trị ở lần xác
+              thực mới; không hủy hồi tố tác vụ đang chạy. Xem grant chỉ dành
+              cho ADMIN được kiểm tra quyền mới; có grant duyệt không cấp quyền
+              xem danh sách.
+            </p>
+            <label class="ack"
+              ><input
+                type="checkbox"
+                name="acknowledgement"
+                [(ngModel)]="acknowledgement"
+                [disabled]="busy()"
+              />Tôi xác nhận thay đổi vai trò tổ chức này.</label
+            >
+            <button
+              class="button"
+              type="button"
+              [disabled]="!acknowledgement || busy()"
+              (click)="send()"
+            >
+              Lưu vai trò
+            </button>
+            <button
+              class="button secondary"
+              type="button"
+              [disabled]="busy()"
+              (click)="edit()"
+            >
+              Quay lại chỉnh sửa
+            </button>
+          } @else {
+            <p class="caption">Vai trò hiện tại · chỉ đọc</p>
+            <h2>
+              {{ c.member.currentRole }} · {{ roleLabel(c.member.currentRole) }}
+            </h2>
+            <form (ngSubmit)="review()" class="role-form">
+              <label for="new-role">Vai trò mới</label>
+              <select
+                id="new-role"
+                name="newRole"
+                required
+                [(ngModel)]="newRole"
+                (ngModelChange)="changed()"
+                [disabled]="busy()"
+              >
+                <option value="">Chọn vai trò…</option>
+                <option value="ADMIN">ADMIN · Quản trị viên tổ chức</option>
+                <option value="MEMBER">MEMBER · Thành viên tổ chức</option>
+              </select>
+              <p class="caption">ADMIN / MEMBER · Chưa chọn mặc định</p>
+              <label for="role-reason">Lý do</label
+              ><textarea
+                id="role-reason"
+                name="reason"
+                required
+                [(ngModel)]="reason"
+                (ngModelChange)="changed()"
+                [disabled]="busy()"
+                placeholder="Nhập lý do thay đổi…"
+                aria-describedby="reason-help"
+              ></textarea>
+              <p class="caption" id="reason-help">
+                Bắt buộc · Tối đa 1000 ký tự Unicode sau khi bỏ khoảng trắng ở
+                hai đầu.
+              </p>
+              @for (code of c.blockers; track code) {
+                <p class="error">{{ blocker(code) }}</p>
+              }
+              @if (c.revision === 2147483647) {
+                <p class="error">
+                  Không thể tạo thay đổi mới: phiên bản đã đạt giới hạn.
+                </p>
+              }
+              <p>
+                ADMIN mở rộng quản trị tổ chức; không tạo grant duyệt hoặc quyền
+                thực thi. MEMBER loại bỏ quản trị ở lần kiểm tra mới.
+              </p>
+              <button
+                class="button secondary"
+                type="submit"
+                [disabled]="!canReview() || c.revision === 2147483647"
+              >
+                Xem lại thay đổi
+              </button>
+            </form>
+          }
+        </section>
+      }
+      @if (historyLoading()) {
+        <p role="status">Đang tải lịch sử vai trò…</p>
+      }
+      @if (history(); as h) {
+        <section class="role-content" aria-label="Lịch sử vai trò">
+          <h2>Lịch sử vai trò · chỉ đọc · ADMIN</h2>
+          @for (item of h.items; track item.id) {
+            <article class="history-event" data-testid="role-history-event">
+              <h2>{{ item.beforeRole }} → {{ item.afterRole }}</h2>
+              <p>{{ item.actorName }} · {{ item.actorId }}</p>
+              <p>Sự kiện: {{ item.id }} · Phiên bản: {{ item.revision }}</p>
+              <p>
+                <time [attr.datetime]="item.recordedAt">{{
+                  item.recordedAt
+                }}</time>
+              </p>
+              <p class="reason">{{ item.reason }}</p>
+            </article>
+          } @empty {
+            <p>
+              Chưa có sự kiện vai trò được ghi nhận. Không có dữ liệu nguồn gốc
+              cho trạng thái cũ.
+            </p>
+          }
+          <nav class="pagination" aria-label="Phân trang lịch sử vai trò">
+            <button
+              class="button secondary"
+              type="button"
+              [disabled]="historyPage === 0 || busy()"
+              (click)="loadHistory(historyPage - 1)"
+            >
+              Trang trước</button
+            ><span>Trang {{ historyPage + 1 }} · {{ h.total }} sự kiện</span
+            ><button
+              class="button secondary"
+              type="button"
+              [disabled]="
+                (historyPage + 1) * 20 >= h.total ||
+                historyPage >= 100000 ||
+                busy()
+              "
+              (click)="loadHistory(historyPage + 1)"
+            >
+              Trang sau
+            </button>
+          </nav>
+        </section>
+      }
+    }
+    @if (!unknown() && !context() && !result()) {
+      <button class="button secondary" type="button" (click)="load()">
+        Làm mới ngữ cảnh
+      </button>
+    }
+    <p class="caption">
+      Chỉ quản trị viên hiện tại được đổi vai trò của thành viên khác đang hoạt
+      động.
+    </p>
+    <a class="button secondary" [routerLink]="['/workspace', id, 'members']"
+      >Về thành viên & quyền</a
+    >
+  }
+</main>

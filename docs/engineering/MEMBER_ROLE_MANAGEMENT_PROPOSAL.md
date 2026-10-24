@@ -1,6 +1,8 @@
-# Member organization role management — proposal
+# Member organization role management — historical proposal
 
-Status: PROPOSED, not an approved authorization policy and not implemented. Branch feature/member-role-management stacks on draft/unmerged PR23 at3da67e2fa03432ad63e28509e53d188ea8bd91a0. The verified application beneath it is838b1d9 (176 backend/435 browser passes). Those counts verify the earlier grant feature, not this proposal.
+Decision update24 October2026: the user requested continuation after the recommended A/B proposal. The implementation proceeds with recommended A as stated in the coordinator update; [MEMBER_ROLE_MANAGEMENT_CONTRACT.md](MEMBER_ROLE_MANAGEMENT_CONTRACT.md) is the active contract. This original proposal remains a historical review record. PR24 stays draft/unmerged.
+
+Historical status: PROPOSED, not an approved authorization policy and not implemented. Branch feature/member-role-management stacks on draft/unmerged PR23 at3da67e2fa03432ad63e28509e53d188ea8bd91a0. The verified application beneath it is838b1d9 (176 backend/435 browser passes). Those counts verify the earlier grant feature, not this proposal.
 
 Review assets: [15 provisional Figma views](https://www.figma.com/design/5wUjDKXg8vtRaJcO9XHfml?node-id=124-7180), [exact frame handoff](MEMBER_ROLE_MANAGEMENT_FIGMA.md), [independent proposal review](../qc/MEMBER_ROLE_MANAGEMENT_PROPOSAL_REVIEW.md), [24 prospective acceptance scenarios](../qc/MEMBER_ROLE_MANAGEMENT_TEST_CASES.md). All Figma views are marked ĐỀ XUẤT — CHƯA DUYỆT; no interactive save or implemented role writer is claimed.
 

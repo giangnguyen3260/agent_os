@@ -1,0 +1,50 @@
+# Member role management — independent QC review
+
+24 October 2026. Candidate A is authorized under `docs/engineering/MEMBER_ROLE_MANAGEMENT_CONTRACT.md`. This review concerns the active implementation; the proposal review is historical and unchanged. Working branch: feature/member-role-management. Source review is of an evolving uncommitted tree based on HEAD090992153482ff55927b2d5d818550ffd4b12f11, not certification of a final release candidate.
+
+## Evidence and disposition
+
+No concrete P1 was identified in the backend source available at this checkpoint. This is not runtime acceptance. Twelve browser cases have been added; JavaScript syntax checking succeeds. Actual Playwright collection reports36 new instances at1440/768/390 and471 total instances in22 files, preserving435 existing instances. No local browser execution: the installed Playwright package has no Chromium executable, and E2E_PASSWORD is unset. Screenshots, backend/native gates, Docker/restart and final browser execution remain pending with the main worker. No commit, merge, production deployment or Mac deployment was performed by this reviewer.
+
+## Backend independent source observations
+
+Reviewed MemberRoleManagementController, MemberRoleManagementCommandDeserializer, MemberRoleManagementResponse, MemberRoleManagementService and V014__member_role_management.sql.
+
+- Controller and records match context/result/history endpoints and declared field sets. Strict UUID and enum parsing precedes service calls; command parser rejects unknown/missing/null/coerced fields and enables duplicate detection. Reason normalization uses Java strip and code-point bounds with permitted internal TAB/LF/CR.
+- Reads use read-only REPEATABLE_READ and current enabled/version-matching same-organization ADMIN authorization. Context proves membership before profile access. History scopes through retained events or current membership and does not fetch a removed target profile. Receipt lookup scopes actor/org/key, returns null for wrong target, and independently reauthorizes.
+- New mutations use READ_COMMITTED and acquire organization mutex first. The exact-receipt branch locks only actor account/membership, reauthorizes and returns before target checks. The new-write branch proves target membership, sorts distinct actor/target UUID strings, acquires global accounts then memberships then ledger, and rechecks actor authority and target/revision after waits. No arbitrary administrator account locks are taken for counting.
+- Revision/current-role conflict precedes self/disabled/no-op rejection; overflow is rejected before ledger insertion. One timestamp is captured after waits. Membership, ledger, event, receipt and safe audit insertion share the transaction. Audit payload contains account/event IDs only. Runtime rollback and actual lock waits require the native/BE evidence lanes.
+- V014 is additive. Ledger/event/receipt FKs reference organizations/global humans, not live membership. Receipt has the composite event FK and org/actor/key primary key. Event transitions and revision uniqueness are constrained. There is no provenance update/delete API in this slice.
+- Canonical hashing uses a sorted map serialized as a JSON string then UTF-8; literal Unicode vectors require production-validator test execution. No timestamp-format or scaling defect is inferred from source alone.
+
+## Frontend independent source observations
+
+Reviewed the available member-role-management service/component and navigation guard as they arrived; template/styles, role route and member-card integration were subsequently reviewed after arrival.
+
+- Service validators require exact field sets, matching org/account/actor/transition/revision/key and consistent blockers; private extra fields cannot be accepted as valid DTOs. History checks fixed page size, bounded page, total-derived length, unique IDs and descending microsecond time/ID ordering.
+- Component review requests selected-role context again, clears acknowledgement, freezes the command and allocates one key only at final save. POST results are correlated with the frozen transition; current role is not used as an ambiguous-result oracle.
+- Failure retains opaque in-memory correlation for a pending command while clearing private fields and retry body. Account change resets all correlation. Receipt recovery checks current workspace ADMIN before private GET; null receipt in opaque recovery returns without context/history or a replacement command.
+- Focus/visibility revalidation checks both session and workspace, gates private rendering through identityChecking, ignores control-target focus and deduplicates an overlapping check. History callbacks use route/actor generation guards. A first dispatched POST remains correlated when an asynchronous history denial clears private data.
+- The role route uses auth plus the role navigation guard, runs guards always, and calls canLeave on deactivation. The final available template provides contract test IDs, native labeled controls, gated private rendering, explicit unknown/result panels and nonself enabled-member entry links in inventory/card views. Browser behavior and rendered visuals remain unverified. No full accessibility claim is made.
+
+## Browser harness review
+
+The suite uses the native worker's disposable fixture. B04 uses grant-bearing102/202/302 and performs a supported real promotion before UI demotion; native901..930 and cross91/92 remain isolated. B08/B09/B12 SQL authority-loss probes restore viewport actors3/4/5 in finally. Count assumptions do not depend on native enabled-Admin mutations.
+
+Loss/malformed tests first forward the POST to the real backend and require201 before aborting/corrupting only its reply. B07 verifies the real historical receipt before substituting null and keeps that oracle installed through observed original-key/body POST200 replay. No fake successful business result is injected. Navigation tests use actual RouterLink entry, evaluate-triggered Back/reload, actual context-response synchronization before reused-route traversal, and bounded response barriers rather than sleeps. Late POST/history cases hold real responses and restore authority in cleanup.
+
+The matrix in MEMBER_ROLE_MANAGEMENT_TEST_CASES.md distinguishes the36 collected instances from the24 acceptance rows. Seven synthetic screenshot states at all widths are implemented but not yet generated. Main must bind final source tree/commit, CI jobs, native logs and screenshot artifacts before changing this disposition.
+
+
+Additional evidence review: the arriving MemberRoleManagementIntegrationTest contains production-hash vector assertions, strict MockMvc wire/CSRF cases, retained history/replay, revision/ABA/exhaustion, fresh credential authority, grant/credential/other-org preservation and injected final-audit rollback checks. Its concurrent-peer test starts two threads together but does not establish an observed database lock wait; that requirement remains with the native barrier probe. None of these source assertions is counted as an executed pass here.
+
+
+Final available HTML/CSS check: acknowledgement accessible name has a trailing full stop, now accepted by the browser locator; the grant-preservation warning is a sibling of role-review in its containing section, now asserted at that actual section. Edit select/reason label associations, result exact timestamp rendering, ADMIN-only history controls and unknown receipt/retry labels match the suite. CSS supports wrapping/flexible content and mobile button width, but actual overflow and readability remain screenshot/browser oracles. The review wording about not reversing running tasks should be interpreted only within the contract's earlier-serialized-operation limit; no runtime-execution acceptance is implied.
+
+
+Transport-boundary source review: SecurityConfig's existing organization authorization parses organization scope before role-controller dispatch and denies requests when that scope cannot be authorized. Keeping that behavior is secure and preserves shared baseline semantics: authenticated malformed organization rejected by the outer guard403; valid organization/current ADMIN malformed target or receipt/header key reaching strict controller parsing400; anonymous401 and CSRF403 take their earlier transport precedence. These responses disclose no foreign target/profile/reason. No SecurityConfig expansion is required. The main worker is clarifying the broad syntax400 contract statement accordingly; this reviewer changes only the QC expectations. Frozen UUID test source currently asserts target, receipt key and Idempotency-Key400 with valid organization/ADMIN, consistently with this boundary. Runtime verification remains pending; source availability and the reported15 backend tests/native barriers are not counted as passes here.
+
+
+Unicode hardening follow-up: reviewed the arrived role command deserializer, service validator/hash path, role frontend validator and new BE/node assertions. Both Java code-point scans reject isolated D800–DFFF before commandHash can serialize/UTF-8-encode; valid pairs produce supplementary code points and remain valid. The frontend wraps the unchanged shared grant validator with a role-local code-point check, also covering role-history reason validation. Existing combining forms remain unnormalized. The backend test sends escaped ASCII JSON explicitly, avoiding encoder replacement before Jackson, and checks both direct hash/mutation rejection and HTTP400 with unchanged business state. No shared grant-service diff was present in this review.
+
+Executed `node frontend/scripts/test-member-role-management-validation.cjs` from frontend (script path `scripts/test-member-role-management-validation.cjs`): PASS. This runs the production role validators and includes isolated high/low surrogate rejection in form/history, valid paired emoji, code-point bounds, distinct combining forms and existing DTO/correlation checks. This is node validator evidence only; backend/native/browser execution remains with main. No new source defect identified in this technical boundary patch.

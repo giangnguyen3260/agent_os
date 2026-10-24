@@ -1,4 +1,7 @@
-# Member role management: independent preimplementation QC review
+# Member role management: historical preimplementation QC review
+
+Continuation update24 October2026: implementation proceeds with recommended A after the user requested continuation, as stated in the coordinator update. MEMBER_ROLE_MANAGEMENT_CONTRACT.md governs the implementation. The policy-open statements below describe this earlier proposal review; they are not a new request for confirmation. Source/runtime verification is tracked separately in MEMBER_ROLE_MANAGEMENT_REVIEW.md.
+
 
 Disposition: **A/B is the only OPEN user decision; QC-02–04 are CLOSED at proposal-contract level after rereading the appended conditional engineering contract; implementation verification remains future work. Suitable for an explicitly unapproved draft proposal.** Reviewed working-tree proposal on `feature/member-role-management`, HEAD `3da67e2fa03432ad63e28509e53d188ea8bd91a0`. No product approval is inferred from delegation, PR23, or this review. No code/migration implementation, test execution, new pass counts, commit, or deployment is claimed.
 

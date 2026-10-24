@@ -1,3 +1,4 @@
+import {memberRoleNavigationGuard} from './features/members/member-role-navigation.guard';
 import {Routes} from '@angular/router';
 import {grantNavigationGuard} from './features/members/grant-navigation.guard';
 import {authGuard, previewGuard} from './core/auth/auth.guard';
@@ -32,6 +33,20 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./features/workspace/workspace-page.component').then(
         module => module.WorkspacePageComponent,
+      ),
+  },
+  {
+    path: 'workspace/:id/members/:accountId/role',
+    canActivate: [authGuard, memberRoleNavigationGuard],
+    runGuardsAndResolvers: 'always',
+    canDeactivate: [
+      (
+        component: import('./features/members/member-role-management.component').MemberRoleManagementComponent,
+      ) => component.canLeave(),
+    ],
+    loadComponent: () =>
+      import('./features/members/member-role-management.component').then(
+        module => module.MemberRoleManagementComponent,
       ),
   },
   {
