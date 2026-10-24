@@ -1,6 +1,6 @@
 # Member role management — acceptance matrix
 
-IMPLEMENTATION IN PROGRESS / RUNTIME NOT RUN. Candidate A is active under docs/engineering/MEMBER_ROLE_MANAGEMENT_CONTRACT.md following the authorized continuation. The 24 rows below remain acceptance oracles, not pass claims. Twelve real-backend browser cases are implemented and collected at three widths; execution is pending. Preserve the verified PR23 baseline176 backend/435 browser instances; never count that baseline as verification of role editing.
+VERIFIED FOR BOUNDED DEVELOPMENT SCOPE — candidate81bc489 passed192BE/471browser, native PostgreSQL, Docker/restart and21-capture visual review. See [final QC](MEMBER_ROLE_MANAGEMENT_QC_REPORT.md). Candidate A is active under docs/engineering/MEMBER_ROLE_MANAGEMENT_CONTRACT.md following the authorized continuation. The24 rows below map acceptance oracles to their evidence lanes; counts are test instances, not24 independently executed cases. Twelve real-backend browser cases passed at three widths. Preserve the verified PR23 baseline176 backend/435 browser instances; never count that baseline as verification of role editing.
 
 Disposable data: two organizations; enabled actor Admins and Members, shared global accounts in both organizations, disabled/removed/foreign targets, no-history legacy membership, retained role events, matching explicit approval grant and valid sealed preview request. No production seed. Native/browser fixtures must be isolated from each other and existing suites.
 
@@ -31,12 +31,12 @@ Disposable data: two organizations; enabled actor Admins and Members, shared glo
 | MR23 | Responsive keyboard/form/history/error/unknown/recorded states | Label/focus/action semantics, dark readable text, wrapping IDs, no horizontal overflow at1440/768/390; inspect synthetic screenshots | Browser + visual review |
 | MR24 | Full suite, migration, restart/logout, exact candidate binding | Quality/Docker/native/all-browser gates; receipt/session durability where applicable; report exact commit/tree/merge/job/artifact digest | CI + independent QC |
 
-Execution ledger: browser implementation collected, NOT RUN. New case counts are measured independently from these24 acceptance rows. Sonar paused. No production-scale, full accessibility, merge or Mac deployment acceptance is implied.
+Execution ledger:471 browser instances passed, including36 role instances;192 backend tests and native/restart gates passed. New case counts are measured independently from these24 acceptance rows. Sonar paused. No production-scale, full accessibility, merge or Mac deployment acceptance is implied.
 
 
 ## Implemented browser mapping — 24 October 2026
 
-Source: `frontend/tests/e2e/member-role-management.spec.mjs`. `node --check` succeeds; Playwright collection reports 36 role instances and 471 total instances in 22 files (435 existing + 36 new). Collection does not execute the app. Local Chromium executable and E2E_PASSWORD are absent; no screenshots or runtime passes are claimed.
+Source: `frontend/tests/e2e/member-role-management.spec.mjs`. `node --check` succeeds; Playwright collection reports 36 role instances and 471 total instances in 22 files (435 existing + 36 new). Collection does not execute the app. At initial authoring, local Chromium and E2E_PASSWORD were absent. Final execution used the isolated CI stack and is recorded in the final QC report.
 
 | Browser case | Matrix rows | Concrete oracle |
 | --- | --- | --- |
@@ -55,9 +55,9 @@ Source: `frontend/tests/e2e/member-role-management.spec.mjs`. `node --check` suc
 
 Fixture: role organization80808080-8080-4080-8080-808080808080; accounts8080; browser ranges101..120/201..220/301..320. Browser ADMIN actors3/4/5 are restored in finally after every SQL demotion. Native targets901..930 and cross actors91/92 are not browser mutations. B02 does not save; B04 alone mutates the *02 grant-bearing target. Enabled-Admin count is not assumed fixed. SQL role changes model out-of-band authority loss only and do not claim supported-writer revision guarantees.
 
-Seven screenshot states per project: edit, review, recorded, history, error, unknown, denied. Names are `member-role-management-{desktop|tablet|mobile}-{state}.png`; all content comes from disposable synthetic fixture data. The screenshot helper also checks horizontal overflow. Pixel appearance, keyboard coverage and all21 images still require actual execution and inspection.
+Seven screenshot states per project: edit, review, recorded, history, error, unknown, denied. Names are `member-role-management-{desktop|tablet|mobile}-{state}.png`; all content comes from disposable synthetic fixture data. The screenshot helper also checks horizontal overflow. All21 final CI images were downloaded, digest-verified and inspected by the coordinator; bounded keyboard/overflow assertions passed in the browser suite.
 
-Native/BE evidence remains required for retained removed-member history, strict wire/CSRF, canonical digest vectors, audit rollback, overflow, observed lock races, post-demotion administrative denial and actual approval by a demoted explicit grantee. B04 proves grant preservation only; it does not substitute for the native eligible-approval probe. Final gate publication and exact candidate binding belong to the main worker.
+The completed Native/BE gates cover retained removed-member history, strict wire/CSRF, canonical digest vectors, audit rollback, overflow, observed lock races, post-demotion administrative denial and actual approval by a demoted explicit grantee. B04 proves grant preservation only; it does not substitute for the native eligible-approval probe. Final gate publication and exact candidate binding belong to the main worker.
 
 
 Transport precedence clarification (authorized main-worker direction): retain existing SecurityConfig. An organization identifier rejected by the outer organization guard yields403 for an authenticated request; it cannot establish organization authority. With a valid organization and authorized ADMIN, malformed target/receipt key/idempotency key reaching the role controller yields400. Anonymous authentication401 and missing/invalid CSRF403 are earlier transport decisions. The broad syntax400 oracle applies after those guards. This is a scoped contract clarification, not permission to widen shared security behavior. Any new malformed-organization transport test must expect the existing outer403; no such browser assertion is currently present.

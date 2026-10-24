@@ -1,5 +1,7 @@
 # Member role management — Candidate A implementation design handoff
 
+Implementation follow-up: candidate81bc489 passed development runtime gates and all21 final responsive captures were inspected; see [final QC](../qc/MEMBER_ROLE_MANAGEMENT_QC_REPORT.md). The designer handoff and its pending statements below are the historical design-stage record, not the current implementation status. PR24 stays draft/unmerged.
+
 Status: READY FOR FE DESIGN CONTEXT — Candidate A / implementation draft. Active authority is MEMBER_ROLE_MANAGEMENT_CONTRACT.md. Main proceeds with recommended A, inferred from the user's continuation after A/B; this is not a fabricated explicit “I choose A” quote. Historical proposal-unapproved / A/B-open claims in the earlier version of this handoff are superseded for this continuation. Implementation, acceptance and QC remain pending; no actual role save, application behavior, endpoint registration, test execution or deployment is claimed. Invitations remain separate and OPEN.
 
 File: https://www.figma.com/design/5wUjDKXg8vtRaJcO9XHfml?node-id=124-7180

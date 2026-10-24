@@ -405,7 +405,7 @@ Membership removal does not cascade these records. Existing grants retain their 
 V013 and scoped management transactions were verified against native PostgreSQL on candidate838b1d9. See [final QC](docs/qc/APPROVAL_GRANT_MANAGEMENT_QC_REPORT.md); production rollout remains separate.
 
 
-## V014 member role management — implementation pending runtime acceptance
+## V014 member role management — verified development scope
 
 | Table | Keys and relation | Purpose |
 | --- | --- | --- |
@@ -414,3 +414,5 @@ V013 and scoped management transactions were verified against native PostgreSQL 
 | member_role_receipts | PK org/actor/key; composite org/actor/event FK | Canonical UTF-8 command fingerprint and durable historical result |
 
 No live membership FK/cascade or production seed. Supported future membership removal/rejoin writers must participate in the revision/incarnation protocol; privileged direct SQL bypass is outside ABA protection. A role change updates existing membership and commits ledger/event/receipt/safe audit atomically without changing grant tables, sessions or credentials. See [V014 runbook](backend/MEMBER_ROLE_MANAGEMENT_MIGRATION.md) and [contract](docs/engineering/MEMBER_ROLE_MANAGEMENT_CONTRACT.md).
+
+V014 development runtime acceptance is bound to candidate81bc489 and its exact CI/tree evidence in [final QC](docs/qc/MEMBER_ROLE_MANAGEMENT_QC_REPORT.md); PR24 remains draft/unmerged.

@@ -1,6 +1,6 @@
 # V014 member organization role management rollout
 
-Implementation contract: docs/engineering/MEMBER_ROLE_MANAGEMENT_CONTRACT.md. Runtime acceptance is pending until an exact-candidate QC report records actual gates. Prior176BE/435browser results belong to the PR23 baseline, not this migration.
+Implementation contract: docs/engineering/MEMBER_ROLE_MANAGEMENT_CONTRACT.md. Development runtime acceptance is recorded for candidate81bc489 in [final QC](../docs/qc/MEMBER_ROLE_MANAGEMENT_QC_REPORT.md):192BE/471browser, native PostgreSQL, Docker and restart/logout passed. PR24 remains draft/unmerged. Earlier176BE/435browser results belong to the PR23 baseline.
 
 V014 is additive after V013: member_role_ledgers, member_role_events and member_role_receipts. It does not create accounts/memberships, change legacy roles, fabricate provenance or seed production data. Never run scripts/member-role-management-ci-fixture.sql in production. Back up memberships, role provenance, existing approval grants and audit data before rollout; apply Flyway forward migrations without rewriting V001–V013 or a destructive down migration.
 
