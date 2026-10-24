@@ -19,8 +19,9 @@ import urllib.parse
 import urllib.request
 import uuid
 
-ORG = '90909090-9090-4090-8090-909090909090'
-FOREIGN = '91919191-9191-4191-8191-919191919191'
+# Native orgs are disjoint from browser 9090/9191, including mail/event history.
+ORG = '92929292-9292-4292-8292-929292929292'
+FOREIGN = '93939393-9393-4393-8393-939393939393'
 BASE = os.getenv('E2E_BASE_URL', 'http://127.0.0.1:18080')
 MAIL = os.getenv('E2E_MAILPIT_URL', os.getenv('MAILPIT_URL', 'http://127.0.0.1:8025'))
 ROOT = Path(__file__).resolve().parents[1]
@@ -181,9 +182,12 @@ def fingerprint(operation, email=None, expected=None, invitation=None, actor=ide
 
 def vectors():
     invitation='90910000-0000-4000-8000-000000000101'
-    assert fingerprint('CREATE_INVITATION','invitee@example.test')=='c651c65696a23ed4e1e2c62e195d3d34a9c42bcefb9cd19a6612d4184209d6bd'
-    assert fingerprint('RESEND_INVITATION',expected=1,invitation=invitation)=='ff65bf6d78ea6d5a116bc50ac85e767281a78b60aa53af29697f48028b3e7279'
-    assert fingerprint('REVOKE_INVITATION',expected=2,invitation=invitation)=='41980eca49a300e04909063913b2757609beea5e555961501c0796f7b1ef42c8'
+    # Published contract vectors retain their literal org; native isolation must
+    # never silently change the canonical fingerprint test input.
+    org='90909090-9090-4090-8090-909090909090'
+    assert fingerprint('CREATE_INVITATION','invitee@example.test',org=org)=='c651c65696a23ed4e1e2c62e195d3d34a9c42bcefb9cd19a6612d4184209d6bd'
+    assert fingerprint('RESEND_INVITATION',expected=1,invitation=invitation,org=org)=='ff65bf6d78ea6d5a116bc50ac85e767281a78b60aa53af29697f48028b3e7279'
+    assert fingerprint('REVOKE_INVITATION',expected=2,invitation=invitation,org=org)=='41980eca49a300e04909063913b2757609beea5e555961501c0796f7b1ef42c8'
     print('PASS three literal canonical UTF8 SHA256 vectors (local serialization only)')
 
 def outage_command(name):
@@ -479,7 +483,7 @@ def main():
     # before HTTP acceptance starts; no locked business row is changed afterward.
     r=create(admin,'invitation-existing-908@example.test'); token=mail_token(r['email'])
     recipient908=Client('existing-908')
-    sql(f"INSERT INTO member_role_ledgers(organization_id,account_id,revision) VALUES ('{ORG}','{ident(908)}',17); UPDATE organization_invitations SET expires_at=clock_timestamp()+interval '5 seconds' WHERE id='{r['invitationId']}';")
+    sql(f"INSERT INTO member_role_ledgers(organization_id,account_id,revision) VALUES ('{ORG}','{ident(908)}',17); WITH t AS (SELECT clock_timestamp()+interval '5 seconds' AS expiry) UPDATE organization_invitations SET created_at=t.expiry-interval '72 hours',expires_at=t.expiry FROM t WHERE id='{r['invitationId']}';")
     before=snapshot(r['email'])
     ledger=Holder(f"SELECT revision FROM member_role_ledgers WHERE organization_id='{ORG}' AND account_id='{ident(908)}' FOR UPDATE")
     try:
@@ -501,7 +505,7 @@ def main():
     # Management must check time after its invitation row lock too. No change
     # to expires_at is made while the writer holds org/human locks.
     r=create(admin,'invitation-native-management-wait@example.test'); mail_token(r['email'])
-    sql(f"UPDATE organization_invitations SET expires_at=clock_timestamp()+interval '5 seconds' WHERE id='{r['invitationId']}';")
+    sql(f"WITH t AS (SELECT clock_timestamp()+interval '5 seconds' AS expiry) UPDATE organization_invitations SET created_at=t.expiry-interval '72 hours',expires_at=t.expiry FROM t WHERE id='{r['invitationId']}';")
     invitation=Holder(f"SELECT id FROM organization_invitations WHERE id='{r['invitationId']}' FOR UPDATE")
     try:
         with futures.ThreadPoolExecutor(1) as pool:
@@ -566,6 +570,11 @@ def main():
         sql(f"UPDATE organization_memberships SET role='ADMIN' WHERE organization_id='{ORG}' AND account_id='{ident(902)}';")
     print('PASS issuer loss, explicit resend reauthorization, fixed expiry, revoke and historical receipts')
     smtp_outage(admin, anonymous)
+    # Handoff oracle: native artifacts cannot poison browser pages, and even
+    # synthetic native expiry fixtures keep the production 72-hour invariant.
+    assert sql(f"SELECT count(*) FROM organization_invitations WHERE organization_id IN ('{ORG}','{FOREIGN}') AND expires_at<>created_at+interval '72 hours';") == '0'
+    assert sql("SELECT count(*) FROM organization_invitations WHERE organization_id IN ('90909090-9090-4090-8090-909090909090','91919191-9191-4191-8191-919191919191');") == '0'
+    print('PASS native/browser organization isolation and coherent 72-hour fixture lifetimes')
     assert time.monotonic()-START<295
     print('Native invitation probe completed; additional gates listed in QC review must also pass.')
 
