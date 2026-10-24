@@ -34,3 +34,7 @@ Pending source/fixture. No executed passes, screenshots, CI results or final acc
 ### AGM-B11 — dispatched revoke plus late history denial (all three widths)
 
 Use isolated viewport target+11. Create a real grant, hold the real committed201 revoke reply, then demote the issuer and release the in-flight history request to obtain a real403. Require private-data erasure, unknown state and no POST retry. Restore ADMIN and recover only the exact operation/key receipt by GET; late original POST response must not change the recovered result. Role and barrier cleanup are mandatory. Suite now collects435 instances, including33 management cases. Collection is not execution.
+
+## Final execution
+
+All11 cases passed on desktop1440×1000,tablet768×1024,mobile390×844 (33 management instances); entire suite435 passed with no failures/skips on candidate838b1d9e091cd985e6937280e03e8be3cd5ef767. Isolated CI fixtures were freshly provisioned before native/browser execution. Docker run40007019847/job120597403681 completed browser execution2026-10-23T19:12:43Z and restart/logout2026-10-23T19:13:23Z. Quality run40007020133/job120597404879 passed176 backend tests and FE checks. See APPROVAL_GRANT_MANAGEMENT_QC_REPORT.md for source/merge/artifact binding, review and limitations. Earlier pending notes are historical.

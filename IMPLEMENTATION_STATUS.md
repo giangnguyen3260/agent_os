@@ -1,6 +1,6 @@
-# Implementation status — 23 October 2026
+# Implementation status — 24 October 2026
 
-Approval grant management is implemented on `feature/approval-grant-management` in draft [PR23](https://github.com/giangnguyen3260/agent_os/pull/23), with runtime acceptance pending CI. Accepted policy A permits fresh Org Admins to issue explicit Team/PUBLISH_PREVIEW LOW–HIGH grants to another enabled member/admin for 1–168 hours, and revoke one existing grant. V013 stores revision ledgers, restricted history and durable idempotency receipts. Responsive Angular flows include review, acknowledgement and unknown-outcome recovery. Local FE lint/format/build and validator boundary probes passed; 435 browser cases collected, not yet executed on the final candidate. See [current contract](docs/engineering/APPROVAL_GRANT_MANAGEMENT_CONTRACT.md) and [QC gates](docs/qc/APPROVAL_GRANT_MANAGEMENT_REVIEW.md). Older slice statements below describe their historical scope; invitations, role changes and runtime execution remain unavailable.
+Approval grant management is verified on `feature/approval-grant-management` in draft [PR23](https://github.com/giangnguyen3260/agent_os/pull/23). Candidate `838b1d9` passed176 backend tests,435 real-backend browser instances (33 management), native PostgreSQL concurrency/rollback/revocation checks and Docker restart/logout. All21 synthetic responsive captures were inspected at1440/768/390. Accepted policy A supports issuing explicit Team/PUBLISH_PREVIEW LOW–HIGH grants to another enabled member/admin for1–168hours, and revoking one existing grant. V013 persists restricted history and durable receipts. See [contract](docs/engineering/APPROVAL_GRANT_MANAGEMENT_CONTRACT.md), [final QC](docs/qc/APPROVAL_GRANT_MANAGEMENT_QC_REPORT.md) and [migration](backend/APPROVAL_GRANT_MANAGEMENT_MIGRATION.md). PR remains draft/unmerged; invitations, role changes and runtime execution remain unavailable. Older slice statements below describe their historical scope.
 
 ## Current branch outcome
 
@@ -56,7 +56,7 @@ Prior workspace application revision `4f3e795` passed 33 backend tests and 33 br
 | Agent Studio Draft edits | Development gate verified; 66 backend tests, 117 browser instances and native PostgreSQL version/replay probe |
 | Agent Draft creation | Development gate verified; 57 backend tests and 96 browser instances, plus native PostgreSQL retry probe |
 | Approval detail and information exchange | Bounded PUBLISH_PREVIEW decision and real question/requester reply flows verified; producer, grant management and execution remain unavailable |
-| Member access inventory | ADMIN-only persisted membership/grant-lifecycle inspection verified; role/grant/invitation writes unavailable |
+| Member access and approval grants | ADMIN-only persisted inventory plus bounded issue/revoke/history/recovery verified; role/invitation writes unavailable |
 | Task mutation/execution, team/agent activation, complete effective grant management and administration | Full designed flows incomplete; older static previews remain blocked |
 | Production security/scale | Complete roles/grants, load/failover, full visual/accessibility and release hardening not accepted |
 

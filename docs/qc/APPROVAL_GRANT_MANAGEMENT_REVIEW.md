@@ -73,3 +73,13 @@ Review found missing shared-session focus revalidation and loss of opaque correl
 Native probe now mutates copies906/907/908 of legacy rows6/7/8, preserving browser inspection fixtures. Candidatee917e14 reached real browser execution after native management gate success; final FE/review corrections still require a new exact-candidate run.
 
 Final scoped source follow-up closed the organization-change-during-focus-check finding. Added B11 (three widths) for a real late history403 after a real committed REVOKE, private erasure and GET-only receipt recovery. Production receipt validation also requires ISSUE lifetime to be a whole integer hour in1..168, including opaque recovery where the original body is unavailable; independent vectors reject half-hour and one-hour-plus-one-microsecond results. Final candidate now requires435 browser instances (402 baseline+33 management). No runtime pass for these final changes is claimed yet.
+
+## Final runtime candidate in progress
+
+Application candidate `e84b076ad2fbcac7d72c77e168e452e41e8aeb4f`, tree`39dc9fe3d308c4b055617cd2e7cdd51a81be8895`, PR merge candidate`5230eae70ef10ae8fb74b04c4c2ac9c8f65128e4`. Quality run40000319858/job120574409220 succeeded:176 backend tests, Google formatting/import checks, FE dependency audit/style/tooling/production build and wire boundary probes. Docker run40000319955/job120574410088 is pending.
+
+Earlier e917e14 Docker run39998665086/job120568738429 completed the native management probe at2026-10-23T17:57:09Z, including both observed post-revoke grant-dependent waiters. Browser B03 then exposed shared native/browser legacy fixtures:47 passed,1 failed,384 not run. Preserving original rows via native-only copies addresses that fixture error without weakening the canRevoke expectation. This earlier run is not final-candidate acceptance.
+
+## Final disposition — supersedes pending checkpoints above
+
+Candidate838b1d9e091cd985e6937280e03e8be3cd5ef767 passed176 backend tests and435 real browser instances, all native PostgreSQL probes, Docker restart/logout and inspection of21 synthetic responsive captures. Final B10 synchronizes actual route-context completion before Back/Forward and observes the real delayed response with a bounded wait; it passed desktop/tablet/mobile. No remaining blocker is recorded for the bounded contract. See APPROVAL_GRANT_MANAGEMENT_QC_REPORT.md for exact runs/jobs/merge binding/artifact digest and limits. Historical failed or collection-only checkpoints above remain an audit trail, not current disposition. PR23 stays draft/unmerged; Sonar paused.
