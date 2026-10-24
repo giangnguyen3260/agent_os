@@ -167,7 +167,8 @@ test.describe('real member role management', () => {
         await interception.fulfill({response: actual, json: body});
       });
       try {
-        await p.goto(route(target)); await expect(p.getByRole('alert')).toBeVisible();
+        await p.goto(route(target));
+        await expect(p.getByRole('alert').filter({hasText: 'Không thể xác thực dữ liệu vai trò.'})).toBeVisible();
         await expect(p.getByTestId('role-member')).toHaveCount(0);
         await expect(p.locator('main')).not.toContainText('SYNTHETIC_PRIVATE_EXTRA@example.test');
       } finally { await p.unroute(pattern); }
@@ -257,7 +258,8 @@ test.describe('real member role management', () => {
       const checked = response(p, `/api/v1/auth/workspaces/${org}`);
       await p.evaluate(() => window.dispatchEvent(new Event('focus')));
       expect((await (await checked).json()).data.role).toBe('MEMBER');
-      await expect(p.getByRole('alert')).toBeVisible(); await privateGone(p, [secret]); await expect(unknown(p)).toHaveCount(0);
+      await expect(p.getByRole('alert').filter({hasText: 'Không thể truy cập dữ liệu này.'})).toBeVisible();
+      await privateGone(p, [secret]); await expect(unknown(p)).toHaveCount(0);
     } finally { restoreRole(actor(info), 'ADMIN'); }
   });
 
