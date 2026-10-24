@@ -225,11 +225,35 @@ test.describe('member invitations independent QC',()=>{
     }finally{await sibling.close();}
   });
 
-  test('INV-B16 foreign detail denial and visibility refresh do not disclose private data or POST',async({page:p},i)=>{
+  test('INV-B16 list outage clears private data, real retry restores list; foreign detail stays denied',async({page:p},i)=>{
     const csrf=await data(p,'/api/v1/auth/csrf');const foreignSession=await p.context().browser().newContext({baseURL:process.env.E2E_BASE_URL||'http://127.0.0.1:8080'});const other=await foreignSession.newPage();let r;
     try {await login(other,'foreign');const c=await data(other,'/api/v1/auth/csrf');const result=await other.request.post(`/api/v1/organizations/${foreign}/invitations`,{headers:{[c.headerName]:c.token,'Idempotency-Key':randomUUID()},data:{email:email(i,16),acknowledgement:true}});expect(result.status()).toBe(201);r=(await result.json()).data;}
     finally{await foreignSession.close();}
-    expect(csrf.token).toBeTruthy();const observedWrites=writes(p);const denied=await observed(p,base+'/'+r.invitationId+'/context',()=>p.goto(home+'/'+r.invitationId));expect(denied.status()).toBe(404);
+    const local=await create(p,email(i,160));
+    expect(csrf.token).toBeTruthy();const observedWrites=writes(p);
+    const listed=await observed(p,base,()=>p.goto(home));expect(listed.status()).toBe(200);
+    expect((await listed.json()).data.items.some(item=>item.id===local.invitationId)).toBe(true);
+    await expect(hook(p,'row').filter({hasText:local.email})).toBeVisible();
+    let faults=0;
+    await p.route(`**${base}?*`,async route=>{
+      if(route.request().method()!=='GET')return route.continue();
+      const actual=await route.fetch();expect(actual.status()).toBe(200);
+      expect((await actual.json()).data.items.some(item=>item.id===local.invitationId)).toBe(true);faults++;
+      await route.fulfill({response:actual,status:503,json:{error:{code:'SERVICE_UNAVAILABLE',message:'Temporary QC transport fault'}}});
+    });
+    try {
+      const failed=await observed(p,base,()=>p.reload());expect(failed.status()).toBe(503);
+      await expect(p.getByRole('alert').filter({hasText:'Chưa thể tải lời mời. Vui lòng thử lại.'})).toBeVisible();
+      await expect(p.getByRole('alert').filter({hasText:'Bạn không có quyền quản lý lời mời trong tổ chức này.'})).toHaveCount(0);
+      for(const state of ['row','detail','review','result'])await expect(hook(p,state)).toHaveCount(0);
+      await expect(p.locator('main')).not.toContainText(local.email);await expect(p.locator('main')).not.toContainText(r.email);
+      expect(faults).toBe(1);expect(observedWrites).toHaveLength(0);
+    }finally{await p.unroute(`**${base}?*`);}
+    const restored=await observed(p,base,()=>button(p,'Thử lại').click());expect(restored.status()).toBe(200);
+    expect((await restored.json()).data.items.some(item=>item.id===local.invitationId)).toBe(true);
+    await expect(hook(p,'row').filter({hasText:local.email})).toBeVisible();
+    await expect(p.getByRole('alert').filter({hasText:'Chưa thể tải lời mời. Vui lòng thử lại.'})).toHaveCount(0);expect(observedWrites).toHaveLength(0);
+    const denied=await observed(p,base+'/'+r.invitationId+'/context',()=>p.goto(home+'/'+r.invitationId));expect(denied.status()).toBe(404);
     await expect(p.getByRole('alert').filter({hasText:'Bạn không có quyền quản lý lời mời trong tổ chức này.'})).toBeVisible();await expect(hook(p,'detail')).toHaveCount(0);await expect(p.locator('main')).not.toContainText(r.email);await p.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));await expect(hook(p,'review')).toHaveCount(0);expect(observedWrites).toHaveLength(0);
   });
 

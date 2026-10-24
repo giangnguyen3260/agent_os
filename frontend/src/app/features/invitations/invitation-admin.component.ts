@@ -126,6 +126,17 @@ export class InvitationAdminComponent {
       !this.destroyed && epoch === this.epoch && actor === this.auth.user()?.id
     );
   }
+  private fail(error: unknown, retain: boolean): void {
+    this.clear(retain);
+    this.phase.set('denied');
+    const denied =
+      error instanceof InvitationAuthorityDenied ||
+      (error instanceof AuthFailure &&
+        ['unauthorized', 'not-found'].includes(error.kind)) ||
+      (error instanceof HttpErrorResponse &&
+        [401, 403, 404].includes(error.status));
+    if (!denied) this.message.set('Chưa thể tải lời mời. Vui lòng thử lại.');
+  }
   private async gate(): Promise<Workspace> {
     const expected = this.actor;
     const actor = await this.auth.session();
@@ -173,10 +184,9 @@ export class InvitationAdminComponent {
       if (result && 'invitation' in result) this.detail.set(result);
       else if (result) this.list.set(result);
       this.phase.set('edit');
-    } catch {
+    } catch (error) {
       if (this.active(epoch, actor)) {
-        this.clear(!!this.recovery);
-        this.phase.set('denied');
+        this.fail(error, !!this.recovery);
       }
     }
   }
@@ -232,10 +242,9 @@ export class InvitationAdminComponent {
       });
       this.acknowledged = false;
       this.phase.set('review');
-    } catch {
+    } catch (error) {
       if (this.active(epoch, actor)) {
-        this.clear(false);
-        this.phase.set('denied');
+        this.fail(error, false);
       }
     } finally {
       if (this.active(epoch, actor)) this.busy = false;
@@ -292,12 +301,10 @@ export class InvitationAdminComponent {
           (error instanceof HttpErrorResponse &&
             [401, 403, 404].includes(error.status))
         ) {
-          this.clear(!!this.recovery);
-          this.phase.set('denied');
+          this.fail(error, !!this.recovery);
         } else if (this.dispatched) this.phase.set('unknown');
         else {
-          this.clear(false);
-          this.phase.set('denied');
+          this.fail(error, false);
         }
       }
     } finally {
@@ -335,8 +342,7 @@ export class InvitationAdminComponent {
           (error instanceof HttpErrorResponse &&
             [401, 403, 404].includes(error.status))
         ) {
-          this.clear(true);
-          this.phase.set('denied');
+          this.fail(error, true);
         } else {
           this.phase.set('unknown');
           this.message.set(
@@ -413,10 +419,9 @@ export class InvitationAdminComponent {
         if (!this.active(epoch, actor)) return;
         this.workspace.set(workspace);
         this.phase.set(this.recovery ? 'unknown' : 'edit');
-      } catch {
+      } catch (error) {
         if (this.active(epoch, actor)) {
-          this.clear(!!this.recovery);
-          this.phase.set('denied');
+          this.fail(error, !!this.recovery);
         }
       }
       return;
@@ -443,10 +448,9 @@ export class InvitationAdminComponent {
       this.list.set(list);
       this.receipt.set(receipt);
       this.phase.set(phase === 'loading' ? 'edit' : phase);
-    } catch {
+    } catch (error) {
       if (this.active(epoch, actor)) {
-        this.clear(!!this.recovery);
-        this.phase.set('denied');
+        this.fail(error, !!this.recovery);
       }
     }
   }

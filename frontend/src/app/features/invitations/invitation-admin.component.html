@@ -17,9 +17,15 @@
       <section class="invitation-panel" aria-label="Quyền truy cập lời mời">
         <h1>Lời mời thành viên</h1>
         <p role="alert">
-          Bạn không có quyền quản lý lời mời trong tổ chức này.
+          {{
+            message() || 'Bạn không có quyền quản lý lời mời trong tổ chức này.'
+          }}
         </p>
         @if (canRecover) {
+          <p role="status">
+            Kết quả thao tác trước vẫn chưa xác định. Kiểm tra biên nhận khi có
+            lại quyền truy cập.
+          </p>
           <button
             class="button"
             type="button"

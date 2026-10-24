@@ -193,8 +193,8 @@ jobs:
         env:
           E2E_BASE_URL: http://127.0.0.1:18080
           E2E_MAILPIT_URL: http://127.0.0.1:18025
-          INV_SMTP_STOP_COMMAND: '["docker","compose","stop","-t","2","mailpit"]'
-          INV_SMTP_START_COMMAND: '["docker","compose","start","mailpit"]'
+          INV_SMTP_STOP_COMMAND: '["docker","compose","pause","mailpit"]'
+          INV_SMTP_START_COMMAND: '["docker","compose","unpause","mailpit"]'
         run: python3 scripts/member-invitations-probe.py
       - name: Install browser test dependencies
         working-directory: frontend

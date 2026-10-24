@@ -193,6 +193,36 @@ def outage_command(name):
     assert isinstance(value, list) and value and all(isinstance(v, str) and v for v in value), name
     return value
 
+
+def mail_ready(email):
+    # Observable HTTP recovery on the same recipient-search API used by
+    # mail_token. This is not proof of SMTP readiness; real delivery remains
+    # mandatory below. Never print the response or exception (URL has email).
+    end = time.monotonic()+8
+    while time.monotonic() < end:
+        try:
+            with urllib.request.urlopen(MAIL+'/api/v1/search?query='+urllib.parse.quote('to:'+email), timeout=2) as response:
+                value = json.load(response)
+                if response.status == 200 and isinstance(value, dict) and isinstance(value.get('messages'), list):
+                    return
+        except (urllib.error.URLError, TimeoutError, ValueError, OSError):
+            pass
+        time.sleep(.1)
+    raise AssertionError('Mailpit HTTP readiness not observed within 8s')
+
+def replacement_job_diagnostic(invitation):
+    # Only the expected generation's enum and bounded counter can be emitted.
+    # No row dumps, invitation identifiers, addresses, capabilities or errors.
+    try:
+        row = sql(f"SELECT state||'|'||attempts FROM invitation_mail_jobs WHERE invitation_id='{invitation}' AND generation=3;")
+        parts = row.split('|')
+        if len(parts) == 2 and parts[0] in ('QUEUED','SENT','FAILED','CANCELLED') and parts[1] in ('0','1','2','3','4','5'):
+            print('Replacement SMTP job generation=3 state='+parts[0]+' attempts='+parts[1], flush=True)
+            return
+    except Exception:
+        pass
+    print('Replacement SMTP job diagnostic unavailable', flush=True)
+
 def smtp_outage(admin, anonymous):
     stop = outage_command('INV_SMTP_STOP_COMMAND')
     start = outage_command('INV_SMTP_START_COMMAND')
@@ -227,6 +257,7 @@ def smtp_outage(admin, anonymous):
     finally:
         # Attempt recovery even if stopping failed halfway or any oracle fails.
         subprocess.run(start, cwd=ROOT, check=True, timeout=10, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    mail_ready(r['email'])
     # FAILED is terminal: recovery alone must not schedule a sixth attempt.
     time.sleep(2)
     assert sql(f"SELECT state||'|'||attempts FROM invitation_mail_jobs WHERE invitation_id='{r['invitationId']}' AND generation=2;") == 'FAILED|5'
@@ -234,7 +265,11 @@ def smtp_outage(admin, anonymous):
     sql(f"UPDATE organization_invitations SET last_requested_at=last_requested_at-interval '61 seconds' WHERE id='{r['invitationId']}';")
     renewed, _ = post(admin, target+'/resend', {'expectedRevision':2,'acknowledgement':True})
     assert renewed['expiresAt'] == r['expiresAt']
-    replacement = mail_token(r['email'], (old,))
+    try:
+        replacement = mail_token(r['email'], (old,))
+    except Exception:
+        replacement_job_diagnostic(r['invitationId'])
+        raise
     assert inspect(anonymous, old)[0] == 400 and inspect(anonymous, replacement)[0] == 200
     assert sql(f"SELECT state||'|'||attempts FROM invitation_mail_jobs WHERE invitation_id='{r['invitationId']}' AND generation=2;") == 'FAILED|5'
     assert sql(f"SELECT expires_at FROM organization_invitations WHERE id='{r['invitationId']}';") == expiry
