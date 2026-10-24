@@ -1,0 +1,97 @@
+.role-wrapper {
+  max-width: 1168px;
+  margin: 0 auto;
+  padding: 16px 24px 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 16px;
+}
+.role-breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+}
+.role-breadcrumb a {
+  color: inherit;
+  text-decoration: none;
+}
+h1 {
+  font-size: 28px;
+  line-height: 36px;
+}
+h2 {
+  font-size: 18px;
+  line-height: 26px;
+}
+.role-content,
+.role-form,
+.review-summary {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  min-width: 0;
+}
+.role-content {
+  background: var(--surface);
+  padding: 16px;
+}
+.caption,
+.role-form > label {
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+}
+.role-form > label {
+  flex: initial;
+}
+.role-form select,
+.role-form textarea {
+  min-width: 0;
+  width: 100%;
+  min-height: 54px;
+  padding: 16px;
+  font: inherit;
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+.role-form textarea {
+  min-height: 88px;
+  resize: vertical;
+}
+.warning {
+  padding: 16px;
+  border-radius: 0;
+}
+.button {
+  align-self: flex-start;
+  min-width: 310px;
+  max-width: 100%;
+}
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.ack {
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+@media (max-width: 599px) {
+  .role-wrapper {
+    padding: 16px 24px 32px;
+  }
+  .button {
+    width: 100%;
+    min-width: 0;
+  }
+}

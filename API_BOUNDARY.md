@@ -684,3 +684,10 @@ The accepted [contract](docs/engineering/APPROVAL_GRANT_MANAGEMENT_CONTRACT.md) 
 POST requires CSRF and UUID Idempotency-Key, returns 201 first/200 exact replay, and performs one atomic grant/ledger/event/receipt/safe-audit transaction. Org mutex precedes globally ordered account locks; fresh authorization follows waits. Read-only preflights never reserve authority. Historical receipt replay is not current eligibility. No provider, Task/Mission or execution side effect is added.
 
 Final candidate838b1d9:176 backend and435 browser instances, native PostgreSQL and Docker restart/logout passed. See [final QC](docs/qc/APPROVAL_GRANT_MANAGEMENT_QC_REPORT.md). PR23 remains draft/unmerged.
+
+
+## Member role management — verified development scope (PR24)
+
+Current contract: [Member role management](docs/engineering/MEMBER_ROLE_MANAGEMENT_CONTRACT.md). Base `/api/v1/organizations/{org}/members/{account}/role-management` exposes ADMIN-only service reads GET `/context` (optional `newRole`), GET `/history?page=0`, GET `/receipts/{key}` and CSRF/idempotent POST collection. New role is ADMIN/MEMBER, target is another enabled current same-org member; no self change. Separate approval grants and global sessions remain unchanged. Read preflight never reserves authority, and historical receipt never proves current role.
+
+Exact commands/DTOs/status precedence, retained removed-target history and actor-scoped replay are defined by the contract. Existing outer security denial precedes controller syntax mapping where applicable. No Owner, invitation, bootstrap/recovery, account enable/disable or membership removal is added. Earlier read-only-role statements describe previous slices. Candidate81bc489 passed192BE/471browser plus native/Docker/restart gates; see [final QC](docs/qc/MEMBER_ROLE_MANAGEMENT_QC_REPORT.md). PR24 remains draft/unmerged.
