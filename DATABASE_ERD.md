@@ -416,3 +416,15 @@ V013 and scoped management transactions were verified against native PostgreSQL 
 No live membership FK/cascade or production seed. Supported future membership removal/rejoin writers must participate in the revision/incarnation protocol; privileged direct SQL bypass is outside ABA protection. A role change updates existing membership and commits ledger/event/receipt/safe audit atomically without changing grant tables, sessions or credentials. See [V014 runbook](backend/MEMBER_ROLE_MANAGEMENT_MIGRATION.md) and [contract](docs/engineering/MEMBER_ROLE_MANAGEMENT_CONTRACT.md).
 
 V014 development runtime acceptance is bound to candidate81bc489 and its exact CI/tree evidence in [final QC](docs/qc/MEMBER_ROLE_MANAGEMENT_QC_REPORT.md); PR24 remains draft/unmerged.
+
+## V015 member invitations — implementation pending runtime acceptance
+
+| Table | Keys/relation | Purpose |
+| --- | --- | --- |
+| organization_invitations | Org/id scope; issuer account/version; unique nullable token digest | Fixed expiry, recipient, revision/generation, lifecycle and current capability digest |
+| invitation_mail_jobs | Invitation/generation unique | Bounded retry queue with no raw token/body |
+| invitation_events | Scoped invitation; unique invitation/revision and org/actor/id | Restricted actor snapshot and membership-join provenance |
+| invitation_receipts | Org/actor/key; scoped event FK | Canonical management replay without repeating side effects |
+| invitation_email_locks | Email digest primary key | Cross-org absent-account serialization before global human locks |
+
+Actual membership insertion creates/advances retained V014 role revision without inventing a role-change event; rejoin never resets history. Existing-account credentials, sessions, explicit grants and other-org roles are preserved. Forward migration only; no production seed. See [V015 runbook](backend/MEMBER_INVITATIONS_MIGRATION.md) and [contract](docs/engineering/MEMBER_INVITATIONS_CONTRACT.md). Runtime gates remain pending.

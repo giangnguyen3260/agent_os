@@ -177,9 +177,34 @@ test.describe('member invitations independent QC',()=>{
     await button(p,'Đăng xuất để đổi tài khoản').click();await expect(p.getByLabel('Họ và tên',{exact:true})).toBeVisible();expect(observedWrites).toHaveLength(0);
   });
 
-  test('INV-B13 expired and erased fragment generic invalid without automatic acceptance',async({page:p},i)=>{
-    const r=await create(p,email(i,13)),token=await tokenFor(p,r.email);sql(`UPDATE organization_invitations SET created_at=created_at-interval '73 hours',expires_at=expires_at-interval '73 hours' WHERE id='${r.invitationId}';`);
-    await anonymous(p);const observedWrites=writes(p);const result=await observed(p,publicBase+'/inspect',()=>p.goto('/invitation#token='+token),'POST');expect(result.status()).toBe(400);expect((await result.json()).error.code).toBe('INVALID_INVITATION');
+  test('INV-B13 inspect faults recover blank review; expired and erased fragment remain invalid',async({page:p},i)=>{
+    const r=await create(p,email(i,13)),token=await tokenFor(p,r.email);
+    await anonymous(p);const observedWrites=writes(p);
+    for(const fault of ['initial-503','preaccept-503','preaccept-malformed']) {
+      if(fault!=='initial-503'){await newFields(p);await ack(p).check();}
+      let injections=0;
+      await p.route(`**${publicBase}/inspect`,async route=>{
+        const actual=await route.fetch();expect(actual.status()).toBe(200);
+        expect((await actual.json()).data.state).toBe('NEW_ACCOUNT');injections++;
+        if(fault.endsWith('503'))await route.fulfill({response:actual,status:503,json:{error:{code:'SERVICE_UNAVAILABLE',message:'Temporary QC transport fault'}}});
+        else await route.fulfill({response:actual,json:{data:{unexpected:true}}});
+      });
+      try {
+        await observed(p,publicBase+'/inspect',()=>fault==='initial-503'?p.goto('/invitation#token='+token):button(p,'Tạo tài khoản và tham gia').click(),'POST');
+        await expect(p.getByRole('heading',{name:'Chưa thể kiểm tra lời mời',exact:true})).toBeVisible();
+        await expect(p.getByRole('heading',{name:'Lời mời không còn hiệu lực',exact:true})).toHaveCount(0);
+        await expect(hook(p,'unknown')).toHaveCount(0);await expect(hook(p,'accept-review')).toHaveCount(0);
+        await expect(p.getByLabel('Mật khẩu mới',{exact:true})).toHaveCount(0);expect(injections).toBe(1);expect(observedWrites).toHaveLength(0);
+        await expect(p).toHaveURL(/\/invitation$/);await storage(p,[token,'Browser invitation pass 2026!']);
+      }finally{await p.unroute(`**${publicBase}/inspect`);}
+      const retry=await observed(p,publicBase+'/inspect',()=>button(p,'Thử lại').click(),'POST');
+      expect(retry.status()).toBe(200);expect((await retry.json()).data.state).toBe('NEW_ACCOUNT');await publicReview(p);
+      for(const name of ['Họ và tên','Mật khẩu mới','Nhập lại mật khẩu'])await expect(p.getByLabel(name,{exact:true})).toHaveValue('');
+      await expect(ack(p)).not.toBeChecked();await expect(button(p,'Tạo tài khoản và tham gia')).toBeDisabled();expect(observedWrites).toHaveLength(0);
+      await storage(p,[token,'Browser invitation pass 2026!']);
+    }
+    sql(`UPDATE organization_invitations SET created_at=created_at-interval '73 hours',expires_at=expires_at-interval '73 hours' WHERE id='${r.invitationId}';`);
+    const result=await observed(p,publicBase+'/inspect',()=>p.goto('/invitation#token='+token),'POST');expect(result.status()).toBe(400);expect((await result.json()).error.code).toBe('INVALID_INVITATION');
     await expect(p).toHaveURL(/\/invitation$/);await expect(p.getByRole('heading',{name:'Lời mời không còn hiệu lực',exact:true})).toBeVisible();await expect(button(p,'Tạo tài khoản và tham gia')).toHaveCount(0);await expect(p.locator('main')).not.toContainText(r.email);await shot(p,i,'public-invalid');
     await p.reload();await expect(button(p,'Tạo tài khoản và tham gia')).toHaveCount(0);expect(observedWrites).toHaveLength(0);
   });

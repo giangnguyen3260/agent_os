@@ -135,13 +135,61 @@ class InvitationIntegrationTest {
 
   @Test
   void invalidPublicCapabilityHasSafeCode() throws Exception {
+    for (String token : new String[] {"x", "a".repeat(43)}) {
+      for (String operation : new String[] {"inspect", "accept"}) {
+        String body =
+            "{\"token\":\""
+                + token
+                + "\""
+                + (operation.equals("accept") ? ",\"displayName\":null,\"password\":null" : "")
+                + "}";
+        mvc.perform(
+                post("/api/v1/auth/invitations/" + operation)
+                    .with(csrf().asHeader())
+                    .contentType("application/json")
+                    .content(body))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error.code").value("INVALID_INVITATION"));
+      }
+    }
+  }
+
+  @Test
+  void validPublicInspectWithCsrfHeaderReachesCapabilityService() throws Exception {
+    String token = capability(invitation());
     mvc.perform(
             post("/api/v1/auth/invitations/inspect")
-                .with(csrf())
+                .with(csrf().asHeader())
                 .contentType("application/json")
-                .content("{\"token\":\"x\"}"))
-        .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.error.code").value("INVALID_INVITATION"));
+                .content("{\"token\":\"" + token + "\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.state").value("NEW_ACCOUNT"))
+        .andExpect(jsonPath("$.data.organizationId").value(org.toString()))
+        .andExpect(jsonPath("$.data.role").value("MEMBER"));
+  }
+
+  @Test
+  void malformedPublicWireWithCsrfHeaderRemainsBadRequest() throws Exception {
+    for (String operation : new String[] {"inspect", "accept"}) {
+      String extra = operation.equals("accept") ? ",\"displayName\":null,\"password\":null" : "";
+      for (String body :
+          new String[] {
+            "{\"token\":null" + extra + "}",
+            "{\"token\":123" + extra + "}",
+            "{\"token\":\"x\",\"token\":\"y\"" + extra + "}",
+            "{\"token\":\"x\",\"unexpected\":true" + extra + "}",
+            "{}",
+            "{"
+          }) {
+        mvc.perform(
+                post("/api/v1/auth/invitations/" + operation)
+                    .with(csrf().asHeader())
+                    .contentType("application/json")
+                    .content(body))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error.code").value("BAD_REQUEST"));
+      }
+    }
   }
 
   @Test
@@ -160,7 +208,7 @@ class InvitationIntegrationTest {
     mvc.perform(
             post(root())
                 .with(actor(admin))
-                .with(csrf())
+                .with(csrf().asHeader())
                 .header("Idempotency-Key", UUID.randomUUID())
                 .contentType("application/json")
                 .content(
@@ -173,7 +221,7 @@ class InvitationIntegrationTest {
     mvc.perform(
             post(root())
                 .with(actor(admin))
-                .with(csrf())
+                .with(csrf().asHeader())
                 .header("Idempotency-Key", UUID.randomUUID())
                 .contentType("application/json")
                 .content(
@@ -186,7 +234,7 @@ class InvitationIntegrationTest {
     mvc.perform(
             post(root())
                 .with(actor(admin))
-                .with(csrf())
+                .with(csrf().asHeader())
                 .header("Idempotency-Key", UUID.randomUUID())
                 .contentType("application/json")
                 .content("{\"email\":\"a@example.test\",\"acknowledgement\":\"true\"}"))
@@ -704,7 +752,7 @@ class InvitationIntegrationTest {
     var response =
         mvc.perform(
                 post("/api/v1/auth/invitations/inspect")
-                    .with(csrf())
+                    .with(csrf().asHeader())
                     .contentType("application/json")
                     .content("{\"token\":\"" + marker + "x".repeat(8192) + "\"}"))
             .andExpect(status().isBadRequest())

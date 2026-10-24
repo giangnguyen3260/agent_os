@@ -41,7 +41,7 @@ The probe has a 295-second cleanup alarm and a 299-second forced process exit, H
 | INV-B10 | Real SMTP fragment erased; anonymous NEW_ACCOUNT fields and review warning; explicit acceptance only; no auto-login or secret storage |
 | INV-B11 | Existing account inline actual login; token remains component memory; no autoaccept after login; explicit null/null acceptance and actual workspace link |
 | INV-B12 | Wrong signed-in account; registration absent; explicit logout restores new-account flow; zero accept |
-| INV-B13 | Real expired DB capability; HTTP 400 INVALID_INVITATION and generic invalid; erased fragment reload cannot recover token; zero accept |
+| INV-B13 | Actual backend 200 inspections with initial/pre-accept 503 and pre-accept malformed reply faults show unavailable, never expiry; real retry restores blank unchecked review, no accept/storage; real expired DB capability; HTTP 400 INVALID_INVITATION and generic invalid; erased fragment reload cannot recover token; zero accept |
 | INV-B14 | Actual acceptance 200 commit with malformed response injection; UNKNOWN remains on focus despite consumed capability; password removed; no auto-replay |
 | INV-B15 | Public name/password draft; sibling real account switch; observed focus clears inputs; explicit logout returns empty fields; no autoaccept |
 | INV-B17 | Real same-document hash replacement: reject dirty confirmation keeps draft, accept clears old secrets and hash; held real old inspection cannot restore SIGN_IN over new empty NEW_ACCOUNT; same document identity, unchecked acknowledgement, zero acceptance POST and no stored secrets |

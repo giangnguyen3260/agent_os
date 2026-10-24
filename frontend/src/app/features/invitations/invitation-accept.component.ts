@@ -137,6 +137,13 @@ export class InvitationAcceptComponent {
   private active(epoch: number): boolean {
     return epoch === this.epoch && !this.destroy.destroyed;
   }
+  private inspectionFailure(error: unknown): 'invalid' | 'unavailable' {
+    return error instanceof HttpErrorResponse &&
+      error.status === 400 &&
+      error.error?.error?.code === 'INVALID_INVITATION'
+      ? 'invalid'
+      : 'unavailable';
+  }
   async inspect(): Promise<void> {
     if (
       this.dispatched ||
@@ -169,13 +176,7 @@ export class InvitationAcceptComponent {
     } catch (error) {
       if (this.active(epoch)) {
         this.context.set(null);
-        this.phase.set(
-          error instanceof HttpErrorResponse &&
-            error.status === 400 &&
-            error.error?.error?.code === 'INVALID_INVITATION'
-            ? 'invalid'
-            : 'unavailable',
-        );
+        this.phase.set(this.inspectionFailure(error));
       }
     } finally {
       if (this.active(epoch)) this.busy = false;
@@ -313,14 +314,14 @@ export class InvitationAcceptComponent {
       this.token = '';
       this.result.set(result);
       this.phase.set('success');
-    } catch {
+    } catch (error) {
       if (this.active(epoch)) {
         this.clean();
         this.busy = false;
         if (this.dispatched) {
           this.token = '';
           this.phase.set('unknown');
-        } else this.phase.set('invalid');
+        } else this.phase.set(this.inspectionFailure(error));
       }
     } finally {
       if (this.active(epoch)) this.busy = false;
