@@ -366,8 +366,13 @@ class MemberRoleManagementIntegrationTest {
     assertThat(write(key).result()).isEqualTo(result);
     jdbc.update("update human_accounts set credential_version=1 where id=?", admin);
     assertThatThrownBy(() -> write(key)).isInstanceOf(AccessDeniedException.class);
-    assertThatThrownBy(() -> service.context(org, outsider, human(member), null))
+    UUID currentMember = account(org, "MEMBER");
+    assertThatThrownBy(() -> service.context(org, outsider, human(currentMember), null))
         .isInstanceOf(AccessDeniedException.class);
+    assertThat(service.context(org, admin, human(member), null).member().accountId())
+        .isEqualTo(admin);
+    assertThatThrownBy(() -> service.context(org, outsider, human(member), null))
+        .isInstanceOf(EntityNotFoundException.class);
     assertThatThrownBy(() -> service.context(org, outsider, human(outsider), null))
         .isInstanceOf(AccessDeniedException.class);
   }

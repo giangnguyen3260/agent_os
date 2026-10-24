@@ -35,7 +35,7 @@ a.password_hash,n<>6 FROM human_accounts a CROSS JOIN
  UNION ALL SELECT generate_series(301,320) UNION ALL SELECT generate_series(901,930)) x WHERE a.email='qc@example.test';
 INSERT INTO organization_memberships(account_id,organization_id,role)
 SELECT id,CASE WHEN id=pg_temp.rm_id('8080',99) THEN '81818181-8181-4181-8181-818181818181'::uuid ELSE '80808080-8080-4080-8080-808080808080'::uuid END,
-CASE WHEN id IN (pg_temp.rm_id('8080',1),pg_temp.rm_id('8080',3),pg_temp.rm_id('8080',4),pg_temp.rm_id('8080',5),pg_temp.rm_id('8080',91),pg_temp.rm_id('8080',92),pg_temp.rm_id('8080',901),pg_temp.rm_id('8080',902),pg_temp.rm_id('8080',904),pg_temp.rm_id('8080',910),pg_temp.rm_id('8080',99)) THEN 'ADMIN' ELSE 'MEMBER' END
+CASE WHEN id IN (pg_temp.rm_id('8080',1),pg_temp.rm_id('8080',3),pg_temp.rm_id('8080',4),pg_temp.rm_id('8080',5),pg_temp.rm_id('8080',91),pg_temp.rm_id('8080',92),pg_temp.rm_id('8080',901),pg_temp.rm_id('8080',902),pg_temp.rm_id('8080',904),pg_temp.rm_id('8080',99)) THEN 'ADMIN' ELSE 'MEMBER' END
 FROM human_accounts WHERE email LIKE 'role-management-%@example.test' AND id<>pg_temp.rm_id('8080',7);
 INSERT INTO organization_memberships(account_id,organization_id,role) VALUES
 (pg_temp.rm_id('8080',91),'82828282-8282-4282-8282-828282828282','ADMIN'),

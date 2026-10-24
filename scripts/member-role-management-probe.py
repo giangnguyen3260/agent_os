@@ -236,7 +236,7 @@ def main():
     assert admin.data(root(905)+'/history')['total']==0
     for target,body,expected in [(1,command(before='ADMIN',after='MEMBER'),400),(6,command(),400),
                                  (7,command(),404),(99,command(),404),(905,command(after='MEMBER'),400),
-                                 (905,command(revision=1,after='MEMBER'),409)]:
+                                 (905,command(revision=1),409)]:
         assert admin.request(root(target),body,str(uuid.uuid4()))[0]==expected
     assert member.request(root(905),command(),str(uuid.uuid4()))[0]==403
     assert admin.request(root(905),command(),str(uuid.uuid4()),csrf=False)[0]==403
@@ -252,9 +252,15 @@ def main():
     assert admin.request(root(905),command(),str(uuid.uuid4()))[0]==409 # ABA
     assert admin.request(root(905),command(reason='é\r\n😀'),key)[1]['data']==result
     sql(f"DELETE FROM organization_memberships WHERE organization_id='{ORG}' AND account_id='{ident('8080',905)}'; UPDATE human_accounts SET enabled=false WHERE id='{ident('8080',905)}';")
-    assert admin.request(root(905)+'/context')[0]==404
-    assert admin.data(root(905)+'/history')['total']==2
-    assert admin.request(root(905),command(reason='é\r\n😀'),key)[1]['data']==result
+    try:
+        assert admin.request(root(905)+'/context')[0]==404
+        assert admin.data(root(905)+'/history')['total']==2
+        assert admin.request(root(905),command(reason='é\r\n😀'),key)[1]['data']==result
+    finally:
+        # Restore this deliberate native fixture change before comparing global state.
+        # Keep the membership removed to retain the removed-target history coverage.
+        sql(f"UPDATE human_accounts SET enabled=true WHERE id='{ident('8080',905)}';")
+    assert preserved()==unchanged
     # Audit failure occurs after all writes. Compare every business table, not just counts.
     sql(f"ALTER TABLE audit_events ADD CONSTRAINT mrm_probe_rollback CHECK (organization_id<>'{ORG}' OR event_type<>'MEMBER_ROLE_CHANGED') NOT VALID;")
     frozen=state()
@@ -352,6 +358,8 @@ def main():
     assert demoted.data(decisions+ident('8050',903))['eligibility']['canApprove']
     assert demoted.request(decisions+ident('8050',903)+'/approve',decision,str(uuid.uuid4()))[0]==201
     # Actor-only replay must reauthorize after waiting, without touching removed target.
+    # Establish native issuer authority through the supported writer before login/locks.
+    change(admin,910)
     replay_client=Client('target-910')
     replay_result,replay_key=change(replay_client,909)
     sql(f"DELETE FROM organization_memberships WHERE organization_id='{ORG}' AND account_id='{ident('8080',909)}';")
@@ -372,7 +380,6 @@ def main():
     assert admin.data(root(905)+f'/receipts/{key}')==result
     # Privileged native test operations above touched only native targets and issuer
     # role was restored. Browser bindings/baseline, grants, credentials and runtime stay exact.
-    sql(f"UPDATE human_accounts SET enabled=true WHERE id='{ident('8080',905)}';")
     assert preserved()==unchanged
     expected_browser=sql(f"SELECT row_to_json(m)::text FROM organization_memberships m WHERE organization_id='{ORG}' AND account_id<'{ident('8080',900)}' AND account_id<>'{ident('8080',92)}' ORDER BY account_id;")
     original_browser='\n'.join(line for line in browser_before.splitlines() if ident('8080',92) not in line)
