@@ -209,8 +209,11 @@ jobs:
         env:
           E2E_BASE_URL: http://127.0.0.1:18080
           E2E_MAILPIT_URL: http://127.0.0.1:18025
-        # Stop on the first regression; success still requires every collected case.
-        run: npm run test:e2e -- --max-failures=1
+        # Run the new 51 invitation instances first, then all 471 baseline cases.
+        # The two disjoint selections preserve the full 522-case gate, retries zero.
+        run: |
+          npm run test:e2e -- --max-failures=1 --grep 'member invitations independent QC'
+          npm run test:e2e -- --max-failures=1 --grep-invert 'member invitations independent QC'
       - name: Upload synthetic Approval Center visual evidence
         if: always()
         uses: actions/upload-artifact@v4

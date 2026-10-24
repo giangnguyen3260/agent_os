@@ -140,8 +140,12 @@ test.describe('member invitations independent QC',()=>{
   });
 
   test('INV-B08 dirty Back and unload cancel, explicit accepted exit',async({page:p},i)=>{
-    const observedWrites=writes(p);await p.goto(home);await openNew(p,email(i,8));
-    const back=p.waitForEvent('dialog');await p.evaluate(()=>history.back());expect((await back).message()).toContain('chưa');await expect(p.getByLabel('Email người nhận',{exact:true})).toHaveValue(email(i,8));
+    const observedWrites=writes(p);await p.goto(home);
+    // Enter through the actual routerLink so Back exercises canDeactivate,
+    // rather than page.goto's cross-document beforeunload with empty text.
+    await p.getByRole('link',{name:'Mời thành viên',exact:true}).click();await expect(p).toHaveURL(new RegExp(home+'/new$'));
+    await p.getByLabel('Email người nhận',{exact:true}).fill(email(i,8));
+    const back=p.waitForEvent('dialog');await p.evaluate(()=>history.back());const guard=await back;expect(guard.type()).toBe('confirm');expect(guard.message()).toContain('chưa');await expect(p.getByLabel('Email người nhận',{exact:true})).toHaveValue(email(i,8));
     const unload=p.waitForEvent('dialog');await p.evaluate(()=>location.reload());expect((await unload).type()).toBe('beforeunload');await expect(p.getByLabel('Email người nhận',{exact:true})).toHaveValue(email(i,8));
     p.removeAllListeners('dialog');p.on('dialog',d=>d.accept());await p.evaluate(()=>history.back());await expect(p).toHaveURL(new RegExp(home+'$'));expect(observedWrites).toHaveLength(0);
   });
