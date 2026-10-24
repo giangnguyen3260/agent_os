@@ -177,7 +177,11 @@ test.describe('real member role management', () => {
       await p.goto(route(n)); await expect(button(p, 'Lưu vai trò')).toHaveCount(0);
     }
     expect((await p.request.get(`${base(99)}/context`)).status()).toBe(404);
-    await p.goto(route(99)); await expect(p.getByRole('alert')).toBeVisible();
+    await p.goto(route(99));
+    await expect(p.getByRole('alert').filter({hasText: 'Không thể truy cập dữ liệu này.'})).toBeVisible();
+    await expect(p.getByTestId('role-member')).toHaveCount(0);
+    await expect(p.getByTestId('role-review')).toHaveCount(0);
+    await expect(button(p, 'Lưu vai trò')).toHaveCount(0);
     await expect(p.locator('main')).not.toContainText('FOREIGN_ROLE_PRIVATE'); await shot(p, info, 'error');
   });
 
