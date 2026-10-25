@@ -84,6 +84,24 @@ async function shot(p, info, state) {
 async function tab(p, name) {
   await button(p, name).click();
 }
+async function cancelReload(p) {
+  const cancelled = p.waitForEvent('dialog').then(async dialog => {
+    expect(dialog.type()).toBe('beforeunload');
+    await dialog.dismiss();
+  });
+  await p.evaluate(() => location.reload());
+  await cancelled;
+}
+async function guardedBack(p, accept) {
+  const decided = p.waitForEvent('dialog').then(async dialog => {
+    expect(dialog.type()).toBe('confirm');
+    expect(dialog.message()).toContain('chưa');
+    if (accept) await dialog.accept();
+    else await dialog.dismiss();
+  });
+  await p.evaluate(() => history.back());
+  await decided;
+}
 async function review(p) {
   await button(p, 'Xem lại thay đổi').click();
   await expect(p.getByTestId('team-settings-review')).toBeVisible();
@@ -258,7 +276,12 @@ test.describe('team settings independent QC', () => {
     await review(p);
     sql(`UPDATE teams SET updated_at=clock_timestamp() WHERE id='${s.team}';`);
     await button(p, 'Lưu thay đổi').click();
-    await expect(p.getByRole('alert')).toBeVisible();
+    await expect(
+      p.getByRole('alert').filter({
+        hasText: 'Cấu hình nguồn đã thay đổi. Bản nháp được giữ;',
+      }),
+    ).toBeVisible();
+    await expect(p.getByTestId('team-settings-blockers')).toBeVisible();
     await shot(p, info, 'stale-source');
     expect(writes).toBe(0);
     const membership = `organization_id='${s.org}' AND account_id=(SELECT id FROM human_accounts WHERE email='settings-${info.project.name}-admin@example.test')`;
@@ -318,12 +341,7 @@ test.describe('team settings independent QC', () => {
     p.once('dialog', d => d.accept());
     await settle(p, s.api, () => p.reload());
     await field(p, 'Purpose').fill('Dirty reload draft');
-    const cancelledReload = p.waitForEvent('dialog').then(async dialog => {
-      expect(dialog.type()).toBe('beforeunload');
-      await dialog.dismiss();
-    });
-    await p.evaluate(() => location.reload());
-    await cancelledReload;
+    await cancelReload(p);
     await expect(field(p, 'Purpose')).toHaveValue('Dirty reload draft');
     p.once('dialog', d => d.accept());
     await settle(p, s.api, () => p.reload());
@@ -455,15 +473,12 @@ test.describe('team settings independent QC', () => {
     await expect(link).toHaveAttribute('href', s.url);
     await settle(p, s.api, () => link.click());
     await field(p, 'Purpose').fill('Private guarded Back draft');
-    p.once('dialog', d => d.dismiss());
-    await p.goBack();
+    await guardedBack(p, false);
     await expect(p).toHaveURL(new RegExp(`/teams/${s.team}/settings$`));
     await expect(field(p, 'Purpose')).toHaveValue('Private guarded Back draft');
-    p.once('dialog', d => d.dismiss());
-    await p.reload();
+    await cancelReload(p);
     await expect(field(p, 'Purpose')).toHaveValue('Private guarded Back draft');
-    p.once('dialog', d => d.accept());
-    await p.goBack();
+    await guardedBack(p, true);
     await expect(p).toHaveURL(workspace);
     await settle(p, s.api, () => link.click());
     await field(p, 'Purpose').fill('Private reused identity draft');
