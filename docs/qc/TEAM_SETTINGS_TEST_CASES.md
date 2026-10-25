@@ -1,5 +1,7 @@
 # Team Settings S06 QC cases
 
+Final execution on candidate d8c7d99:335 backend tests,39 settings browser cases plus522 baseline passed; native PostgreSQL and restart/logout passed. See [final QC](TEAM_SETTINGS_QC_REPORT.md) for exact bindings and capture limitations. The original authored execution column and continuation notes below are historical snapshots; remaining acceptance gaps remain unexecuted.
+
 Normative source: `docs/engineering/TEAM_SETTINGS_CONTRACT.md`, read fully. This is an authored test inventory, not a pass report. Main owns CI and the final report. Existing 271 backend / 522 browser baseline gates must remain intact; those numbers are historical gates, not observed successes here.
 
 | Area | Authored executable coverage | Execution |

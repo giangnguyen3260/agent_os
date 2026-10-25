@@ -1,5 +1,24 @@
 # Team Settings S06 — evidence in progress
 
+## Final development outcome — 25 October 2026
+
+Team Settings S06 development gate is verified on candidate `d8c7d99d5d18a224f4cfcc41ed0d38777f02714e`, tree `67dd8c3dda6159a235392774815c38da7f1631fa`, tested merge `53d0cb27c844f37beb5c1e815d7c4aae97437ece`, base `18bcd6b9dd1ae891ef70b552285138bab1df6419`. Draft [PR26](https://github.com/giangnguyen3260/agent_os/pull/26) remains stacked on draft PR25 and unmerged. Earlier in-progress/failed-candidate notes below are retained history and superseded by this exact-candidate outcome.
+
+| Gate | Observed result |
+| --- | --- |
+| Code Quality | [40212896358](https://github.com/giangnguyen3260/agent_os/actions/runs/40212896358), job121227755800 SUCCESS;335 tests,0failures/errors/skips, including23 actual PostgreSQL IT cases; Java formatting/imports, FE lint/format/production validators/build/tooling and dependency audit0 passed |
+| Docker/runtime | [40212896346](https://github.com/giangnguyen3260/agent_os/actions/runs/40212896346), job121227755842 SUCCESS;312 regular backend tests0failures/errors/skips during image build; healthy stack, Flyway V016 and all native gates passed |
+| Team Settings browsers |39/39 passed at1440/768/390, one worker, zero retries; source-conflict refusal, actual committed lost/malformed reply recovery, actor/role cleanup, delayed replies, dirty Back/reload and accepted UNKNOWN route reuse included |
+| Existing browsers |522/522 passed (16.4minutes);561 combined actual passes, no collection-only count substituted |
+| Restart/logout |Exact session survives backend restart; logout rejects replay; post-browser native and login/reset barrier probes passed |
+| Responsive captures |Artifact12606973177,54 PNGs,18 identical named states per width; ZIP SHA256 `fe9af7145c1a9fddd47df0e24309b1f3658ff9bdd2e3a55cbff69b54b1955545` matched after download |
+
+Coordinator inspected all18 state contact sheets across the54 captures: information, dirty information, persisted reload, members, changed manager/members, saved limits, acknowledged review, historical receipt, stale source, authority denied, archived blocked, accepted UNKNOWN destination, and unknown/manual-malformed/recovered for each of lost and malformed reply. Forest ink text, green selection/focus, stacked mobile tabs and review rows are readable; no horizontal overflow was detected by browser capture assertions. Long changed-members images were reviewed using top/middle/bottom sections. Initial members captures end partway through the asynchronously expanding candidate list; they are partial capture evidence, not proof of bottom-of-list layout. The later changed-members captures show the full paginated list and bottom actions at all widths. No app clipping defect is inferred from the initial capture alone. This is bounded responsive review, not pixel-perfect or comprehensive accessibility certification.
+
+Delivered: real scoped ADMIN-only metadata and saved-limit editing; DRAFT-safe membership/manager changes with protected history; revision/fingerprint CAS; atomic persisted event/receipt/audit; explicit review/acknowledgement and identical-body/key manual recovery. Runtime enforcement/capacity/spend, Agent activation, grant changes, production load/failover and the remaining designed screens remain outside this slice. Sonar remains paused. No production or Mac deployment is claimed. Exact sorted lock acquisition trace and the unexecuted vectors listed in the test inventory remain explicit limits, not silently accepted tests.
+
+Final closure changes documentation only; application, tests, migrations and workflows remain byte-identical to the tested candidate above. Independent source/runtime evidence is recorded in TEAM_SETTINGS_INDEPENDENT_REVIEW.md; visual inspection is coordinator-owned.
+
 Not yet runtime accepted. Branch feature/team-settings is stacked on PR25 docs HEAD18bcd6b9dd1ae891ef70b552285138bab1df6419. Baseline271BE/522browser is prior invitation evidence, not validation of this source. No merge, production or Mac deployment.
 
 [Shared contract](../engineering/TEAM_SETTINGS_CONTRACT.md), [BA/SA review](../engineering/TEAM_SETTINGS_REQUIREMENTS_REVIEW.md), [21-view Figma handoff](../engineering/TEAM_SETTINGS_FIGMA.md). Contract checkpoint7cf96a4d3866036ccf90e2cd3312245523c1c896 was published before application integration. Engineering defaults are explicit, not invented historical PO approval.
