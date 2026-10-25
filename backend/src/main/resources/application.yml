@@ -37,6 +37,14 @@ server:
         secure: ${AGENTOS_SESSION_COOKIE_SECURE:true}
 
 agentos:
+  invitations:
+    enabled: ${AGENTOS_INVITATIONS_ENABLED:false}
+    frontend-base-url: ${AGENTOS_INVITATIONS_FRONTEND_BASE_URL:}
+    from: ${AGENTOS_INVITATIONS_FROM:}
+    # Dispatch delay 100..60000 ms; retry delay 1..3600 seconds.
+    # Fixed policy: 72h lifetime, 60s resend cooldown, 5 SMTP attempts, one job per tick.
+    dispatch-delay-ms: ${AGENTOS_INVITATIONS_DISPATCH_DELAY_MS:1000}
+    retry-delay-seconds: ${AGENTOS_INVITATIONS_RETRY_DELAY_SECONDS:60}
   recovery:
     enabled: ${AGENTOS_RECOVERY_ENABLED:false}
     frontend-base-url: ${AGENTOS_RECOVERY_FRONTEND_BASE_URL:}

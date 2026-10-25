@@ -1,3 +1,4 @@
+import {pushSpaHistory} from './spa-history.mjs';
 import {test, expect} from '@playwright/test';
 import {randomUUID} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
@@ -28,10 +29,7 @@ const contextPath = (n, g = '') => g ? `${root(n)}/${g}/revocation-context` : `$
 const dialogAction = new WeakMap();
 const requestIs = (r, path, method = 'GET') => new URL(r.url()).pathname === path && r.method() === method;
 async function spa(p, target) {
-  await p.evaluate(path => {
-    history.pushState({}, '', path);
-    window.dispatchEvent(new PopStateEvent('popstate', {state: {}}));
-  }, target);
+  await pushSpaHistory(p, target);
 }
 function responseFor(p, path, method = 'GET') {
   return p.waitForResponse(r => requestIs(r.request(), path, method));

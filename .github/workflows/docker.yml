@@ -32,6 +32,8 @@ jobs:
               print('APP_PORT=18080', file=config)
               print('MAILPIT_PORT=18025', file=config)
               print('AGENTOS_RECOVERY_FRONTEND_BASE_URL=http://127.0.0.1:18080', file=config)
+              print('AGENTOS_INVITATIONS_FRONTEND_BASE_URL=http://127.0.0.1:18080', file=config)
+              print('AGENTOS_INVITATIONS_RETRY_DELAY_SECONDS=1', file=config)
               print('AGENTOS_BOOTSTRAP_ENABLED=true', file=config)
               print('AGENTOS_BOOTSTRAP_EMAIL=qc@example.test', file=config)
               print('AGENTOS_BOOTSTRAP_DISPLAY_NAME=QC Operator', file=config)
@@ -183,6 +185,17 @@ jobs:
         env:
           E2E_BASE_URL: http://127.0.0.1:18080
         run: python3 scripts/member-role-management-probe.py
+      - name: Provision isolated Member invitation fixtures
+        run: |
+          docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < scripts/member-invitations-ci-fixture.sql
+      - name: PostgreSQL and SMTP Member invitation authority and acceptance
+        timeout-minutes: 5
+        env:
+          E2E_BASE_URL: http://127.0.0.1:18080
+          E2E_MAILPIT_URL: http://127.0.0.1:18025
+          INV_SMTP_STOP_COMMAND: '["docker","compose","pause","mailpit"]'
+          INV_SMTP_START_COMMAND: '["docker","compose","unpause","mailpit"]'
+        run: python3 scripts/member-invitations-probe.py
       - name: Install browser test dependencies
         working-directory: frontend
         run: |
@@ -196,8 +209,11 @@ jobs:
         env:
           E2E_BASE_URL: http://127.0.0.1:18080
           E2E_MAILPIT_URL: http://127.0.0.1:18025
-        # Stop on the first regression; success still requires every collected case.
-        run: npm run test:e2e -- --max-failures=1
+        # Run the new 51 invitation instances first, then all 471 baseline cases.
+        # The two disjoint selections preserve the full 522-case gate, retries zero.
+        run: |
+          npm run test:e2e -- --max-failures=1 --grep 'member invitations independent QC'
+          npm run test:e2e -- --max-failures=1 --grep-invert 'member invitations independent QC'
       - name: Upload synthetic Approval Center visual evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -239,6 +255,13 @@ jobs:
         with:
           name: member-role-management-visuals
           path: frontend/qa-visuals/member-role-management-*.png
+          if-no-files-found: ignore
+      - name: Upload synthetic Member invitation visual evidence
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: member-invitations-visuals
+          path: frontend/qa-visuals/member-invitations-*.png
           if-no-files-found: ignore
       - name: PostgreSQL concurrent Agent Draft creation and replay
         timeout-minutes: 2

@@ -1,3 +1,7 @@
+import {
+  invitationAdminGuard,
+  invitationLeaveGuard,
+} from './features/invitations/invitation-navigation.guard';
 import {memberRoleNavigationGuard} from './features/members/member-role-navigation.guard';
 import {Routes} from '@angular/router';
 import {grantNavigationGuard} from './features/members/grant-navigation.guard';
@@ -5,6 +9,45 @@ import {authGuard, previewGuard} from './core/auth/auth.guard';
 import {approvalDetailNavigationGuard} from './features/approvals/approval-navigation.guard';
 
 export const routes: Routes = [
+  {
+    path: 'invitation',
+    canDeactivate: [invitationLeaveGuard],
+    loadComponent: () =>
+      import('./features/invitations/invitation-accept.component').then(
+        m => m.InvitationAcceptComponent,
+      ),
+  },
+  {
+    path: 'workspace/:id/invitations/new',
+    canActivate: [invitationAdminGuard],
+    canDeactivate: [invitationLeaveGuard],
+    runGuardsAndResolvers: 'always',
+    loadComponent: () =>
+      import('./features/invitations/invitation-admin.component').then(
+        m => m.InvitationAdminComponent,
+      ),
+  },
+  {
+    path: 'workspace/:id/invitations/:invitationId',
+    canActivate: [invitationAdminGuard],
+    canDeactivate: [invitationLeaveGuard],
+    runGuardsAndResolvers: 'always',
+    loadComponent: () =>
+      import('./features/invitations/invitation-admin.component').then(
+        m => m.InvitationAdminComponent,
+      ),
+  },
+  {
+    path: 'workspace/:id/invitations',
+    canActivate: [invitationAdminGuard],
+    canDeactivate: [invitationLeaveGuard],
+    runGuardsAndResolvers: 'always',
+    loadComponent: () =>
+      import('./features/invitations/invitation-admin.component').then(
+        m => m.InvitationAdminComponent,
+      ),
+  },
+
   {path: '', pathMatch: 'full', redirectTo: 'workspace'},
   {
     path: 'login',
