@@ -9,6 +9,21 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: agentos_test
+          POSTGRES_USER: agentos
+          # Disposable test service only; never application or production credentials.
+          POSTGRES_PASSWORD: agentos_ci_only
+        ports:
+          - 15432:5432
+        options: >-
+          --health-cmd "pg_isready -U agentos -d agentos_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
     steps:
       - uses: actions/checkout@v4
         with:
@@ -26,7 +41,12 @@ jobs:
       - name: Google Java import rules
         run: python3 scripts/check-java-imports.py
       - name: Backend formatting, tests and coverage
-        run: mvn --batch-mode --no-transfer-progress -f backend/pom.xml verify
+        env:
+          TEAM_SETTINGS_TEST_JDBC_URL: jdbc:postgresql://127.0.0.1:15432/agentos_test
+          TEAM_SETTINGS_TEST_DB_USER: agentos
+          TEAM_SETTINGS_TEST_DB_PASSWORD: agentos_ci_only
+        # Default tests plus the explicit real-PostgreSQL suite, no silent skips.
+        run: mvn --batch-mode --no-transfer-progress -f backend/pom.xml '-Dtest=*Test,TeamSettingsPostgresIT' verify
       - name: Frontend dependencies
         working-directory: frontend
         run: npm ci
@@ -35,7 +55,7 @@ jobs:
         run: npm run audit:check
       - name: Frontend Google style and type/build checks
         working-directory: frontend
-        run: npm run lint && npm run format:check && npm run test:tooling && node scripts/test-auth-generation.cjs && node scripts/test-member-access-validation.cjs && node scripts/test-approval-grant-management-validation.cjs && node scripts/test-member-role-management-validation.cjs && node scripts/test-member-invitations-validation.cjs && npm run build
+        run: npm run lint && npm run format:check && npm run test:tooling && node scripts/test-auth-generation.cjs && node scripts/test-member-access-validation.cjs && node scripts/test-approval-grant-management-validation.cjs && node scripts/test-member-role-management-validation.cjs && node scripts/test-member-invitations-validation.cjs && node scripts/test-team-settings-validation.cjs && npm run build
       - uses: actions/upload-artifact@v4
         if: always()
         with:

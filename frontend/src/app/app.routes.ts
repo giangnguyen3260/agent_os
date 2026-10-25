@@ -1,4 +1,8 @@
 import {
+  teamSettingsNavigationGuard,
+  teamSettingsLeaveGuard,
+} from './features/teams/team-settings-navigation.guard';
+import {
   invitationAdminGuard,
   invitationLeaveGuard,
 } from './features/invitations/invitation-navigation.guard';
@@ -266,6 +270,16 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./features/teams/team-page.component').then(
         module => module.TeamPageComponent,
+      ),
+  },
+  {
+    path: 'workspace/:id/teams/:teamId/settings',
+    canActivate: [authGuard, teamSettingsNavigationGuard],
+    canDeactivate: [teamSettingsLeaveGuard],
+    runGuardsAndResolvers: 'always',
+    loadComponent: () =>
+      import('./features/teams/team-settings.component').then(
+        module => module.TeamSettingsComponent,
       ),
   },
   {

@@ -1,0 +1,575 @@
+<div class="forest-shell">
+  <aside class="desktop-sidebar">
+    <div class="brand">agentos</div>
+    <nav aria-label="Workspace navigation">
+      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a
+      ><button disabled>Organization map</button
+      ><a class="selected" [routerLink]="['/workspace', id, 'teams']">Teams</a
+      ><a [routerLink]="['/workspace', id, 'agents']">Agents</a
+      ><a [routerLink]="['/workspace', id, 'missions']">Missions</a
+      ><button disabled>Approvals</button><button disabled>Trace</button>
+    </nav>
+  </aside>
+  <header class="compact-header">
+    <span class="brand">agentos</span
+    ><button
+      class="button secondary"
+      type="button"
+      aria-controls="team-settings-menu"
+      [attr.aria-expanded]="menuOpen()"
+      (click)="toggleMenu()"
+    >
+      Menu
+    </button>
+  </header>
+  <dialog
+    id="team-settings-menu"
+    aria-label="Workspace navigation"
+    (cancel)="closeMenu()"
+    (close)="closeMenu()"
+  >
+    <button class="button secondary" type="button" (click)="closeMenu()">
+      Close menu
+    </button>
+    <nav>
+      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a
+      ><a [routerLink]="['/workspace', id, 'teams']">Teams</a
+      ><a [routerLink]="['/workspace', id, 'agents']">Agents</a
+      ><a [routerLink]="['/workspace', id, 'missions']">Missions</a
+      ><a routerLink="/workspace">Change workspace</a>
+    </nav>
+  </dialog>
+  <main [attr.aria-busy]="loading() || busy()">
+    <div class="breadcrumb">
+      <span
+        >{{ workspace()?.name }} /
+        {{ context()?.team?.name || 'Team settings' }}</span
+      ><span>{{ auth.user()?.displayName }}</span>
+    </div>
+    <header class="heading">
+      <h1 tabindex="-1">
+        @if (phase() === 'unknown') {
+          Chưa xác định kết quả lưu
+        } @else if (phase() === 'review') {
+          Xem lại thay đổi
+        } @else {
+          Team settings
+        }
+      </h1>
+      <p>Chỉ Org ADMIN hiện tại · MANUAL intake</p>
+    </header>
+    @if (loading()) {
+      <p role="status">Đang tải cấu hình Team…</p>
+    }
+    @if (denied()) {
+      <section class="panel" role="alert" data-testid="team-settings-blockers">
+        <h2>Quyền truy cập không khả dụng</h2>
+        <p>
+          Chỉ Org Admin hiện tại được xem và sửa cài đặt. Dữ liệu riêng tư đã
+          được xóa.
+        </p>
+        <a routerLink="/workspace">Chọn workspace</a>
+      </section>
+    }
+    @if (error()) {
+      <p class="auth-error" role="alert">{{ error() }}</p>
+    }
+    @if (!verified() && !loading() && !busy() && phase() !== 'unknown') {
+      <button
+        class="button secondary"
+        type="button"
+        (click)="context() ? revalidate() : load()"
+      >
+        Thử lại bằng GET
+      </button>
+    }
+    @if (phase() === 'unknown') {
+      <section
+        class="unknown-content"
+        data-testid="team-settings-unknown"
+        aria-live="polite"
+      >
+        <section class="panel settings-panel">
+          <h2>Yêu cầu có thể đã được ghi nhận</h2>
+          <p>
+            Mất phản hồi không có nghĩa là lưu thất bại. Không tự gửi lại hoặc
+            tạo yêu cầu mới.
+          </p>
+        </section>
+        <section class="panel settings-panel">
+          <h2>Khôi phục bằng biên nhận</h2>
+          <p>
+            Kiểm tra yêu cầu gốc sau khi xác minh quyền hiện tại. Biên nhận
+            rỗng, lỗi hoặc không hợp lệ vẫn chưa xác định kết quả.
+          </p>
+        </section>
+        <button
+          class="button"
+          type="button"
+          [disabled]="busy()"
+          (click)="recover()"
+        >
+          Kiểm tra biên nhận
+        </button>
+        <section class="panel settings-panel">
+          <h2>Gửi lại thủ công</h2>
+          <p>
+            Chỉ khi vẫn cùng tài khoản và còn quyền: gửi lại nguyên yêu cầu đã
+            giữ, không thay đổi nội dung.
+          </p>
+        </section>
+        <button
+          class="button secondary"
+          type="button"
+          [disabled]="busy() || !canReplay()"
+          (click)="recover(true)"
+        >
+          Gửi lại đúng yêu cầu này
+        </button>
+        @if (!canReplay()) {
+          <p>
+            Yêu cầu riêng tư đã được xóa. Chỉ có thể kiểm tra biên nhận bằng
+            đúng tài khoản ban đầu.
+          </p>
+        }
+      </section>
+    }
+    @if (receipt(); as r) {
+      <section
+        class="panel settings-panel"
+        data-testid="team-settings-result"
+        aria-live="polite"
+      >
+        <h2>Đã ghi nhận thay đổi</h2>
+        <p>
+          Biên nhận lịch sử; cấu hình Team hiện tại có thể đã thay đổi sau đó.
+        </p>
+        <p>
+          {{ r.actorName }} · {{ r.recordedAt | date: 'medium' }} · Phiên bản
+          {{ r.revision }}
+        </p>
+        <p>Mã biên nhận {{ r.eventId }}</p>
+        <p>Mã yêu cầu {{ r.idempotencyKey }}</p>
+        <div class="diff-table">
+          <div class="diff-row diff-head">
+            <strong>Trường</strong><strong>Trước</strong
+            ><strong>Đã ghi nhận</strong>
+          </div>
+          @for (row of diffRows(r.before, r.after); track row.label) {
+            <div class="diff-row">
+              <strong>{{ row.label }}</strong
+              ><span>{{ row.before }}</span
+              ><span>{{ row.after }}</span>
+            </div>
+          }
+        </div>
+        <button class="button secondary" type="button" (click)="newRead()">
+          Tải cấu hình hiện tại
+        </button>
+      </section>
+    }
+    @if (context(); as c) {
+      @if (phase() === 'edit' || phase() === 'review') {
+        <div class="settings-tabs" aria-label="Cài đặt Team">
+          @for (t of tabs; track t.id) {
+            <button
+              type="button"
+              [attr.aria-current]="tab() === t.id ? 'page' : null"
+              [disabled]="busy()"
+              (click)="selectTab(t.id)"
+            >
+              {{ t.label }}
+            </button>
+          }
+        </div>
+        @if (c.blockers.length || c.revision === 2147483647 || stale()) {
+          <section
+            class="panel settings-panel"
+            data-testid="team-settings-blockers"
+            role="alert"
+          >
+            <h2>Không thể lưu cấu hình</h2>
+            @for (blocker of c.blockers; track blocker) {
+              <p>{{ blockerLabel(blocker) }}</p>
+            }
+            @if (c.revision === 2147483647) {
+              <p>Team đã đạt giới hạn phiên bản cấu hình.</p>
+            }
+            @if (stale()) {
+              <p>Nguồn đã thay đổi; tải lại và xem lại bản nháp.</p>
+            }
+            <button
+              type="button"
+              class="button secondary"
+              [disabled]="busy()"
+              (click)="load()"
+            >
+              Tải lại cấu hình
+            </button>
+          </section>
+        }
+        @if (phase() === 'edit') {
+          <form
+            data-testid="team-settings-edit"
+            (ngSubmit)="review()"
+            novalidate
+          >
+            <fieldset
+              class="settings-fields settings-panel"
+              [disabled]="!editable()"
+              [hidden]="tab() !== 'info'"
+            >
+              <legend class="sr-only">Thông tin</legend>
+              <label for="settings-name"
+                >Team name<input
+                  id="settings-name"
+                  name="name"
+                  required
+                  [(ngModel)]="draft.name"
+                  (ngModelChange)="edit()"
+              /></label>
+              <label for="settings-purpose"
+                >Purpose<textarea
+                  id="settings-purpose"
+                  name="purpose"
+                  required
+                  rows="1"
+                  [(ngModel)]="draft.purpose"
+                  (ngModelChange)="edit()"
+                ></textarea>
+              </label>
+              <label for="settings-description"
+                >Description<textarea
+                  id="settings-description"
+                  name="description"
+                  rows="1"
+                  [(ngModel)]="draft.description"
+                  (ngModelChange)="edit()"
+                ></textarea>
+              </label>
+              <label for="settings-intake"
+                >Intake mode<input
+                  id="settings-intake"
+                  [value]="c.team.intake ?? ''"
+                  readonly
+              /></label>
+            </fieldset>
+            @if (tab() === 'info') {
+              <section class="panel settings-panel">
+                <h2>Phạm vi chỉnh sửa</h2>
+                <p>
+                  DRAFT / ACTIVE: sửa thông tin và giới hạn đã lưu. ARCHIVED:
+                  chỉ đọc. Trạng thái Team không thay đổi.
+                </p>
+              </section>
+            }
+            <section class="settings-panel" [hidden]="tab() !== 'members'">
+              <fieldset
+                class="panel settings-panel"
+                [disabled]="!membershipEditable()"
+              >
+                <legend class="sr-only">Thành viên &amp; Manager</legend>
+                <label for="settings-manager"
+                  >Manager<select
+                    id="settings-manager"
+                    name="manager"
+                    [(ngModel)]="draft.managerAgentId"
+                    (ngModelChange)="edit()"
+                  >
+                    <option [ngValue]="null">Không có</option>
+                    @for (a of managers(); track a.id) {
+                      <option [ngValue]="a.id">
+                        {{ a.name }} · {{ agentLabel(a) }}
+                      </option>
+                    }
+                  </select></label
+                >
+                <h2>Members · {{ draft.selected.length }} / 200</h2>
+                @for (a of c.members; track a.id) {
+                  <div class="member-row" data-testid="team-settings-member">
+                    <label class="check"
+                      ><input
+                        type="checkbox"
+                        [name]="'member-' + a.id"
+                        [checked]="draft.selected.includes(a.id)"
+                        [disabled]="!a.canRemove"
+                        [attr.aria-describedby]="'blockers-' + a.id"
+                        (change)="toggleMember(a)"
+                      /><span
+                        >{{ a.name }}<small>{{ agentLabel(a) }}</small></span
+                      ></label
+                    >
+                    <p class="caption" [id]="'blockers-' + a.id">
+                      {{ removalReason(a.removalBlockers) }}
+                    </p>
+                  </div>
+                }
+                @for (a of additions(); track a.id) {
+                  @if (draft.selected.includes(a.id)) {
+                    <div class="member-row" data-testid="team-settings-member">
+                      <label class="check"
+                        ><input
+                          type="checkbox"
+                          [name]="'added-' + a.id"
+                          checked
+                          (change)="toggleMember(a)"
+                        /><span
+                          >{{ a.name
+                          }}<small>{{ agentLabel(a) }} · Thêm mới</small></span
+                        ></label
+                      >
+                    </div>
+                  }
+                }
+              </fieldset>
+              <section class="panel settings-panel">
+                <h2>Membership policy</h2>
+                <p>
+                  Một Agent thuộc một Team hoặc Unassigned. Chỉ thay đổi thành
+                  viên và Manager khi Team ở trạng thái DRAFT.
+                </p>
+                <p>
+                  Không thể bỏ Agent có quan hệ báo cáo hoặc tham chiếu lịch sử
+                  bị chặn. Manager cũ vẫn là thành viên khi chọn Manager mới.
+                </p>
+                @if (!c.canChangeMembership) {
+                  <p>Thành viên và Manager hiện tại được giữ nguyên.</p>
+                }
+              </section>
+              @if (c.canChangeMembership) {
+                <section
+                  class="panel settings-panel"
+                  aria-label="Ứng viên thực tế"
+                >
+                  <h2>Thêm Agent chưa được phân Team</h2>
+                  <div class="filters">
+                    <label for="settings-search"
+                      >Tìm Agent<input
+                        id="settings-search"
+                        type="search"
+                        name="candidateQuery"
+                        [(ngModel)]="search"
+                        [disabled]="!editable()" /></label
+                    ><button
+                      class="button secondary"
+                      type="button"
+                      [disabled]="!editable() || candidateLoading()"
+                      (click)="findCandidates(0)"
+                    >
+                      Tìm kiếm
+                    </button>
+                  </div>
+                  @if (candidateLoading()) {
+                    <p role="status">Đang tải ứng viên…</p>
+                  }
+                  @if (candidateError()) {
+                    <p role="alert">{{ candidateError() }}</p>
+                    <button
+                      class="button secondary"
+                      type="button"
+                      [disabled]="busy()"
+                      (click)="findCandidates(page)"
+                    >
+                      Thử lại danh sách
+                    </button>
+                  }
+                  @if (candidates(); as list) {
+                    <p>{{ list.total }} ứng viên · Trang {{ page + 1 }}</p>
+                    @for (a of list.items; track a.id) {
+                      <div
+                        class="member-row"
+                        data-testid="team-settings-candidate"
+                      >
+                        <label class="check"
+                          ><input
+                            type="checkbox"
+                            [name]="'candidate-' + a.id"
+                            [checked]="draft.selected.includes(a.id)"
+                            [disabled]="
+                              !membershipEditable() ||
+                              (!draft.selected.includes(a.id) &&
+                                draft.selected.length >= 200)
+                            "
+                            (change)="toggleMember(a)"
+                          /><span
+                            >{{ a.name
+                            }}<small>{{ agentLabel(a) }}</small></span
+                          ></label
+                        >
+                      </div>
+                    }
+                    @if (!list.items.length) {
+                      <p>Không có ứng viên phù hợp.</p>
+                    }
+                    <div class="pagination">
+                      <button
+                        class="button secondary"
+                        type="button"
+                        [disabled]="
+                          page === 0 || candidateLoading() || !editable()
+                        "
+                        (click)="findCandidates(page - 1)"
+                      >
+                        Trước</button
+                      ><button
+                        class="button secondary"
+                        type="button"
+                        [disabled]="
+                          (page + 1) * 20 >= list.total ||
+                          page >= 100000 ||
+                          candidateLoading() ||
+                          !editable()
+                        "
+                        (click)="findCandidates(page + 1)"
+                      >
+                        Tiếp
+                      </button>
+                    </div>
+                  }
+                </section>
+              }
+            </section>
+            <fieldset
+              class="settings-fields settings-panel"
+              [disabled]="!editable()"
+              [hidden]="tab() !== 'limits'"
+            >
+              <legend class="sr-only">Giới hạn</legend>
+              <label for="settings-concurrency"
+                >Concurrency<input
+                  id="settings-concurrency"
+                  name="concurrency"
+                  inputmode="numeric"
+                  required
+                  [(ngModel)]="draft.concurrency"
+                  (ngModelChange)="edit()"
+                /><small>1–1000 · Cấu hình đã lưu</small></label
+              >
+              <label for="settings-effective"
+                >Effective concurrency<input
+                  id="settings-effective"
+                  value="Chưa có số liệu thực thi"
+                  readonly
+              /></label>
+              <label for="settings-budget"
+                >Monthly budget (USD)<input
+                  id="settings-budget"
+                  name="budget"
+                  inputmode="decimal"
+                  required
+                  [(ngModel)]="draft.monthlyBudget"
+                  (ngModelChange)="edit()"
+                /><small
+                  >0–1,000,000 USD · Tối đa 2 chữ số thập phân</small
+                ></label
+              >
+              <label for="settings-spend"
+                >Spent this period<input
+                  id="settings-spend"
+                  value="Chưa có số liệu thực thi"
+                  readonly
+              /></label>
+              <p>Current slots: Chưa có dữ liệu</p>
+            </fieldset>
+            <div class="actions">
+              <button class="button" type="submit" [disabled]="!editable()">
+                Xem lại thay đổi</button
+              ><button
+                class="button secondary"
+                type="button"
+                [disabled]="busy()"
+                (click)="load()"
+              >
+                Tải lại</button
+              ><a
+                class="button secondary"
+                [routerLink]="['/workspace', id, 'teams', teamId, 'workspace']"
+                >Quay lại Team</a
+              >
+            </div>
+          </form>
+        }
+        @if (phase() === 'review') {
+          <section
+            class="panel settings-panel"
+            data-testid="team-settings-review"
+          >
+            <h2>Thay đổi cấu hình đã lưu</h2>
+            <div class="diff-table">
+              <div class="diff-row diff-head">
+                <strong>Trường</strong><strong>Trước</strong
+                ><strong>Sau</strong>
+              </div>
+              @for (row of diffRows(); track row.label) {
+                <div class="diff-row">
+                  <strong>{{ row.label }}</strong
+                  ><span>{{ row.before }}</span
+                  ><span>{{ row.after }}</span>
+                </div>
+              }
+            </div>
+            <p>
+              Thêm thành viên:
+              @for (id of membershipDiff(true); track id) {
+                <span>{{ agentName(id) }}; </span>
+              } @empty {
+                Không có
+              }
+            </p>
+            <p>
+              Bỏ thành viên:
+              @for (id of membershipDiff(false); track id) {
+                <span>{{ agentName(id) }}; </span>
+              } @empty {
+                Không có
+              }
+            </p>
+            <p>
+              Giữ nguyên thành viên:
+              @for (id of retainedMembers(); track id) {
+                <span>{{ agentName(id) }}; </span>
+              } @empty {
+                Không có
+              }
+            </p>
+            <label class="check"
+              ><input
+                type="checkbox"
+                name="acknowledgement"
+                [(ngModel)]="acknowledged"
+                [disabled]="busy() || !verified() || stale()"
+              />Tôi đã xem lại thay đổi cấu hình Team.</label
+            >
+            <div class="actions">
+              <button
+                class="button"
+                type="button"
+                [disabled]="!acknowledged || busy() || !verified() || stale()"
+                (click)="save()"
+              >
+                Lưu thay đổi</button
+              ><button
+                class="button secondary"
+                type="button"
+                [disabled]="busy()"
+                (click)="back()"
+              >
+                Quay lại chỉnh sửa
+              </button>
+            </div>
+          </section>
+        }
+      }
+      <section class="guidance">
+        <h2>Điều kiện / hướng xử lý</h2>
+        <p>
+          Các giới hạn này là cấu hình đã lưu. Số liệu thực thi hiện chưa có.
+        </p>
+        <p>
+          Chỉ Org Admin hiện tại được sửa cài đặt. Cấu hình không thay đổi trạng
+          thái Agent, tool/model grants hoặc quyền của con người.
+        </p>
+      </section>
+    }
+  </main>
+</div>

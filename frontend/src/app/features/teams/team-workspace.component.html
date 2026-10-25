@@ -116,12 +116,15 @@
           disabled
           aria-describedby="creation-unavailable"
         >
-          Create Task</button
-        ><a
-          class="button secondary"
-          [routerLink]="['/workspace', id, 'teams', teamId]"
-          >Settings</a
-        >
+          Create Task
+        </button>
+        @if (context()?.role === 'ADMIN') {
+          <a
+            class="button secondary"
+            [routerLink]="['/workspace', id, 'teams', teamId, 'settings']"
+            >Settings</a
+          >
+        }
         <button
           class="button secondary"
           type="button"

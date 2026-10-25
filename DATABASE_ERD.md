@@ -428,3 +428,14 @@ V014 development runtime acceptance is bound to candidate81bc489 and its exact C
 | invitation_email_locks | Email digest primary key | Cross-org absent-account serialization before global human locks |
 
 Actual membership insertion creates/advances retained V014 role revision without inventing a role-change event; rejoin never resets history. Existing-account credentials, sessions, explicit grants and other-org roles are preserved. Forward migration only; no production seed. See [V015 runbook](backend/MEMBER_INVITATIONS_MIGRATION.md) and [contract](docs/engineering/MEMBER_INVITATIONS_CONTRACT.md). Candidate31270e8 passed native PostgreSQL/SMTP,271BE,522browser and Docker/restart/logout; see [final QC](docs/qc/MEMBER_INVITATIONS_QC_REPORT.md).
+
+
+## V016 Team settings — implementation in progress
+
+| Table | Integrity | Purpose |
+|---|---|---|
+| team_settings_ledgers | Scoped Team key, nonnegative bounded revision | Retained settings concurrency ledger; lazy zero only in writer |
+| team_settings_events | Team/revision and actor/event uniqueness; scoped Team FK | Immutable restricted before/after and original actor/time |
+| team_settings_receipts | Org/actor/key uniqueness; scoped event FK | Canonical command replay and lost-response receipt lookup |
+
+Assignment mutations preserve Agent identity/config/history and all historical references; detach is blocked for protected Mission/Task/Approval/reporting/AGENT audit attribution. Existing schemas/history are retained. [Contract](docs/engineering/TEAM_SETTINGS_CONTRACT.md), [runbook](backend/TEAM_SETTINGS_MIGRATION.md), [QC pending](docs/qc/TEAM_SETTINGS_QC_REPORT.md).

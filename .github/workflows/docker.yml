@@ -196,6 +196,14 @@ jobs:
           INV_SMTP_STOP_COMMAND: '["docker","compose","pause","mailpit"]'
           INV_SMTP_START_COMMAND: '["docker","compose","unpause","mailpit"]'
         run: python3 scripts/member-invitations-probe.py
+      - name: Provision isolated Team settings fixtures
+        run: |
+          docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < scripts/team-settings-ci-fixture.sql
+      - name: PostgreSQL Team settings authority and atomic update
+        timeout-minutes: 5
+        env:
+          E2E_BASE_URL: http://127.0.0.1:18080
+        run: python3 scripts/team-settings-probe.py
       - name: Install browser test dependencies
         working-directory: frontend
         run: |
@@ -209,11 +217,11 @@ jobs:
         env:
           E2E_BASE_URL: http://127.0.0.1:18080
           E2E_MAILPIT_URL: http://127.0.0.1:18025
-        # Run the new 51 invitation instances first, then all 471 baseline cases.
-        # The two disjoint selections preserve the full 522-case gate, retries zero.
+        # New Team settings first, then the complete 522-instance baseline.
+        # Selections are disjoint; one worker and zero retries remain unchanged.
         run: |
-          npm run test:e2e -- --max-failures=1 --grep 'member invitations independent QC'
-          npm run test:e2e -- --max-failures=1 --grep-invert 'member invitations independent QC'
+          npm run test:e2e -- --max-failures=1 --grep 'team settings independent QC'
+          npm run test:e2e -- --max-failures=1 --grep-invert 'team settings independent QC'
       - name: Upload synthetic Approval Center visual evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -262,6 +270,13 @@ jobs:
         with:
           name: member-invitations-visuals
           path: frontend/qa-visuals/member-invitations-*.png
+          if-no-files-found: ignore
+      - name: Upload synthetic Team settings visual evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: team-settings-visuals
+          path: frontend/qa-visuals/team-settings-*.png
           if-no-files-found: ignore
       - name: PostgreSQL concurrent Agent Draft creation and replay
         timeout-minutes: 2
