@@ -6,12 +6,12 @@
 
 | Binding | Value |
 |---|---|
-| Application/test candidate | `1fc8a0371447e02591ee52bae95ec304b64572d9` |
-| Application/test tree | `7177d6bbc3c63779d2b58a92ee5fade68f34c73a` |
-| Tested PR merge | `6c793db717ebac1e62a895ce6564d0efdc7bd057` |
+| Application/test candidate | `38c67622276d5502f686a699c01df4a8b8de70ba` |
+| Application/test tree | `2bf719b35f03d7485088f62f82534d75d48898cd` |
+| Tested PR merge | `7cfb2633e122fb2e2263953ed5b4bab0680475fe` |
 | Base | `778ed08911f761eaa3a5397291414a560679248e` |
-| Quality | [40109410272](https://github.com/giangnguyen3260/agent_os/actions/runs/40109410272), job120917805761 SUCCESS:271BE,0fail/errors/skips, audit0 and all quality gates |
-| Docker | [40109410285](https://github.com/giangnguyen3260/agent_os/actions/runs/40109410285), job120917805813 failed at INV-B13; native passed, browser12pass/1fail/38unrun, baseline471/restart unrun |
+| Quality | [40185649031](https://github.com/giangnguyen3260/agent_os/actions/runs/40185649031), job121145756173 SUCCESS:271 tests,0fail/errors/skips, audit0 and all quality gates |
+| Docker | [40185649053](https://github.com/giangnguyen3260/agent_os/actions/runs/40185649053), job121145756180 native passed;51 invitation browser passed; baseline43pass/1fail/427unrun, restart unrun |
 
 Required browser gate:51 invitation instances (17 cases ×3 widths) first, then471 baseline, with51 invitation captures planned. Disjoint collection counts were observed locally; these are not execution results. Backend expected271 includes192 baseline +79 additions (59 @Test methods and20 parameterized inputs). Prior candidate6 Quality271/native passed; this candidate must reproduce the full gates after the global router correction.
 
@@ -66,3 +66,9 @@ Sonar remains paused. No first-Admin bootstrap, Team Settings/Organization Map, 
 ## Token URL correction after candidate7
 
 B08 dirty history restoration passed in CI7. B13 reopened an expired invitation on the same document: the real inspect returned400 INVALID_INVITATION, but Angular committed its captured fragment back after the native hashchange handler scrubbed it. The next source subscribes to completed/skipped router navigation and scrubs the URL again without consuming a capability, resetting review or issuing another request. Hashchange consumes event.newURL so an earlier router scrub cannot erase the incoming capability before its handler reads it. Subscription ends with component destruction. Existing B13 URL/invalid/no-write and B17 dirty-cancel/replacement/late-response oracles remain unchanged. Runtime acceptance remains pending the new candidate.
+
+Independent source reviewer Turing inspected the token URL correction against the contract and B13/B17: no actionable critical race/security issue found. This is source review only; runtime approval remains pending. No assertions, case counts or retry settings changed. Local FE lint/format/production validators/build passed on this source.
+
+## Candidate8 browser outcome
+
+All51 invitation browser instances passed, including B13 and B17 at all3 widths. The baseline stopped at AD-B10: synthetic pushState({},...) discarded Angular history page metadata, so computed cancellation could not determine the previous entry position. Its prompt, old-content and single-POST contract remains required. A bounded test-fixture correction is under independent QC review; no production guard is being bypassed and no assertion removed. All471 baseline instances and restart must complete on the final candidate.

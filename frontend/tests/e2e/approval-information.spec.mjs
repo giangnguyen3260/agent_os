@@ -1,3 +1,4 @@
+import {pushSpaHistory} from './spa-history.mjs';
 import {test, expect} from '@playwright/test';
 import {randomUUID} from 'node:crypto';
 import {mkdirSync} from 'node:fs';
@@ -381,13 +382,7 @@ test('AI-B07 dirty navigation, reused route and compact menu guard input', async
     prompts++;
     await dialog.dismiss();
   });
-  await p.evaluate(
-    target => {
-      history.pushState({}, '', target);
-      dispatchEvent(new PopStateEvent('popstate'));
-    },
-    url(n + 1),
-  );
+  await pushSpaHistory(p, url(n + 1));
   await expect(p).toHaveURL(new RegExp(`${url(n)}$`));
   expect(prompts).toBe(2);
   await expect(p.getByLabel('Question *', {exact: true})).toHaveValue(

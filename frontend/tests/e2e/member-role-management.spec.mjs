@@ -1,3 +1,4 @@
+import {pushSpaHistory} from './spa-history.mjs';
 import {test, expect} from '@playwright/test';
 import {randomUUID} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
@@ -90,7 +91,7 @@ async function privateGone(p, secrets) {
   await expect(button(p, 'Gửi lại đúng yêu cầu này')).toHaveCount(0);
 }
 async function spa(p, path) {
-  await p.evaluate(url => { history.pushState({}, '', url); dispatchEvent(new PopStateEvent('popstate', {state: {}})); }, path);
+  await pushSpaHistory(p, path);
 }
 function writes(p) {
   const items = []; p.on('request', r => { if (r.method() === 'POST' && new URL(r.url()).pathname.endsWith('/role-management')) items.push(r); }); return items;

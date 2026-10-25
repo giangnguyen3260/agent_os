@@ -1,3 +1,4 @@
+import {pushSpaHistory} from './spa-history.mjs';
 import {test, expect} from '@playwright/test';
 import {randomUUID} from 'node:crypto';
 import {mkdirSync} from 'node:fs';
@@ -417,13 +418,7 @@ test('AD-B10 pending mutation cannot silently cross reused route identity and du
     await expect(button(p, 'Approve')).toBeDisabled();
     await button(p, 'Approve').evaluate(el => el.click());
     const prompt = p.waitForEvent('dialog');
-    await p.evaluate(
-      target => {
-        history.pushState({}, '', target);
-        window.dispatchEvent(new PopStateEvent('popstate'));
-      },
-      url(offset(info) + 23),
-    );
+    await pushSpaHistory(p, url(offset(info) + 23));
     await (await prompt).dismiss();
     await expect(p).toHaveURL(new RegExp(`${url(n)}$`));
     await expect(
