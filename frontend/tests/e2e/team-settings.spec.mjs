@@ -182,6 +182,10 @@ test.describe('team settings independent QC', () => {
       await review(p);
       const attempts = [];
       let original;
+      let firstFaultDelivered;
+      const firstFault = new Promise(resolve => {
+        firstFaultDelivered = resolve;
+      });
       await p.route(`**${s.api}`, async route => {
         if (route.request().method() !== 'POST') return route.continue();
         attempts.push({
@@ -196,22 +200,39 @@ test.describe('team settings independent QC', () => {
           return route.fulfill({response: actual});
         }
         original = receipt;
-        return mode === 'lost'
-          ? route.abort('failed')
-          : route.fulfill({response: actual, body: '{malformed'});
+        if (mode === 'lost') await route.abort('failed');
+        else await route.fulfill({response: actual, body: '{malformed'});
+        firstFaultDelivered();
       });
       await button(p, 'Lưu thay đổi').click();
+      await firstFault;
       await expect(p.getByTestId('team-settings-unknown')).toBeVisible();
+      await expect(button(p, 'Kiểm tra biên nhận')).toBeEnabled();
       await shot(p, info, `${mode}-unknown`);
       expect(attempts).toHaveLength(1);
       const pattern = `**${s.api}/receipts/*`;
+      let malformedDelivered;
+      const receiptFault = new Promise(resolve => {
+        malformedDelivered = resolve;
+      });
       await p.route(pattern, async route => {
         const actual = await route.fetch();
         expect(actual.status()).toBe(200);
         expect((await actual.json()).data).toEqual(original);
         await route.fulfill({response: actual, body: '{malformed'});
+        malformedDelivered();
       });
       await button(p, 'Kiểm tra biên nhận').click();
+      await receiptFault;
+      // UNKNOWN is already visible before this GET starts. Wait for the new
+      // malformed reply to be handled before removing its route or replaying.
+      await expect(
+        p.getByRole('alert').filter({
+          hasText: 'Không thể kiểm tra biên nhận. Kết quả vẫn chưa xác định.',
+        }),
+      ).toBeVisible();
+      await expect(button(p, 'Kiểm tra biên nhận')).toBeEnabled();
+      await expect(button(p, 'Gửi lại đúng yêu cầu này')).toBeEnabled();
       await expect(p.getByTestId('team-settings-unknown')).toBeVisible();
       expect(attempts).toHaveLength(1);
       await shot(p, info, `${mode}-manual-malformed-receipt`);
@@ -279,6 +300,8 @@ test.describe('team settings independent QC', () => {
     }
     await field(p, 'Team name').fill(name);
     await tab(p, 'Giới hạn');
+    const validConcurrency = await field(p, 'Concurrency').inputValue();
+    const validBudget = await field(p, 'Monthly budget (USD)').inputValue();
     for (const [label, value] of [
       ['Concurrency', '0'],
       ['Concurrency', '1001'],
@@ -286,6 +309,8 @@ test.describe('team settings independent QC', () => {
       ['Monthly budget (USD)', '-1'],
       ['Monthly budget (USD)', '1.001'],
     ]) {
+      await field(p, 'Concurrency').fill(validConcurrency);
+      await field(p, 'Monthly budget (USD)').fill(validBudget);
       await field(p, label).fill(value);
       await button(p, 'Xem lại thay đổi').click();
       await expect(p.getByTestId('team-settings-review')).toHaveCount(0);
@@ -293,8 +318,12 @@ test.describe('team settings independent QC', () => {
     p.once('dialog', d => d.accept());
     await settle(p, s.api, () => p.reload());
     await field(p, 'Purpose').fill('Dirty reload draft');
-    p.once('dialog', d => d.dismiss());
-    await p.reload();
+    const cancelledReload = p.waitForEvent('dialog').then(async dialog => {
+      expect(dialog.type()).toBe('beforeunload');
+      await dialog.dismiss();
+    });
+    await p.evaluate(() => location.reload());
+    await cancelledReload;
     await expect(field(p, 'Purpose')).toHaveValue('Dirty reload draft');
     p.once('dialog', d => d.accept());
     await settle(p, s.api, () => p.reload());
@@ -362,7 +391,18 @@ test.describe('team settings independent QC', () => {
       );
       await p.evaluate(() => window.dispatchEvent(new Event('focus')));
       await expect(p.getByTestId('team-settings-edit')).toHaveCount(0);
+      const delivered = p.waitForEvent('requestfinished', {
+        predicate: request =>
+          new URL(request.url()).pathname === `${s.api}/candidates`,
+      });
       release();
+      await delivered;
+      await p.evaluate(
+        () =>
+          new Promise(resolve =>
+            requestAnimationFrame(() => requestAnimationFrame(resolve)),
+          ),
+      );
       await expect(p.getByTestId('team-settings-candidate')).toHaveCount(0);
       await expect(p.locator('main')).not.toContainText('Settings Agent');
     } finally {
@@ -510,8 +550,20 @@ test.describe('team settings independent QC', () => {
       expect(session.status()).toBe(200);
       expect((await session.json()).data.id).not.toBe(receipt.actorId);
       await privateGone();
+      const delivered = p.waitForEvent('requestfinished', {
+        predicate: request =>
+          request.method() === 'POST' &&
+          new URL(request.url()).pathname === s.api,
+      });
       release();
       await completed;
+      await delivered;
+      await p.evaluate(
+        () =>
+          new Promise(resolve =>
+            requestAnimationFrame(() => requestAnimationFrame(resolve)),
+          ),
+      );
       await privateGone();
       await expect(button(p, 'Gửi lại đúng yêu cầu này')).toBeDisabled();
       expect(posts).toBe(1);
@@ -532,6 +584,10 @@ test.describe('team settings independent QC', () => {
     let receipt,
       key,
       posts = 0;
+    let faultDelivered;
+    const committedFault = new Promise(resolve => {
+      faultDelivered = resolve;
+    });
     await p.route(`**${s.api}`, async route => {
       if (route.request().method() !== 'POST') return route.continue();
       posts++;
@@ -540,11 +596,14 @@ test.describe('team settings independent QC', () => {
       expect(actual.status()).toBe(201);
       receipt = (await actual.json()).data;
       await route.abort('failed');
+      faultDelivered();
     });
     const membership = `organization_id='${s.org}' AND account_id=(SELECT id FROM human_accounts WHERE email='settings-${info.project.name}-admin@example.test')`;
     try {
       await button(p, 'Lưu thay đổi').click();
+      await committedFault;
       await expect(p.getByTestId('team-settings-unknown')).toBeVisible();
+      await expect(button(p, 'Kiểm tra biên nhận')).toBeEnabled();
       sql(
         `UPDATE organization_memberships SET role='MEMBER' WHERE ${membership};`,
       );
