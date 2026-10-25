@@ -9,12 +9,7 @@ const numbers = {desktop: 2, tablet: 3, mobile: 4};
 const uuid = (prefix, n) =>
   `${prefix}-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const button = (p, name) => p.getByRole('button', {name, exact: true});
-const field = (p, name) =>
-  ['Concurrency', 'Monthly budget (USD)'].includes(name)
-    ? p.locator(
-        name === 'Concurrency' ? '#settings-concurrency' : '#settings-budget',
-      )
-    : p.getByLabel(name, {exact: true});
+const field = (p, name) => p.getByLabel(name, {exact: true});
 function sql(input) {
   return execFileSync(
     'docker',
@@ -243,6 +238,7 @@ test.describe('team settings independent QC', () => {
     sql(`UPDATE teams SET updated_at=clock_timestamp() WHERE id='${s.team}';`);
     await button(p, 'Lưu thay đổi').click();
     await expect(p.getByRole('alert')).toBeVisible();
+    await shot(p, info, 'stale-source');
     expect(writes).toBe(0);
     const membership = `organization_id='${s.org}' AND account_id=(SELECT id FROM human_accounts WHERE email='settings-${info.project.name}-admin@example.test')`;
     try {
@@ -256,6 +252,7 @@ test.describe('team settings independent QC', () => {
         'Pending private draft',
       );
       expect(writes).toBe(0);
+      await shot(p, info, 'authority-denied');
     } finally {
       sql(
         `UPDATE organization_memberships SET role='ADMIN' WHERE ${membership};`,
@@ -322,6 +319,7 @@ test.describe('team settings independent QC', () => {
       if (status === 'ARCHIVED') {
         expect(data.canEdit).toBe(false);
         await expect(p.getByTestId('team-settings-blockers')).toBeVisible();
+        await shot(p, info, 'archived-blocked');
       } else {
         await tab(p, 'Thành viên & Manager');
         await expect(field(p, 'Manager')).toBeDisabled();
@@ -622,5 +620,92 @@ test.describe('team settings independent QC', () => {
       await expect(p.getByTestId('team-settings-review')).toHaveCount(0);
     }
     expect(posts).toBe(0);
+  });
+
+  test('accepted UNKNOWN route reuse loads the destination and ignores the old committed reply', async ({
+    page: p,
+  }, info) => {
+    const s = await login(p, info);
+    const secret = `Unknown old Team draft ${info.project.name}`;
+    await field(p, 'Purpose').fill(secret);
+    await review(p);
+    let release, arrived, finished;
+    const gate = new Promise(resolve => {
+      release = resolve;
+    });
+    const received = new Promise(resolve => {
+      arrived = resolve;
+    });
+    const completed = new Promise(resolve => {
+      finished = resolve;
+    });
+    const pattern = `**${s.api}`;
+    let receipt,
+      posts = 0;
+    p.on('request', request => {
+      if (
+        request.method() === 'POST' &&
+        new URL(request.url()).pathname.endsWith('/settings')
+      )
+        posts++;
+    });
+    await p.route(pattern, async route => {
+      if (route.request().method() !== 'POST') return route.continue();
+      try {
+        const actual = await route.fetch();
+        expect(actual.status()).toBe(201);
+        receipt = (await actual.json()).data;
+        arrived();
+        await gate;
+        await route.fulfill({response: actual});
+      } finally {
+        finished();
+      }
+    });
+    try {
+      await button(p, 'Lưu thay đổi').click();
+      await received;
+      await expect(p.getByTestId('team-settings-unknown')).toBeVisible();
+      const otherTeam = uuid('50610000', s.n * 100 + 4);
+      const otherUrl = s.url.replace(s.team, otherTeam);
+      p.once('dialog', dialog => dialog.accept());
+      const loaded = await settle(p, s.api.replace(s.team, otherTeam), () =>
+        pushSpaHistory(p, otherUrl),
+      );
+      expect(loaded.status()).toBe(200);
+      const destination = (await loaded.json()).data;
+      await expect(p).toHaveURL(otherUrl);
+      await expect(p.getByTestId('team-settings-edit')).toBeVisible();
+      await expect(field(p, 'Team name')).toHaveValue(destination.team.name);
+      await expect(field(p, 'Purpose')).toHaveValue(
+        destination.team.purpose ?? '',
+      );
+      await expect(p.getByTestId('team-settings-unknown')).toHaveCount(0);
+      await expect(p.locator('main')).not.toContainText(secret);
+      const delivered = p.waitForEvent('requestfinished', {
+        predicate: request =>
+          request.method() === 'POST' &&
+          new URL(request.url()).pathname === s.api,
+      });
+      release();
+      await completed;
+      await delivered;
+      await p.evaluate(
+        () =>
+          new Promise(resolve =>
+            requestAnimationFrame(() => requestAnimationFrame(resolve)),
+          ),
+      );
+      await expect(p.getByTestId('team-settings-edit')).toBeVisible();
+      await expect(p.getByTestId('team-settings-result')).toHaveCount(0);
+      await expect(p.getByTestId('team-settings-unknown')).toHaveCount(0);
+      await expect(p.locator('main')).not.toContainText(receipt.eventId);
+      await expect(p.locator('main')).not.toContainText(secret);
+      expect(posts).toBe(1);
+      await shot(p, info, 'accepted-unknown-route');
+    } finally {
+      release();
+      await p.unroute(pattern);
+    }
   });
 });

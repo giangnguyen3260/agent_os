@@ -272,6 +272,7 @@
                 <label for="settings-manager"
                   >Manager<select
                     id="settings-manager"
+                    aria-label="Manager"
                     name="manager"
                     [(ngModel)]="draft.managerAgentId"
                     (ngModelChange)="edit()"
@@ -438,12 +439,16 @@
               <label for="settings-concurrency"
                 >Concurrency<input
                   id="settings-concurrency"
+                  aria-label="Concurrency"
+                  aria-describedby="settings-concurrency-help"
                   name="concurrency"
                   inputmode="numeric"
                   required
                   [(ngModel)]="draft.concurrency"
                   (ngModelChange)="edit()"
-                /><small>1–1000 · Cấu hình đã lưu</small></label
+                /><small id="settings-concurrency-help"
+                  >1–1000 · Cấu hình đã lưu</small
+                ></label
               >
               <label for="settings-effective"
                 >Effective concurrency<input
@@ -454,12 +459,14 @@
               <label for="settings-budget"
                 >Monthly budget (USD)<input
                   id="settings-budget"
+                  aria-label="Monthly budget (USD)"
+                  aria-describedby="settings-budget-help"
                   name="budget"
                   inputmode="decimal"
                   required
                   [(ngModel)]="draft.monthlyBudget"
                   (ngModelChange)="edit()"
-                /><small
+                /><small id="settings-budget-help"
                   >0–1,000,000 USD · Tối đa 2 chữ số thập phân</small
                 ></label
               >

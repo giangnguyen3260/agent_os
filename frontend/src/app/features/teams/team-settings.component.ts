@@ -121,6 +121,10 @@ export class TeamSettingsComponent {
     this.route.paramMap.pipe(takeUntilDestroyed()).subscribe(p => {
       this.clearPrivate();
       this.locator = null;
+      // An accepted identity change starts a fresh page, even from UNKNOWN.
+      // Same-identity refresh still preserves the unresolved operation in load().
+      this.phase.set('edit');
+      this.tab.set('info');
       this.id = p.get('id') ?? '';
       this.teamId = p.get('teamId') ?? '';
       this.actor = this.auth.user()?.id;
