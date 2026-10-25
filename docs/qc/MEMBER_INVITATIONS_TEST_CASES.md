@@ -1,5 +1,10 @@
 # Member invitations independent QC cases
 
+Current outcome: candidate31270e8388d7bd02430786830cd3492bff51ccaa passed271BE,522 real-backend browser instances (51 invitation +471 baseline), all native PostgreSQL/SMTP gates including real outage/exhaustion/recovery, Docker and restart/logout. B13/B17/B08 and baseline route-reuse regression passed at all3widths. See [final exact-candidate QC](MEMBER_INVITATIONS_QC_REPORT.md) for logs, binding, artifact hashes, visual-review attribution and limitations. PR25 remains draft/unmerged. Sonar remains paused.
+
+## Historical authoring and partial-run records
+
+
 Source: full `docs/engineering/MEMBER_INVITATIONS_CONTRACT.md`, including shared labels/hooks and retained approval rejoin warning. Base supplied by main: `778ed08911f761eaa3a5397291414a560679248e` (prior 192 backend / 471 browser results are supplied historical evidence, not independently rerun here).
 
 The scripts require disposable PostgreSQL, an enabled invitation worker, HTTP frontend/backend, and isolated Mailpit SMTP. No external delivery. Fixture applies once after V015, copies only the disposable bootstrap password hash, and creates no invitation capability directly. Native emails are `invitation-native-*` and native existing humans 901–930; browser emails are `invitation-browser-{project}-*` and existing humans 101–130 / 201–230 / 301–330. Browser actors 3/4/5; native actor 1 and 901/902. Foreign actor 99. Browser organizations are 90909090-9090-4090-8090-909090909090 and 91919191-9191-4191-8191-919191919191; native organizations are 92929292-9292-4292-8292-929292929292 and 93939393-9393-4393-8393-939393939393. Original browser memberships remain, including admin 1; native scope is added separately. Published canonical vectors explicitly retain their literal 9090 organization. No previous-feature account is modified. The fixture intentionally fails on reapplication; rebuild the disposable database before repeating.

@@ -1,4 +1,4 @@
-# Member invitations — runtime acceptance in progress
+# Member invitations — bounded development gate verified
 
 [PR25](https://github.com/giangnguyen3260/agent_os/pull/25) remains draft/unmerged on `feature/member-invitations`, stacked on PR24. This report covers the invitation slice only. No production or Mac deployment acceptance.
 
@@ -6,14 +6,14 @@
 
 | Binding | Value |
 |---|---|
-| Application/test candidate | `38c67622276d5502f686a699c01df4a8b8de70ba` |
-| Application/test tree | `2bf719b35f03d7485088f62f82534d75d48898cd` |
-| Tested PR merge | `7cfb2633e122fb2e2263953ed5b4bab0680475fe` |
+| Application/test candidate | `31270e8388d7bd02430786830cd3492bff51ccaa` |
+| Application/test tree | `60c1622fddcf1aa1b8d2be0144c45b63d534263d` |
+| Tested PR merge | `06969a2008f91c84ae2d7c08de0abc2cd8680f8f` |
 | Base | `778ed08911f761eaa3a5397291414a560679248e` |
-| Quality | [40185649031](https://github.com/giangnguyen3260/agent_os/actions/runs/40185649031), job121145756173 SUCCESS:271 tests,0fail/errors/skips, audit0 and all quality gates |
-| Docker | [40185649053](https://github.com/giangnguyen3260/agent_os/actions/runs/40185649053), job121145756180 native passed;51 invitation browser passed; baseline43pass/1fail/427unrun, restart unrun |
+| Quality | [40186580919](https://github.com/giangnguyen3260/agent_os/actions/runs/40186580919), job121148529888 SUCCESS:271BE,0fail/errors/skips, audit0 and all quality gates |
+| Docker | [40186580915](https://github.com/giangnguyen3260/agent_os/actions/runs/40186580915), job121148529822 SUCCESS: native PostgreSQL/SMTP,51+471browser and restart/logout |
 
-Required browser gate:51 invitation instances (17 cases ×3 widths) first, then471 baseline, with51 invitation captures planned. Disjoint collection counts were observed locally; these are not execution results. Backend expected271 includes192 baseline +79 additions (59 @Test methods and20 parameterized inputs). Prior candidate6 Quality271/native passed; this candidate must reproduce the full gates after the global router correction.
+Executed browser gate: **522 passed**, zero failures/skips/retries:51 invitation instances (17 cases ×3 widths,2.0minutes), then471 baseline (14.6minutes). Backend **271 passed**,0failures/errors/skips:192 baseline +79 additions (59 @Test methods and20 parameterized inputs). B13 URL erasure, B17 same-document replacement, B08 dirty Back/reload and baseline AD-B10 all passed at1440/768/390. Native PostgreSQL/SMTP and backend restart/session/logout passed. This report binds the tested application/test candidate above; a later documentation-only closure does not change that tested source.
 
 ## Delivered boundary
 
@@ -23,7 +23,7 @@ Fixed72h deadline,60s resend cooldown and alternate current-Admin resend reautho
 
 V015 is additive, without production seed. Organization-first, global email-digest and sorted-human locks, post-wait issuer/authority/expiry checks, retained-ledger overflow and transactional provenance protect enrollment. Public POSTs still require CSRF; only the two exact inspect/accept endpoints are added to anonymous transport.
 
-## Verification required on this candidate
+## Executed gates
 
 - Quality: Java21 compilation, Google Java formatting/imports, JUnit, FE lint/format/tooling/actual production DTO validators and canonical SHA256 vectors, audit and Angular production build.
 - Native PostgreSQL/HTTP/SMTP: strict wire/auth/replay, digest-only real delivered links, one-time new/existing acceptance, no account overwrite, rejoin revision/overflow, disabled-recipient privacy, organization/global-email/sorted-human lock barriers, expiry after waits, latest issuer rebinding, audit rollback, fixed-expiry resend/revoke and immutable historical receipts.
@@ -36,7 +36,7 @@ V015 is additive, without production seed. Organization-first, global email-dige
 
 FE lint, Prettier, actual production invitation validators and three canonical SHA256 vectors, Angular production build, Java formatter/imports, workflow/Compose YAML parse, Python AST, browser Node syntax and disjoint51/471 collection passed. Local Java17 cannot compile this Java21 project; local Maven/Docker are unavailable. CI supplies the actual Java21/PostgreSQL/SMTP/browser evidence. Main fetched high-fidelity Figma contexts/screenshots for mobile new account, desktop review and tablet inline sign-in; design-only review is not runtime acceptance.
 
-## Earlier failures and corrections
+## Historical failures and corrections
 
 All entries below are historical, not successful completion of the current candidate. Base remains778ed089.
 
@@ -72,3 +72,21 @@ Independent source reviewer Turing inspected the token URL correction against th
 ## Candidate8 browser outcome
 
 All51 invitation browser instances passed, including B13 and B17 at all3 widths. The baseline stopped at AD-B10: synthetic pushState({},...) discarded Angular history page metadata, so computed cancellation could not determine the previous entry position. Its prompt, old-content and single-POST contract remains required. A bounded test-fixture correction is under independent QC review; no production guard is being bypassed and no assertion removed. All471 baseline instances and restart must complete on the final candidate.
+
+## Complete invitation visual review
+
+Candidate8 `38c67622276d5502f686a699c01df4a8b8de70ba`, tree`2bf719b35f03d7485088f62f82534d75d48898cd`, merge`7cfb2633e122fb2e2263953ed5b4bab0680475fe`: Quality40185649031/job121145756173271pass; Docker40185649053/job12114575618051invitation pass,43baselinepass/1fail/427unrun, restart unrun. All51 invitation PNGs in artifact12596203147 were downloaded and ZIP SHA256 matched metadata: `9353beed2c5fb7a5a9bc423541ad1a498d08f00685f8d964364845f89feaf79e`. Coordinator inspected all17states across1440/768/390, plus full-resolution vertical segments for long tablet/mobile lists: readable ink text, clear action hierarchy, wrapped recipient/receipt values and no observed overlap or horizontal overflow. Mobile long forms/lists scroll vertically as intended. This is bounded synthetic visual review, not full accessibility certification.
+
+Candidate9 changes only four baseline fixture call sites, one shared test helper and this report. Application sources are byte-identical to candidate8. The helper retains Angular history state, advances its page index for the pushed entry and dispatches that stored state; it fails explicitly without a valid router page index. It models managed history for synthetic parameter-reuse tests; actual native Back/reload remain covered by B08. All original prompt/URL/DOM/single-write oracles,522-case collection and zero retries remain. At that handoff, final baseline/restart evidence was pending; execution is closed below.
+
+## Final executed evidence
+
+Quality40186580919/job121148529888 completed SUCCESS. Docker40186580915/job121148529822 completed SUCCESS. Native invitation output at2026-10-25T10:58:46Z confirms wire/auth/receipts, real SMTP new/existing enrollment and digest-only one-time joins, organization/global-email/sorted-human lock barriers, post-wait issuer/expiry/ledger checks, audit rollback, overflow, fixed deadline, queued replacement, issuer loss/explicit reauthorization, historical receipts and real transport outage/retry/five-attempt exhaustion/recovery. Native/browser isolation and coherent72h fixture handoff passed.
+
+Invitation browser51 passed at11:01:19Z; baseline471 passed at11:15:57Z. AD-B10 passed desktop/tablet/mobile with the corrected managed-history fixture and original assertions. Post-browser native gates passed. At11:16:46Z the exact session survived backend restart and logout rejected replay. Dates/times here are log UTC evidence, not local deployment times.
+
+Final run artifact12596661547 contains51 PNGs,17 per viewport. Coordinator downloaded ZIP and SHA256 matched GitHub metadata: `92065d54a855e31cf670e5409c27f605f22a91afe14e1c10b0159957c6eeb61b`. Full51 visual review described above uses candidate8's byte-identical application source; final candidate9 changes only test fixtures/report and reproduces all51 responsive executions. No application UI change requires repeated visual certification.
+
+Earlier chronological pending/failed statements document those candidates only; they do not override this final result. No known blocking finding remains for this bounded invitation implementation. PR25 remains draft/unmerged, stacked on PR24. Production, Mac deployment and the other remaining screens are not accepted by these development results.
+
+Independent reviewer Turing separately retrieved completed Quality/Docker logs and GitHub bindings, verified head/tree/tested-merge/base parents,271 and51+471 counts, B13/B17/B08 and affected baseline navigation oracles at all3widths, native PostgreSQL/SMTP steps, restart/logout and successful teardown. No blocking issue found in that bounded review. Artifact download/hash/count verification and visual inspection are coordinator evidence, not independently repeated by the reviewer.

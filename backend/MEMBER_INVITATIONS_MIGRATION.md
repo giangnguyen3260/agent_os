@@ -1,6 +1,6 @@
 # V015 member invitations — development rollout
 
-Implementation contract: [MEMBER_INVITATIONS_CONTRACT.md](../docs/engineering/MEMBER_INVITATIONS_CONTRACT.md). Implementation/runtime gates are in progress; previous PR24 results192BE/471browser are a baseline, not acceptance of invitations. This branch is stacked on unmerged PR24. No merge, production rollout or Mac deployment claim.
+Implementation contract: [MEMBER_INVITATIONS_CONTRACT.md](../docs/engineering/MEMBER_INVITATIONS_CONTRACT.md). Candidate31270e8 passed271BE,522browser, native PostgreSQL/SMTP and Docker/restart/logout; see [final QC](../docs/qc/MEMBER_INVITATIONS_QC_REPORT.md). Previous PR24 results192BE/471browser remain the historical baseline. This branch is stacked on unmerged PR24. No merge, production rollout or Mac deployment claim.
 
 V015 adds organization invitations, durable mail jobs, restricted invitation events/management receipts and a global email-digest mutex table. It preserves V001–V014, existing accounts, memberships, grant/role ledgers and sessions. No production seed; never apply scripts/member-invitations-ci-fixture.sql outside disposable QC. Back up organization memberships, role revisions, invitation provenance/receipts and existing grants before forward migration; do not reset history or use destructive down migrations.
 

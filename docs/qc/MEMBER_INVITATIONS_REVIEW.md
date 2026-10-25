@@ -1,5 +1,10 @@
 # Independent member invitations review
 
+Current outcome: candidate31270e8388d7bd02430786830cd3492bff51ccaa passed271BE,522 real-backend browser instances (51 invitation +471 baseline), all native PostgreSQL/SMTP gates including real outage/exhaustion/recovery, Docker and restart/logout. B13/B17/B08 and baseline route-reuse regression passed at all3widths. See [final exact-candidate QC](MEMBER_INVITATIONS_QC_REPORT.md) for logs, binding, artifact hashes, visual-review attribution and limitations. PR25 remains draft/unmerged. Sonar remains paused.
+
+## Historical authoring and partial-run records
+
+
 Status: authored QC, not runtime acceptance. No commits, merge, rollout or production-security claim. Scope is limited to the five assigned QC files. Main owns workflows, compose, final report and independent exact candidate binding.
 
 Read the full shared contract, including subsequent labels/hooks and the retained approval warning. Inspected V015, InvitationStore, InvitationManagement, InvitationRedemption, InvitationDispatch, InvitationController, frontend InvitationService and admin/public component state machines while agents were implementing them. The code remains a moving candidate; this is not final source approval.
