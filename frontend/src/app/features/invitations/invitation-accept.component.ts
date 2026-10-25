@@ -11,7 +11,13 @@ import {
 import {DatePipe} from '@angular/common';
 import {HttpErrorResponse} from '@angular/common/http';
 import {FormsModule} from '@angular/forms';
-import {RouterLink} from '@angular/router';
+import {
+  NavigationEnd,
+  NavigationSkipped,
+  Router,
+  RouterLink,
+} from '@angular/router';
+import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {AuthFailure, AuthService} from '../../core/auth/auth.service';
 import {InvitationService} from './invitation.service';
 import {InvitationScopeComponent} from './invitation-scope.component';
@@ -34,6 +40,7 @@ export class InvitationAcceptComponent {
   readonly auth = inject(AuthService);
   private readonly api = inject(InvitationService);
   private readonly destroy = inject(DestroyRef);
+  private readonly router = inject(Router);
   readonly context = signal<Inspection | null>(null);
   readonly result = signal<Acceptance | null>(null);
   readonly phase = signal<
@@ -63,6 +70,17 @@ export class InvitationAcceptComponent {
   private dispatched = false;
   constructor() {
     this.token = this.consumeFragment();
+    // Router commits can restore a hash after the native hashchange scrub.
+    // Erase it again without consuming a capability or starting a request.
+    this.router.events
+      .pipe(takeUntilDestroyed(this.destroy))
+      .subscribe(event => {
+        if (
+          event instanceof NavigationEnd ||
+          event instanceof NavigationSkipped
+        )
+          this.scrubFragment();
+      });
     effect(() => {
       const actor = this.auth.user()?.id;
       if (actor !== this.actor) {
@@ -95,20 +113,23 @@ export class InvitationAcceptComponent {
     });
     void this.inspect();
   }
-  private consumeFragment(): string {
-    const fragment = window.location.hash;
+  private scrubFragment(): void {
     window.history.replaceState(
       window.history.state,
       '',
       window.location.pathname,
     );
+  }
+  private consumeFragment(fragment = window.location.hash): string {
+    this.scrubFragment();
     return /^#token=([A-Za-z0-9_-]{43})$/.exec(fragment)?.[1] || '';
   }
-  @HostListener('window:hashchange')
-  replaceInvitation(): void {
+  @HostListener('window:hashchange', ['$event'])
+  replaceInvitation(event: HashChangeEvent): void {
     // A same-document link does not recreate this component. Scrub it even if
     // the user chooses to keep the current draft or unresolved operation.
-    const token = this.consumeFragment();
+    // Read the event URL if a router completion already scrubbed location.
+    const token = this.consumeFragment(new URL(event.newURL).hash);
     if (!this.canLeave()) return;
     this.flow++;
     this.clean();
