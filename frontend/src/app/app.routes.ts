@@ -221,6 +221,15 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'workspace/:id/agents/:agentId/permissions',
+    canActivate: [authGuard],
+    runGuardsAndResolvers: 'always',
+    loadComponent: () =>
+      import('./features/agents/agent-permissions.component').then(
+        module => module.AgentPermissionsComponent,
+      ),
+  },
+  {
     path: 'workspace/:id/agents/:agentId/studio',
     canActivate: [authGuard],
     canDeactivate: [

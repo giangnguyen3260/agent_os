@@ -1,0 +1,166 @@
+<div class="forest-shell" data-testid="agent-permissions">
+  <aside class="desktop-sidebar">
+    <div class="brand">agentos</div>
+    <nav aria-label="Điều hướng workspace">
+      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a
+      ><a
+        [routerLink]="['/workspace', id, 'organization-map']"
+        (click)="closeMenu()"
+        >Organization map</a
+      ><a [routerLink]="['/workspace', id, 'teams']">Teams</a
+      ><a
+        class="selected"
+        aria-current="page"
+        [routerLink]="['/workspace', id, 'agents']"
+        >Agents</a
+      ><a [routerLink]="['/workspace', id, 'missions']">Missions</a
+      ><a [routerLink]="['/workspace', id, 'approvals']">Approvals</a
+      ><button disabled>Trace</button
+      ><a routerLink="/workspace">Đổi workspace</a>
+    </nav>
+  </aside>
+  <header class="compact-header">
+    <span class="brand">agentos</span
+    ><button
+      type="button"
+      class="button secondary"
+      aria-haspopup="dialog"
+      aria-controls="agent-permissions-menu"
+      [attr.aria-expanded]="menuOpen()"
+      (click)="toggleMenu()"
+    >
+      Menu
+    </button>
+  </header>
+  <dialog
+    id="agent-permissions-menu"
+    aria-label="Workspace navigation"
+    (cancel)="closeMenu()"
+  >
+    <button type="button" class="button secondary" (click)="closeMenu()">
+      Close menu
+    </button>
+    <nav aria-label="Điều hướng thu gọn">
+      <a [routerLink]="['/workspace', id, 'dashboard']" (click)="closeMenu()"
+        >Overview</a
+      ><a
+        [routerLink]="['/workspace', id, 'organization-map']"
+        (click)="closeMenu()"
+        >Organization map</a
+      ><a [routerLink]="['/workspace', id, 'teams']" (click)="closeMenu()"
+        >Teams</a
+      ><a
+        class="selected"
+        aria-current="page"
+        [routerLink]="['/workspace', id, 'agents']"
+        (click)="closeMenu()"
+        >Agents</a
+      ><a [routerLink]="['/workspace', id, 'missions']" (click)="closeMenu()"
+        >Missions</a
+      ><a routerLink="/workspace" (click)="closeMenu()">Đổi workspace</a>
+    </nav>
+  </dialog>
+  <main [attr.aria-busy]="loading()">
+    @if (context(); as workspace) {
+      <div class="breadcrumb">
+        <span>{{ workspace.name }}</span
+        ><span>{{ auth.user()?.displayName }}</span>
+      </div>
+    }
+    <header class="heading">
+      <h1>
+        {{
+          permissions() ? permissions()!.name + ' / Permissions' : 'Permissions'
+        }}
+      </h1>
+      <p>Xem nội dung đã cấu hình và thông tin quyền của Agent.</p>
+    </header>
+    <div class="actions">
+      <a
+        class="button secondary"
+        [routerLink]="['/workspace', id, 'agents', agentId, 'studio']"
+        >Back</a
+      ><button type="button" class="button secondary" (click)="load()">
+        Refresh</button
+      ><a
+        class="button secondary"
+        [routerLink]="['/workspace', id, 'agents', agentId, 'studio']"
+        >Open Agent Studio</a
+      >
+    </div>
+    @if (loading()) {
+      <p role="status" data-testid="permissions-loading">
+        Đang tải thông tin quyền…
+      </p>
+    }
+    @if (denied()) {
+      <div role="alert" data-testid="permissions-denied">
+        <p>Không thể truy cập Agent hoặc workspace này.</p>
+        <a routerLink="/workspace">Chọn workspace khác</a>
+      </div>
+    }
+    @if (error()) {
+      <p role="alert" data-testid="permissions-error">{{ error() }}</p>
+    }
+    @if (permissions(); as info) {
+      <div class="metadata">
+        <p>Trạng thái: {{ info.status }}</p>
+        <p>Phiên bản cấu hình: {{ info.configurationRevision }}</p>
+        <p>
+          Kiểm tra lúc:
+          <time [attr.datetime]="info.checkedAt">{{ info.checkedAt }}</time>
+        </p>
+        <p>
+          Team:
+          {{
+            info.team?.name ??
+              (info.teamState === 'UNASSIGNED'
+                ? 'Chưa gán Team'
+                : 'Không có thông tin Team')
+          }}
+        </p>
+      </div>
+      <p class="availability" data-testid="permissions-unavailable">
+        Hiện chưa thể xác minh quyền thực tế của Agent. Nội dung đã cấu hình
+        không xác nhận quyền đã cấp hoặc bị từ chối.
+      </p>
+      @if (!info.configurationPresent) {
+        <p class="notice" data-testid="permissions-missing-config">
+          Agent chưa có cấu hình đã lưu.
+        </p>
+      }
+      <table aria-label="Thông tin quyền của Agent">
+        <thead>
+          <tr>
+            <th scope="col">Nhóm cấu hình</th>
+            <th scope="col">Đã cấu hình</th>
+            <th scope="col">Quyền thực tế</th>
+            <th scope="col">Bên cấp quyền</th>
+            <th scope="col">Phạm vi</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (request of info.requests; track request.kind) {
+            <tr data-testid="permission-request">
+              <th scope="row">
+                <span class="card-label">Nhóm cấu hình</span
+                >{{ labels[request.kind] }}
+              </th>
+              <td>
+                <span class="card-label">Đã cấu hình</span
+                ><span class="raw">{{ configured(request.configured) }}</span>
+              </td>
+              <td>
+                <span class="card-label">Quyền thực tế</span>Chưa thể xác minh
+              </td>
+              <td>
+                <span class="card-label">Bên cấp quyền</span>Không có dữ liệu
+              </td>
+              <td><span class="card-label">Phạm vi</span>Không có dữ liệu</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+  </main>
+</div>
