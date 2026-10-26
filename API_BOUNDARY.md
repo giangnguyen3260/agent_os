@@ -1,5 +1,7 @@
 # AgentOS API Boundary v0.1
 
+Current S09 inspection boundary: authenticated current organization ADMIN/MEMBER may GET `/api/v1/organizations/{organizationId}/agents/{agentId}/permissions`. The response projects actual stored requests, revision, safe Team and lifecycle; `sourceStatus=UNAVAILABLE`, with null effective authority/issuer/scope. No Agent permission writer or human approval-grant inheritance. See [normative contract](docs/engineering/AGENT_PERMISSIONS_CONTRACT.md) and [verified QC](docs/qc/AGENT_PERMISSIONS_QC_REPORT.md).
+
 ## 1. Purpose
 
 This document defines the API and service boundaries for AgentOS v0.1.

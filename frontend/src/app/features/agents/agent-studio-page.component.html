@@ -80,6 +80,17 @@
         </header>
         @if (stage() === 'view') {
           <div class="actions">
+            <a
+              class="button secondary"
+              [routerLink]="[
+                '/workspace',
+                id,
+                'agents',
+                agentId,
+                'permissions',
+              ]"
+              >Permissions</a
+            >
             @if (
               context()?.role === 'ADMIN' && config.agent.status === 'DRAFT'
             ) {
