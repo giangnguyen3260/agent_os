@@ -1,5 +1,7 @@
 # Organization Map — executable acceptance matrix
 
+Final bounded execution: candidate07968e3 passed7 new Map integration tests,24 Map browser cases plus561 baseline, native PostgreSQL and restart/logout. See [final QC](ORGANIZATION_MAP_QC_REPORT.md) and [independent review](ORGANIZATION_MAP_FINAL_REVIEW.md). The original prospective matrix/NOT RUN labels below are historical planning, not blanket acceptance of every proposed vector. UNKNOWN membership-role SQL is prohibited by V002 in normal PostgreSQL; executed browser authority coverage uses deletion and legal ADMIN→MEMBER downgrade. Corruption, dedicated visibility, broad accessibility and other unexecuted vectors remain gaps.
+
 Status: specification only; all cases NOT RUN. No executable tests changed or authored by this reviewer. Companion findings/undecided semantics: `ORGANIZATION_MAP_REVIEW.md`. Run in disposable fixtures; use actual backend/PostgreSQL for scope/transaction claims and browser for UI claims. Main owns execution and evidence collection.
 
 ## Fixture recipe and execution rules

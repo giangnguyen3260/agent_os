@@ -57,3 +57,8 @@ Independent QC authored the initial review/matrix and eight browser cases before
 OM-R01 source mitigation: component load clears both projections and increments its generation before awaiting current session/workspace; every subscription success/failure checks active generation, actor and destruction. Actor effect clears private state; focus and visibility listeners invoke load even during pending requests. OM-R02: Map projection independently scopes manager/reporting joins and returns only validated target IDs, unlike the older directory DTO. These are source observations with pending actual privacy tests. Existing scope constraints are retained; corrupt manager/assignment fixtures are not claimed native-schema coverage.
 
 Candidate1 CI found one test error (nonmember noncanonical organization path expected400; transport correctly403). Main preserved403 assertion and added a dedicated owned scope to actually reach canonical-path400 validation. All query UUID vectors remain; no app/security behavior weakened. Exact candidate/run/outcome evidence belongs to ORGANIZATION_MAP_QC_REPORT.md.
+
+
+## Final evidence pointers
+
+The subsequent independent final reviewer completed source and actual CI-log verification in ORGANIZATION_MAP_FINAL_REVIEW.md, superseding the coordinator-only interim review boundary above. Main completed responsive download/hash and24-capture review; exact evidence and bounded gaps are in ORGANIZATION_MAP_QC_REPORT.md. Initial pending/ambiguity rows above are historical: contract resolutions and source/runtime acceptance must be read with those final reports. No blanket pass of prospective corruption/visibility/accessibility vectors is implied.
