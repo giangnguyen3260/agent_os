@@ -164,10 +164,10 @@ test.describe('organization map independent QC', () => {
     for (const name of ['003', '004', '005'])
       await expect(
         hook(p, 'agent').filter({hasText: `Map Agent ${name}`}),
-      ).toContainText('Reports to: Unavailable');
+      ).toContainText('Báo cáo cho: Không có thông tin');
     await expect(
       hook(p, 'agent').filter({hasText: 'Map Agent 006'}).first(),
-    ).toContainText('Reports to: Map Agent 007');
+    ).toContainText('Báo cáo cho: Map Agent 007');
     await shot(p, info, 'selected');
     const next = await change(
       p,
