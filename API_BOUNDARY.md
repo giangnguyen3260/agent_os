@@ -702,3 +702,8 @@ Tokens are32 random bytes and persisted only as SHA256; real SMTP runs outside r
 ## Team Settings S06 — implementation in progress
 
 ADMIN-only scoped Context/candidates/receipts and reviewed atomic settings update under `/api/v1/organizations/{org}/teams/{team}/settings`; exact DTOs/status/strict wire and actor-scoped replay are normative in the [contract](docs/engineering/TEAM_SETTINGS_CONTRACT.md). Revision plus full stored aggregate fingerprint protects stale writes from Team/Agent/Studio changes. DRAFT/ACTIVE metadata and saved limits, DRAFT-only membership, archived read-only, retained-reference removal blocks. No Team status, execution, grants or account changes. Runtime gates pending; see [QC](docs/qc/TEAM_SETTINGS_QC_REPORT.md).
+
+
+## Organization Map S02 read boundary
+
+Current ADMIN/MEMBER GET `/api/v1/organizations/{organizationId}/organization-map` and `/organization-map/agents` expose bounded scoped Team/Agent projections with20-row pages. Reporting target IDs/names are disclosed only within the same organization and Team; cycles remain flat labels. No ownership/permission graph, runtime metrics, config bodies or write effects. See [contract](docs/engineering/ORGANIZATION_MAP_CONTRACT.md) and [verified QC](docs/qc/ORGANIZATION_MAP_QC_REPORT.md). No schema migration.

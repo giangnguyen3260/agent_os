@@ -1,9 +1,9 @@
 <ng-template #navigation>
   <nav aria-label="Điều hướng workspace">
     <span class="selected" aria-current="page">Overview</span>
-    <button type="button" disabled aria-describedby="unfinished">
-      Organization map
-    </button>
+    <a [routerLink]="['/workspace', context()?.id, 'organization-map']"
+      >Organization map</a
+    >
     <button type="button" (click)="viewTeams()">Teams</button>
     <a [routerLink]="['/workspace', context()?.id, 'teams']">Browse teams</a>
     <a [routerLink]="['/workspace', context()?.id, 'agents']">Agents</a>

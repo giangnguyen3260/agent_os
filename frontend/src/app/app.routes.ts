@@ -375,6 +375,15 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'workspace/:id/organization-map',
+    canActivate: [authGuard],
+    runGuardsAndResolvers: 'always',
+    loadComponent: () =>
+      import('./features/organization/organization-map.component').then(
+        module => module.OrganizationMapComponent,
+      ),
+  },
+  {
     path: 'workspace/:id',
     canActivate: [authGuard],
     runGuardsAndResolvers: 'always',

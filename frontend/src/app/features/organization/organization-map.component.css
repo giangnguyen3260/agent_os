@@ -1,0 +1,76 @@
+:host {
+  color: var(--text, #20342a);
+  background: var(--canvas, #f7f8f5);
+}
+.map-panel {
+  display: grid;
+  gap: 12px;
+  padding: 20px 24px;
+  background: var(--surface, white);
+  border: 1px solid var(--line, #dde4dc);
+  border-radius: 8px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.map-row {
+  display: grid;
+  gap: 4px;
+  border-bottom: 1px solid var(--line, #dde4dc);
+  padding: 8px 0 12px;
+  min-width: 0;
+}
+.map-row a {
+  color: var(--primary, #17634b);
+  font-weight: 600;
+}
+.team-selector {
+  justify-self: start;
+  max-width: 100%;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  padding: 10px 12px;
+  border: 1px solid var(--line, #dde4dc);
+  border-radius: 8px;
+  color: var(--primary, #17634b);
+  background: var(--surface, white);
+  min-height: 44px;
+  cursor: pointer;
+}
+[aria-pressed='true'] {
+  background: var(--surface-soft, #e7f0e9);
+}
+.filters {
+  align-items: end;
+}
+.filters label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+input,
+select {
+  min-height: 44px;
+  max-width: 100%;
+  border: 1px solid var(--line, #dde4dc);
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: var(--surface, white);
+  color: inherit;
+  font: inherit;
+}
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--primary, #17634b);
+  outline-offset: 3px;
+}
+@media (max-width: 767px) {
+  .map-panel {
+    padding: 20px 16px;
+  }
+  .filters label {
+    width: 100%;
+  }
+}
