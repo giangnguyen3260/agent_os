@@ -1,6 +1,6 @@
 # Trace Explorer PRnext independent QC review
 
-Status: **authored; runtime acceptance pending**. Review date: 2026-10-26. No merge/closure approval. Only the assigned browser spec, native probe and two QC documents were authored. No commits. Shared application files remain owned by main and FE/BE workers.
+Status: **source findings resolved; completed candidate2 runtime acceptance is recorded in TRACE_EXPLORER_FINAL_REVIEW.md and QC_REPORT.md**. The authored/pending ledger below is historical before CI. Review date: 2026-10-26. No merge/closure approval. Only the assigned browser spec, native probe and two QC documents were authored. No commits. Shared application files remain owned by main and FE/BE workers.
 
 ## Executed evidence
 
