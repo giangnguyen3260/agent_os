@@ -297,7 +297,7 @@ test.describe('trace explorer independent QC', () => {
       sql(`DELETE FROM organization_memberships WHERE account_id='${original.id}' AND organization_id='${f.org}';`);
       const rejected = responseFor(p, `/api/v1/auth/workspaces/${f.org}`);
       await button(p, 'Refresh').click();
-      expect((await rejected).status()).toBe(403);
+      expect((await rejected).status()).toBe(404);
       await expect(hook(p, 'denied')).toBeVisible();
       await held.release();
       await cleared(p);
