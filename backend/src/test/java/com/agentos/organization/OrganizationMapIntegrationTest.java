@@ -403,6 +403,21 @@ class OrganizationMapIntegrationTest {
     mvc.perform(
             get("/api/v1/organizations/" + "ABCDEF00-0000-4000-8000-000000000000/organization-map")
                 .with(auth()))
+        .andExpect(status().isForbidden());
+    // An owned scope reaches canonical controller validation; an unowned scope does not.
+    UUID owned =
+        UUID.fromString("abcdef00-0000-4000-8000-" + UUID.randomUUID().toString().substring(24));
+    jdbc.update(
+        "insert into organizations(id,name,slug,status,created_at,updated_at) values"
+            + " (?,'Canonical scope',?,'ACTIVE',current_timestamp,current_timestamp)",
+        owned,
+        owned.toString());
+    jdbc.update("insert into organization_memberships values (?,?,'MEMBER')", account, owned);
+    mvc.perform(
+            get("/api/v1/organizations/"
+                    + owned.toString().toUpperCase(java.util.Locale.ROOT)
+                    + "/organization-map")
+                .with(auth()))
         .andExpect(status().isBadRequest());
   }
 
