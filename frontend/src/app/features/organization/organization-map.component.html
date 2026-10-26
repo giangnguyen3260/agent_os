@@ -1,0 +1,274 @@
+<div class="forest-shell">
+  <aside class="desktop-sidebar">
+    <div class="brand">agentos</div>
+    <nav aria-label="Điều hướng workspace">
+      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a
+      ><span class="selected" aria-current="page">Organization map</span
+      ><a [routerLink]="['/workspace', id, 'teams']">Teams</a
+      ><a [routerLink]="['/workspace', id, 'agents']">Agents</a
+      ><a [routerLink]="['/workspace', id, 'missions']">Missions</a
+      ><a [routerLink]="['/workspace', id, 'approvals']">Approvals</a
+      ><button disabled>Trace</button
+      ><a routerLink="/workspace">Đổi workspace</a>
+    </nav>
+  </aside>
+  <header class="compact-header">
+    <span class="brand">agentos</span
+    ><button
+      type="button"
+      class="button secondary"
+      aria-haspopup="dialog"
+      aria-controls="org-map-menu"
+      [attr.aria-expanded]="menuOpen()"
+      (click)="toggleMenu()"
+    >
+      Menu
+    </button>
+  </header>
+  <dialog
+    id="org-map-menu"
+    aria-label="Workspace navigation"
+    (cancel)="closeMenu()"
+  >
+    <button type="button" class="button secondary" (click)="closeMenu()">
+      Close menu
+    </button>
+    <nav aria-label="Điều hướng thu gọn">
+      <a [routerLink]="['/workspace', id, 'dashboard']" (click)="closeMenu()"
+        >Overview</a
+      ><span class="selected" aria-current="page">Organization map</span
+      ><a [routerLink]="['/workspace', id, 'teams']" (click)="closeMenu()"
+        >Teams</a
+      ><a [routerLink]="['/workspace', id, 'agents']" (click)="closeMenu()"
+        >Agents</a
+      ><a [routerLink]="['/workspace', id, 'missions']" (click)="closeMenu()"
+        >Missions</a
+      ><a routerLink="/workspace" (click)="closeMenu()">Đổi workspace</a>
+    </nav>
+  </dialog>
+  <main [attr.aria-busy]="loading()">
+    @if (context(); as workspace) {
+      <div class="breadcrumb">
+        <span>{{ workspace.name }}</span
+        ><span>{{ auth.user()?.displayName }}</span>
+      </div>
+    }
+    <header class="heading">
+      <h1>Organization map</h1>
+      <p>Team và Agent đã lưu trong tổ chức.</p>
+    </header>
+    <div class="actions">
+      @if (inspector()?.team; as team) {
+        <a
+          class="button secondary"
+          [routerLink]="['/workspace', id, 'teams', team.id, 'workspace']"
+          >Open team</a
+        >
+      }
+      @if (context()?.role === 'ADMIN') {
+        <a
+          class="button secondary"
+          [routerLink]="['/workspace', id, 'agents', 'new']"
+          >Add Agent</a
+        >
+      }
+      <button type="button" class="button secondary" (click)="load()">
+        Refresh
+      </button>
+      @if (!denied()) {
+        <button type="button" class="text-action" (click)="clearFilters()">
+          Xóa bộ lọc
+        </button>
+      }
+    </div>
+    @if (loading()) {
+      <p role="status">Đang tải Organization map…</p>
+    }
+    @if (denied()) {
+      <div data-testid="org-map-denied" role="alert">
+        <p>Không còn quyền truy cập workspace.</p>
+        <a routerLink="/workspace">Chọn workspace khác</a>
+      </div>
+    }
+    @if (error()) {
+      <div data-testid="org-map-error" role="alert">
+        <p>{{ error() }}</p>
+        <button class="button secondary" type="button" (click)="load()">
+          Thử lại
+        </button>
+      </div>
+    }
+    @if (overview(); as org) {
+      <section
+        class="map-panel"
+        data-testid="org-map-overview"
+        aria-labelledby="org-map-heading"
+      >
+        <h2 id="org-map-heading">{{ org.name }}</h2>
+        <p>
+          {{ org.teamTotal }} Teams · {{ org.agentTotal }} Agents ·
+          {{ org.unassignedTotal }} Unassigned
+        </p>
+        <p class="caption">
+          Dữ liệu phản ánh thời điểm tải. Số liệu hoạt động hiện chưa có. Quan
+          hệ báo cáo không thay đổi quyền truy cập.
+        </p>
+        <form class="filters" (ngSubmit)="applyTeams()">
+          <label>Tìm Team<input name="teamQuery" [(ngModel)]="search" /></label
+          ><label
+            >Trạng thái Team<select
+              aria-label="Trạng thái Team"
+              name="teamStatus"
+              [(ngModel)]="selectedStatus"
+            >
+              <option value="">Tất cả</option>
+              @for (s of statuses; track s) {
+                <option [value]="s">{{ s }}</option>
+              }
+            </select></label
+          ><button class="button secondary" type="submit">Lọc Team</button>
+        </form>
+        @for (team of org.teams.items; track team.id) {
+          <article class="map-row" data-testid="org-map-team">
+            <button
+              class="team-selector"
+              type="button"
+              [attr.aria-pressed]="teamId === team.id"
+              (click)="select(team.id)"
+            >
+              {{ team.name }}
+            </button>
+            <p>
+              {{ team.status }} · {{ team.agentCount }} Agents · Manager
+              {{
+                team.managerUnavailable
+                  ? 'Không có thông tin'
+                  : (team.managerName ?? 'Chưa thiết lập')
+              }}
+            </p>
+          </article>
+        } @empty {
+          <p>Không có Team trong kết quả hiện tại.</p>
+        }
+        <div class="pagination" aria-label="Phân trang Team">
+          <button
+            class="button secondary"
+            type="button"
+            [disabled]="teamPage === 0"
+            (click)="changePage('teamPage', teamPage - 1)"
+          >
+            Team trước</button
+          ><span role="status"
+            >Trang {{ teamPage + 1 }} · {{ org.teams.total }} Teams</span
+          ><button
+            class="button secondary"
+            type="button"
+            [disabled]="
+              teamPage >= 100000 || (teamPage + 1) * 20 >= org.teams.total
+            "
+            (click)="changePage('teamPage', teamPage + 1)"
+          >
+            Team tiếp
+          </button>
+        </div>
+      </section>
+      @if (inspector(); as selected) {
+        <section
+          class="map-panel"
+          data-testid="org-map-inspector"
+          aria-labelledby="inspector-heading"
+        >
+          <h2 id="inspector-heading">
+            Inspector · {{ selected.team?.name ?? 'Unassigned' }}
+          </h2>
+          @if (selected.team; as team) {
+            <p>Mục đích: {{ team.purpose ?? 'Chưa thiết lập' }}</p>
+            <p>
+              Manager
+              {{
+                team.managerUnavailable
+                  ? 'Không có thông tin'
+                  : (team.managerName ?? 'Chưa thiết lập')
+              }}
+              · Thành viên {{ team.agentCount }} · Tiếp nhận
+              {{ team.intake ?? 'Chưa thiết lập' }} · {{ team.status }}
+            </p>
+          }
+          <form class="filters" (ngSubmit)="applyAgents()">
+            <label
+              >Tìm Agent<input
+                name="agentQuery"
+                [(ngModel)]="agentSearch" /></label
+            ><button class="button secondary" type="submit">Lọc Agent</button>
+          </form>
+          @for (agent of selected.items; track agent.id) {
+            <article class="map-row" data-testid="org-map-agent">
+              <a [routerLink]="['/workspace', id, 'agents', agent.id]">{{
+                agent.name
+              }}</a>
+              <p>
+                {{ agent.role ?? '—' }} · {{ agent.level ?? '—' }} ·
+                {{ agent.status ?? '—' }}
+              </p>
+              <p>
+                Báo cáo cho:
+                {{
+                  agent.reportingUnavailable
+                    ? 'Không có thông tin'
+                    : (agent.reportsToName ?? 'Chưa thiết lập')
+                }}
+              </p>
+            </article>
+          } @empty {
+            <p>Không có Agent trong kết quả hiện tại.</p>
+          }
+          <div class="pagination" aria-label="Phân trang Agent">
+            <button
+              class="button secondary"
+              type="button"
+              [disabled]="agentPage === 0"
+              (click)="changePage('agentPage', agentPage - 1)"
+            >
+              Agent trước</button
+            ><span role="status"
+              >Trang {{ agentPage + 1 }} · {{ selected.total }} Agents</span
+            ><button
+              class="button secondary"
+              type="button"
+              [disabled]="
+                agentPage >= 100000 || (agentPage + 1) * 20 >= selected.total
+              "
+              (click)="changePage('agentPage', agentPage + 1)"
+            >
+              Agent tiếp
+            </button>
+          </div>
+        </section>
+      }
+      <section
+        class="map-panel"
+        data-testid="org-map-unassigned"
+        aria-labelledby="unassigned-heading"
+      >
+        <h2 id="unassigned-heading">Unassigned</h2>
+        <p>
+          {{
+            org.unassignedTotal
+              ? org.unassignedTotal + ' Agents chưa gán Team'
+              : 'Không có agent chưa gán team'
+          }}
+        </p>
+        <div>
+          <button
+            type="button"
+            class="button secondary"
+            [attr.aria-pressed]="teamId === null"
+            (click)="select(null)"
+          >
+            Unassigned
+          </button>
+        </div>
+      </section>
+    }
+  </main>
+</div>

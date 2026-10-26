@@ -3,7 +3,8 @@
     <div class="brand">agentos</div>
     <nav aria-label="Điều hướng workspace">
       <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a
-      ><button disabled>Organization map</button
+      ><a [routerLink]="['/workspace', id, 'organization-map']"
+        >Organization map</a
       ><span class="selected" aria-current="page">Teams</span
       ><a [routerLink]="['/workspace', id, 'agents']">Agents</a
       ><a [routerLink]="['/workspace', id, 'missions']">Missions</a

@@ -1,0 +1,5 @@
+# Organization Map S02 Figma handoff
+
+File https://www.figma.com/design/5wUjDKXg8vtRaJcO9XHfml?node-id=43-1568 . Session8b161e81-6e46-4836-8a26-87d1e4f1ebf2. Coordinator fetched high-fidelity design context and screenshots for desktop43:1568, tablet60:10456 and mobile60:3840 before implementation. Three stacked sections: organization/Team inventory, selected-Team inspector and Unassigned. Existing Forest native Angular controls, Inter and canvas/ink/brand/border tokens reused. React Simple Design System mapped Button is not installed or usable in Angular; no React/Tailwind dependency. No visible static images/SVG assets in these frames.
+
+Actual scoped names, recorded lifecycle/reporting and saved intake replace sample names, taskIDs, Busy/Idle and Accepting. Added bounded Team/Agent filters/pages and independent selection; no runtime authority inferred. Responsive224sidebar/32desktop,24tablet,16mobile and compact accessible Menu follow the design. No Figma writes made for this slice. Actual rendered visual comparison remains pending CI screenshots; design fetch is not runtime acceptance.

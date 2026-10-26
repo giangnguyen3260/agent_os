@@ -204,6 +204,14 @@ jobs:
         env:
           E2E_BASE_URL: http://127.0.0.1:18080
         run: python3 scripts/team-settings-probe.py
+      - name: Provision isolated Organization Map fixtures
+        run: |
+          docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < scripts/organization-map-ci-fixture.sql
+      - name: PostgreSQL Organization Map scope and no-write projection
+        timeout-minutes: 3
+        env:
+          E2E_BASE_URL: http://127.0.0.1:18080
+        run: python3 scripts/organization-map-probe.py
       - name: Install browser test dependencies
         working-directory: frontend
         run: |
@@ -217,11 +225,18 @@ jobs:
         env:
           E2E_BASE_URL: http://127.0.0.1:18080
           E2E_MAILPIT_URL: http://127.0.0.1:18025
-        # New Team settings first, then the complete 522-instance baseline.
+        # Organization Map first; then the complete 561-instance baseline.
         # Selections are disjoint; one worker and zero retries remain unchanged.
         run: |
-          npm run test:e2e -- --max-failures=1 --grep 'team settings independent QC'
-          npm run test:e2e -- --max-failures=1 --grep-invert 'team settings independent QC'
+          npm run test:e2e -- --max-failures=1 --grep 'organization map independent QC'
+          npm run test:e2e -- --max-failures=1 --grep-invert 'organization map independent QC'
+      - name: Upload synthetic Organization Map visual evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: organization-map-visuals
+          path: frontend/qa-visuals/organization-map-*.png
+          if-no-files-found: ignore
       - name: Upload synthetic Approval Center visual evidence
         if: always()
         uses: actions/upload-artifact@v4
