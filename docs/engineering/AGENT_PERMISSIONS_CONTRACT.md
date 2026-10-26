@@ -26,3 +26,6 @@ BE meaningful integration: exact wire, current ADMIN/MEMBER, credential/disabled
 
 
 Frozen visible column labels: Nhóm cấu hình / Đã cấu hình / Quyền thực tế / Bên cấp quyền / Phạm vi. Group labels Mô hình / Công cụ / Kỹ năng; these are metadata labels, not tool catalog entries. Malformed workspace200 must clear private data and show a load error, while raw401/403/404 remain definite denied states. The Permissions service preserves raw workspace HTTP status using the existing `/api/v1/auth/workspaces/{id}` endpoint; shared AuthService semantics remain unchanged.
+
+
+Unsupported write-method denial follows existing transport behavior: no Permissions write handler exists. A method-not-supported sendError dispatch is blocked at the closed /error route, so native ADMIN PUT is expected403; MEMBER PUT is rejected403 by outer role authorization. Do not add a writer, relax security or infer permission denial/grant lifecycle from this transport status. The no-business-write snapshot is the acceptance oracle alongside exact denial.

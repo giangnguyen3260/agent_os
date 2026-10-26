@@ -114,8 +114,13 @@ for client in [admin, member]:
         assert client.get(ROOT + '/permissions' + suffix)[0] == 400
     assert client.get(ROOT.replace(AGENT, 'ABCDEF00-0000-4000-8000-000000000001') + '/permissions')[0] == 400
 assert json.loads(sql(f"SELECT json_build_object('n',count(*))::text FROM approval_grants WHERE organization_id='{ORG}';"))['n'] == 1
-assert admin.command(ROOT + '/permissions', 'PUT', {})[0] == 405
-assert member.command(ROOT + '/permissions', 'PUT', {})[0] == 403
+# An unmapped method uses sendError, whose /error dispatch is deliberately denied
+# by the existing transport policy. Do not add a writer or relax that policy.
+status, rejected = admin.command(ROOT + '/permissions', 'PUT', {})
+assert status == 403, ('unsupported ADMIN write', status, rejected.get('error', {}).get('code'))
+status, rejected = member.command(ROOT + '/permissions', 'PUT', {})
+assert status == 403, ('unsupported MEMBER write', status, rejected.get('error', {}).get('code'))
+print('PASS: unsupported Permissions PUT is rejected403 for ADMIN and MEMBER under existing transport policy')
 assert admin.command(ROOT + '/activation', 'POST', {'expectedRevision': 0})[0] == 409
 assert before == snapshot(), 'Permissions read/unsupported write/blocked activation changed business rows'
 
