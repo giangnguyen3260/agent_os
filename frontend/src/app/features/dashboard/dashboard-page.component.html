@@ -8,11 +8,7 @@
     <a [routerLink]="['/workspace', context()?.id, 'teams']">Browse teams</a>
     <a [routerLink]="['/workspace', context()?.id, 'agents']">Agents</a>
     <a [routerLink]="['/workspace', context()?.id, 'missions']">Missions</a>
-    @for (module of modules; track module) {
-      <button type="button" disabled aria-describedby="unfinished">
-        {{ module }}
-      </button>
-    }
+    <a [routerLink]="['/workspace', context()?.id, 'trace']">Trace</a>
     <a routerLink="/workspace">Đổi workspace</a>
     <a [routerLink]="['/workspace', context()?.id, 'approvals']">Approvals</a>
   </nav>

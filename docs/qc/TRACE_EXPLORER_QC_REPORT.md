@@ -1,0 +1,9 @@
+# Trace Explorer inspection QC report
+
+Baseline PR28 closure b56b4f9d37c19f0b7f1e5d1462f58d7637c5e916; branch feature/trace-explorer. Scope: actual persisted same-org Mission/Task activity metadata, list/detail/filter/page/refresh and safe resource navigation. Runtime spans, providers, usage/cost and mutations remain unavailable. No migration or production event seeds.
+
+Local validation passed: production FE validation/privacy harness, lint, format, Angular build; Google Java formatter1.22/import check; Python/workflow syntax; Playwright collection24new+609baseline. Nine new integration tests plus two privacy/transaction checks authored, not locally executed (hostJava17/noMaven). Actual CI aggregate/native/browser counts and responsive visual acceptance remain pending. No Sonar/Mac/production deployment or merge claimed.
+
+Integration fixes: retired both unbounded payload-bearing legacy observability endpoints with direct404; retained outer authentication/organization denial. Removed obsolete untracked TraceService copy after class rename to TraceExplorerService, avoiding bean-name collision with legacy observability service. Main rechecked current organization/account/credential/membership predicates equivalent to existing package-private read authorization; contract records local implementation. FE selected Trace is unique in desktop and compact navigation. Held browser requests observe delivery/body completion or cancellation before stale-DOM assertions. SQL snapshot digests detect payload/config/grant/receipt changes without returning raw payload.
+
+See engineering/TRACE_EXPLORER_CONTRACT.md, engineering/TRACE_EXPLORER_FIGMA.md, engineering/TRACE_EXPLORER_GAP_REVIEW.md, TRACE_EXPLORER_REVIEW.md and TRACE_EXPLORER_TEST_CASES.md. Authored/collected tests are not completed execution evidence.

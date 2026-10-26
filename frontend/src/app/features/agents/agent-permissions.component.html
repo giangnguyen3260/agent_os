@@ -15,7 +15,7 @@
         >Agents</a
       ><a [routerLink]="['/workspace', id, 'missions']">Missions</a
       ><a [routerLink]="['/workspace', id, 'approvals']">Approvals</a
-      ><button disabled>Trace</button
+      ><a [routerLink]="['/workspace', id, 'trace']">Trace</a
       ><a routerLink="/workspace">Đổi workspace</a>
     </nav>
   </aside>
@@ -57,6 +57,7 @@
         >Agents</a
       ><a [routerLink]="['/workspace', id, 'missions']" (click)="closeMenu()"
         >Missions</a
+      ><a [routerLink]="['/workspace', id, 'trace']">Trace</a
       ><a routerLink="/workspace" (click)="closeMenu()">Đổi workspace</a>
     </nav>
   </dialog>
