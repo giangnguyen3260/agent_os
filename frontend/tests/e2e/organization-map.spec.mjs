@@ -311,7 +311,7 @@ test.describe('organization map independent QC', () => {
     }
   });
 
-  test('focus observes membership deletion and unsupported role; finally restores MEMBER', async ({
+  test('focus observes membership deletion and ADMIN downgrade preserves MEMBER reads', async ({
     page: p,
   }, info) => {
     const s = await login(p, info);
@@ -329,12 +329,22 @@ test.describe('organization map independent QC', () => {
       await button(p, 'Refresh').click();
       await stable(p);
       sql(
-        `UPDATE organization_memberships SET role='UNKNOWN' WHERE ${predicate};`,
+        `UPDATE organization_memberships SET role='ADMIN' WHERE ${predicate};`,
       );
-      expect((await p.request.get(s.api)).status()).toBe(403);
+      await button(p, 'Refresh').click();
+      await stable(p);
+      await expect(
+        p.getByRole('link', {name: 'Add Agent', exact: true}),
+      ).toBeVisible();
+      sql(
+        `UPDATE organization_memberships SET role='MEMBER' WHERE ${predicate};`,
+      );
       await p.evaluate(() => window.dispatchEvent(new Event('focus')));
-      await expect(hook(p, 'denied')).toBeVisible();
-      await privateGone(p);
+      await stable(p);
+      await expect(
+        p.getByRole('link', {name: 'Add Agent', exact: true}),
+      ).toHaveCount(0);
+      expect((await p.request.get(s.api)).status()).toBe(200);
     } finally {
       sql(
         `INSERT INTO organization_memberships(account_id,organization_id,role) SELECT id,'${s.org}','MEMBER' FROM human_accounts WHERE email='${s.email}' ON CONFLICT(account_id,organization_id) DO UPDATE SET role='MEMBER';`,
