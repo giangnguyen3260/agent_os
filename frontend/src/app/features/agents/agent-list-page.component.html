@@ -8,7 +8,8 @@
       ><a [routerLink]="['/workspace', id, 'teams']">Teams</a
       ><span class="selected" aria-current="page">Agents</span
       ><a [routerLink]="['/workspace', id, 'missions']">Missions</a
-      ><button disabled>Approvals</button><button disabled>Trace</button
+      ><button disabled>Approvals</button
+      ><a [routerLink]="['/workspace', id, 'trace']">Trace</a
       ><a routerLink="/workspace">Đổi workspace</a>
     </nav>
   </aside>
@@ -36,6 +37,7 @@
       <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a
       ><a [routerLink]="['/workspace', id, 'teams']">Teams</a
       ><a [routerLink]="['/workspace', id, 'missions']">Missions</a
+      ><a [routerLink]="['/workspace', id, 'trace']">Trace</a
       ><a routerLink="/workspace">Đổi workspace</a>
     </nav>
   </dialog>

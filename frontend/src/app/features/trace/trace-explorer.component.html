@@ -1,0 +1,258 @@
+<div class="forest-shell" data-testid="trace-explorer">
+  <aside class="desktop-sidebar">
+    <div class="brand">agentos</div>
+    <nav aria-label="Điều hướng workspace">
+      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a
+      ><a
+        [routerLink]="['/workspace', id, 'organization-map']"
+        (click)="closeMenu()"
+        >Organization map</a
+      ><a [routerLink]="['/workspace', id, 'teams']">Teams</a
+      ><a [routerLink]="['/workspace', id, 'agents']">Agents</a
+      ><a [routerLink]="['/workspace', id, 'missions']">Missions</a
+      ><a [routerLink]="['/workspace', id, 'approvals']">Approvals</a
+      ><a
+        class="selected"
+        aria-current="page"
+        [routerLink]="['/workspace', id, 'trace']"
+        >Trace</a
+      ><a routerLink="/workspace">Đổi workspace</a>
+    </nav>
+  </aside>
+  <header class="compact-header">
+    <span class="brand">agentos</span
+    ><button
+      type="button"
+      class="button secondary"
+      aria-haspopup="dialog"
+      aria-controls="trace-menu"
+      [attr.aria-expanded]="menuOpen()"
+      (click)="toggleMenu()"
+    >
+      Menu
+    </button>
+  </header>
+  <dialog
+    id="trace-menu"
+    aria-label="Workspace navigation"
+    (cancel)="closeMenu()"
+  >
+    <button type="button" class="button secondary" (click)="closeMenu()">
+      Close menu
+    </button>
+    <nav aria-label="Điều hướng thu gọn">
+      <a [routerLink]="['/workspace', id, 'dashboard']" (click)="closeMenu()"
+        >Overview</a
+      ><a
+        [routerLink]="['/workspace', id, 'organization-map']"
+        (click)="closeMenu()"
+        >Organization map</a
+      ><a [routerLink]="['/workspace', id, 'teams']" (click)="closeMenu()"
+        >Teams</a
+      ><a [routerLink]="['/workspace', id, 'agents']" (click)="closeMenu()"
+        >Agents</a
+      ><a [routerLink]="['/workspace', id, 'missions']" (click)="closeMenu()"
+        >Missions</a
+      ><a routerLink="/workspace" (click)="closeMenu()">Đổi workspace</a>
+      <a
+        class="selected"
+        aria-current="page"
+        [routerLink]="['/workspace', id, 'trace']"
+        (click)="closeMenu()"
+        >Trace</a
+      ><a [routerLink]="['/workspace', id, 'approvals']" (click)="closeMenu()"
+        >Approvals</a
+      >
+    </nav>
+  </dialog>
+  <main [attr.aria-busy]="loading()">
+    @if (context(); as workspace) {
+      <div class="breadcrumb">
+        <span>{{ workspace.name }}</span
+        ><span>{{ auth.user()?.displayName }}</span>
+      </div>
+    }
+    <header class="heading">
+      <h1>Trace Explorer</h1>
+      <p>Tra cứu hoạt động Mission và Task đã lưu.</p>
+    </header>
+    <form
+      class="trace-card"
+      (ngSubmit)="apply()"
+      aria-label="Filters"
+      novalidate
+    >
+      <div class="filters">
+        <label>Loại sự kiện<input name="q" [(ngModel)]="draft.q" /></label>
+        <label
+          >Mission ID<input
+            name="missionId"
+            [(ngModel)]="draft.missionId"
+            spellcheck="false"
+        /></label>
+        <label
+          >Task ID<input
+            name="taskId"
+            [(ngModel)]="draft.taskId"
+            spellcheck="false"
+        /></label>
+      </div>
+      @if (validation()) {
+        <p role="alert">{{ validation() }}</p>
+      }
+      <div class="actions">
+        <button type="submit" class="button">Áp dụng</button
+        ><button type="button" class="button secondary" (click)="reset()">
+          Đặt lại</button
+        ><button type="button" class="button secondary" (click)="load()">
+          Refresh
+        </button>
+      </div>
+    </form>
+    @if (loading()) {
+      <p role="status" data-testid="trace-loading">Đang tải hoạt động…</p>
+    }
+    @if (denied()) {
+      <div role="alert" data-testid="trace-denied">
+        <p>Không thể truy cập hoạt động hoặc workspace này.</p>
+        <a routerLink="/workspace">Chọn workspace khác</a>
+      </div>
+    }
+    @if (error()) {
+      <p role="alert" data-testid="trace-error">{{ error() }}</p>
+    }
+    @if (page(); as result) {
+      <p class="availability" role="status" data-testid="trace-unavailable">
+        Đang hiển thị hoạt động đã lưu. Trace thực thi, token và chi phí hiện
+        chưa có dữ liệu.
+      </p>
+      <section class="trace-card" aria-labelledby="trace-timeline">
+        <h2 id="trace-timeline">Hoạt động đã lưu</h2>
+        @for (event of result.items; track event.id) {
+          <button
+            type="button"
+            class="trace-event"
+            data-testid="trace-event"
+            [attr.aria-pressed]="selected()?.id === event.id"
+            (click)="select(event.id)"
+          >
+            <time [attr.datetime]="event.createdAt">{{ event.createdAt }}</time
+            ><span>{{ event.eventType }}</span
+            ><span>{{ event.actorType }}</span>
+          </button>
+        } @empty {
+          <p data-testid="trace-empty">Chưa có hoạt động phù hợp.</p>
+        }
+        <div class="pagination">
+          <button
+            type="button"
+            class="button secondary"
+            [disabled]="result.page === 0"
+            (click)="changePage(-1)"
+          >
+            Trước</button
+          ><span data-testid="trace-page" aria-live="polite"
+            >Trang {{ result.page + 1 }} · {{ result.total }} sự kiện</span
+          ><button
+            type="button"
+            class="button secondary"
+            [disabled]="
+              (result.page + 1) * result.size >= result.total ||
+              result.page >= 100000
+            "
+            (click)="changePage(1)"
+          >
+            Sau
+          </button>
+        </div>
+      </section>
+      <section class="trace-card" aria-labelledby="trace-selected-heading">
+        <h2 id="trace-selected-heading">Sự kiện đã chọn</h2>
+        @if (selected(); as event) {
+          <div data-testid="trace-selected" class="selected-metadata">
+            <dl>
+              <div>
+                <dt>ID</dt>
+                <dd>{{ event.id }}</dd>
+              </div>
+              <div>
+                <dt>Loại sự kiện</dt>
+                <dd>{{ event.eventType }}</dd>
+              </div>
+              <div>
+                <dt>Loại tác nhân</dt>
+                <dd>{{ event.actorType }}</dd>
+              </div>
+              <div>
+                <dt>Thời gian</dt>
+                <dd>
+                  <time [attr.datetime]="event.createdAt">{{
+                    event.createdAt
+                  }}</time>
+                </dd>
+              </div>
+              <div>
+                <dt>Mission</dt>
+                <dd>
+                  {{ event.mission.title }}<small>{{ event.mission.id }}</small>
+                </dd>
+              </div>
+              @if (event.task; as task) {
+                <div>
+                  <dt>Task</dt>
+                  <dd>
+                    {{ task.title }}<small>{{ task.id }}</small>
+                  </dd>
+                </div>
+              }
+              @if (event.team; as team) {
+                <div>
+                  <dt>Team</dt>
+                  <dd>
+                    {{ team.name }}<small>{{ team.id }}</small>
+                  </dd>
+                </div>
+              }
+            </dl>
+            <p>Chỉ hiển thị metadata. Nội dung sự kiện không được cung cấp.</p>
+            @if (event.team; as team) {
+              <div class="actions">
+                <a
+                  class="button secondary"
+                  [routerLink]="[
+                    '/workspace',
+                    id,
+                    'teams',
+                    team.id,
+                    'missions',
+                    event.mission.id,
+                    'workspace',
+                  ]"
+                  >Mở Mission</a
+                >
+                @if (event.task; as task) {
+                  <a
+                    class="button secondary"
+                    [routerLink]="[
+                      '/workspace',
+                      id,
+                      'teams',
+                      team.id,
+                      'missions',
+                      event.mission.id,
+                      'tasks',
+                      task.id,
+                    ]"
+                    >Mở task</a
+                  >
+                }
+              </div>
+            }
+          </div>
+        } @else {
+          <p>Chọn một sự kiện để xem metadata.</p>
+        }
+      </section>
+    }
+  </main>
+</div>

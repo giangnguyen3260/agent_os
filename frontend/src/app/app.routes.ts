@@ -14,6 +14,15 @@ import {approvalDetailNavigationGuard} from './features/approvals/approval-navig
 
 export const routes: Routes = [
   {
+    path: 'workspace/:id/trace',
+    canActivate: [authGuard],
+    runGuardsAndResolvers: 'always',
+    loadComponent: () =>
+      import('./features/trace/trace-explorer.component').then(
+        module => module.TraceExplorerComponent,
+      ),
+  },
+  {
     path: 'invitation',
     canDeactivate: [invitationLeaveGuard],
     loadComponent: () =>

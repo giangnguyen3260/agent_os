@@ -69,7 +69,6 @@ export class DashboardPageComponent implements OnInit {
   readonly teamsSection = viewChild<ElementRef<HTMLElement>>('teamsSection');
   readonly taskSection = viewChild<ElementRef<HTMLElement>>('taskSection');
   readonly states: TaskState[] = ['RUNNING', 'PENDING', 'REVIEW'];
-  readonly modules = ['Trace'];
   constructor() {
     effect(() => {
       const account = this.auth.user()?.id;

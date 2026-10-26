@@ -8,7 +8,8 @@
       ><a class="selected" [routerLink]="['/workspace', id, 'teams']">Teams</a
       ><a [routerLink]="['/workspace', id, 'agents']">Agents</a
       ><a [routerLink]="['/workspace', id, 'missions']">Missions</a
-      ><button disabled>Approvals</button><button disabled>Trace</button>
+      ><button disabled>Approvals</button
+      ><a [routerLink]="['/workspace', id, 'trace']">Trace</a>
     </nav>
   </aside>
   <header class="compact-header">
@@ -37,6 +38,7 @@
       ><a [routerLink]="['/workspace', id, 'teams']">Teams</a
       ><a [routerLink]="['/workspace', id, 'agents']">Agents</a
       ><a [routerLink]="['/workspace', id, 'missions']">Missions</a
+      ><a [routerLink]="['/workspace', id, 'trace']">Trace</a
       ><a routerLink="/workspace">Change workspace</a>
     </nav>
   </dialog>

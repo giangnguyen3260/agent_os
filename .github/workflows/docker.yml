@@ -220,6 +220,14 @@ jobs:
         env:
           E2E_BASE_URL: http://127.0.0.1:18080
         run: python3 scripts/agent-permissions-probe.py
+      - name: Provision isolated Trace Explorer fixtures
+        run: |
+          docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < scripts/trace-explorer-ci-fixture.sql
+      - name: PostgreSQL Trace Explorer safe activity and no-write boundary
+        timeout-minutes: 3
+        env:
+          E2E_BASE_URL: http://127.0.0.1:18080
+        run: python3 scripts/trace-explorer-probe.py
       - name: Install browser test dependencies
         working-directory: frontend
         run: |
@@ -233,11 +241,18 @@ jobs:
         env:
           E2E_BASE_URL: http://127.0.0.1:18080
           E2E_MAILPIT_URL: http://127.0.0.1:18025
-        # Agent Permissions first; then the complete 585-instance baseline.
+        # Trace Explorer first; then the complete 609-instance baseline.
         # Selections are disjoint; one worker and zero retries remain unchanged.
         run: |
-          npm run test:e2e -- --max-failures=1 --grep 'agent permissions independent QC'
-          npm run test:e2e -- --max-failures=1 --grep-invert 'agent permissions independent QC'
+          npm run test:e2e -- --max-failures=1 --grep 'trace explorer independent QC'
+          npm run test:e2e -- --max-failures=1 --grep-invert 'trace explorer independent QC'
+      - name: Upload synthetic Trace Explorer visual evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trace-explorer-visuals
+          path: frontend/qa-visuals/trace-explorer-*.png
+          if-no-files-found: ignore
       - name: Upload synthetic Agent Permissions visual evidence
         if: always()
         uses: actions/upload-artifact@v4

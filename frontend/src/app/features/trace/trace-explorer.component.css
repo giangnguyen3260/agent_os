@@ -1,0 +1,89 @@
+:host {
+  color: var(--text);
+  background: var(--canvas);
+}
+.trace-card {
+  display: grid;
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 20px 24px;
+  min-width: 0;
+}
+.filters {
+  align-items: end;
+}
+.filters label {
+  flex: 1;
+  min-width: 0;
+}
+input {
+  width: 100%;
+  min-width: 0;
+  min-height: 46px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 15px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+.trace-event {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  min-height: 44px;
+  padding: 8px 0;
+  border: 0;
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.trace-event[aria-pressed='true'] {
+  background: var(--surface-soft);
+  color: var(--primary);
+}
+.trace-event:hover {
+  text-decoration: underline;
+}
+.trace-event > * {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.availability {
+  padding: 16px;
+  background: var(--surface-soft);
+  border-radius: 8px;
+}
+.selected-metadata {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+dl {
+  margin: 0;
+}
+dd small {
+  display: block;
+}
+a:focus-visible,
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+}
+@media (max-width: 767px) {
+  .trace-card {
+    padding: 20px 16px;
+  }
+  .filters {
+    flex-direction: column;
+  }
+  .filters label {
+    flex: auto;
+  }
+}
