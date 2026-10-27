@@ -10,3 +10,6 @@ CI exact head/tree/merge/run identities, actual native/concurrency/rollback/auth
 
 
 Post-publication source review found a native-oracle classification defect: business snapshot excluded accounts/memberships/sessions but still included authentication_audit/authentication_attempts; three intentional later test logins legitimately mutate those authentication tables. Excluded those two authentication surfaces, preserving every actual business/history/grant/receipt table and explicit account/membership restoration checks. No app/security change, relaxed write assertion, retry or timeout. Candidate1 CI remains separate; replacement candidate must run its own complete gates.
+
+
+C1Quality40433416109/job121956298788 actually executed423cases,0assertionfailures,3errors,0skips. Three TaskDraftEditPostgresIT setups reported missing organizations after the migration-isolation test returned an application-pooled connection with its temporary schema selected. New migration test now uses a dedicated nonpooled DriverManagerDataSource for its private schema; all retained-row/negative-FK/revision assertions remain. No application, schema constraint, test selection or skip behavior changed. C2 contained the native authentication-snapshot classification fix but not this fixture fix; C3 must establish fresh complete evidence for both corrections.

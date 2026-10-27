@@ -149,7 +149,12 @@ class TaskDraftEditPostgresIT extends TaskDraftEditIntegrationTest {
   @Test
   void migrationRetainsPreexistingTaskRowsAndAddsScopedConstraints() throws Exception {
     String schema = "task_edit_migration_" + UUID.randomUUID().toString().replace("-", "");
-    var source = jdbc.getDataSource();
+    // A migration schema must never leak into the application connection pool.
+    var source =
+        new org.springframework.jdbc.datasource.DriverManagerDataSource(
+            System.getenv("TASK_EDIT_TEST_JDBC_URL"),
+            System.getenv().getOrDefault("TASK_EDIT_TEST_DB_USER", "agentos"),
+            System.getenv().getOrDefault("TASK_EDIT_TEST_DB_PASSWORD", "agentos"));
     try {
       Flyway.configure()
           .dataSource(source)
