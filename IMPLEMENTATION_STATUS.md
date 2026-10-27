@@ -1,4 +1,6 @@
-# Implementation status — 26 October 2026
+# Implementation status — 27 October 2026
+
+Task Draft editing is verified on `feature/task-draft-edit`, draft [PR30](https://github.com/giangnguyen3260/agent_os/pull/30), stacked on PR29. Tested candidate `bf32872` passed 423 backend tests (378 regular + 23 Team Settings PG + 22 Task Edit PG), 678 actual browser instances (45 new + 633 baseline), native PostgreSQL mutation/concurrency/rollback/authority gates and Docker restart/logout. Coordinator reviewed all 27 responsive captures and the 27-record capture manifest. ADMIN can review/save title, description/input, acceptance criteria and priority for eligible DRAFT tasks with revision/fingerprint protection and durable same-command recovery. Owner/dependencies/status/intake counters remain unchanged; no execution or waiting-input blocker evaluation. See [contract](docs/engineering/TASK_DRAFT_EDIT_CONTRACT.md), [migration](backend/TASK_DRAFT_EDIT_MIGRATION.md), [Figma adaptation](docs/engineering/TASK_DRAFT_EDIT_FIGMA.md) and [final QC](docs/qc/TASK_DRAFT_EDIT_QC_REPORT.md). PR remains draft/unmerged.
 
 Trace Explorer S16 recorded-activity inspection is verified on `feature/trace-explorer`, draft [PR29](https://github.com/giangnguyen3260/agent_os/pull/29), stacked on PR28. Application/test candidate `aa87927` passed 362 backend tests, 633 actual browser instances (24 new + 609 baseline), native PostgreSQL and Docker restart/logout. Coordinator reviewed all 24 responsive captures at 1440/768/390. Actual same-org Mission/Task metadata supports literal filters, bounded pages, fresh detail and navigation, with privacy clearing on authority/account/route changes. Legacy raw-payload preview routes are retired. Execution spans, token/cost usage and runtime actions remain unavailable. See [contract](docs/engineering/TRACE_EXPLORER_CONTRACT.md), [Figma handoff](docs/engineering/TRACE_EXPLORER_FIGMA.md) and [final QC](docs/qc/TRACE_EXPLORER_QC_REPORT.md). PR remains draft/unmerged.
 
@@ -69,7 +71,7 @@ Prior workspace application revision `4f3e795` passed 33 backend tests and 33 br
 | Agent Draft creation | Development gate verified; 57 backend tests and 96 browser instances, plus native PostgreSQL retry probe |
 | Approval detail and information exchange | Bounded PUBLISH_PREVIEW decision, real question/requester reply and explicit grant issue/revoke/history verified; producer and execution remain unavailable |
 | Member access, organization roles and approval grants | ADMIN-only persisted inventory, bounded grant issue/revoke/history/recovery and organization role editing verified; MEMBER-only invitations with reviewed lifecycle and account acceptance verified in PR25 |
-| Task mutation/execution, team/agent activation, complete effective grant management and administration | Full designed flows incomplete; older static previews remain blocked |
+| Runtime Task actions, team/agent activation, complete effective grant management and administration | Full designed flows incomplete; older static previews remain blocked |
 | Production security/scale | Complete roles/grants, load/failover, full visual/accessibility and release hardening not accepted |
 
 ## Historical foundation snapshot — 15 October 2026

@@ -70,7 +70,7 @@ The explicit suite has no skip annotation and fails if required environment is a
 
 - `TASK_EDIT_TEST_JDBC_URL=jdbc:postgresql://127.0.0.1:15432/agentos_test`
 - `TASK_EDIT_TEST_DB_USER=agentos`
-- `TASK_EDIT_TEST_DB_PASSWORD=agentos_ci_only` (disposable CI service only)
+- `TASK_EDIT_TEST_DB_PASSWORD` supplied by the disposable CI database configuration; no password value is published here
 
 Quality selector owned by main:
 `-Dtest=*Test,TeamSettingsPostgresIT,TaskDraftEditPostgresIT`.
@@ -101,3 +101,8 @@ Owned deliverable is 11 files: six production Java files in
 `backend/src/test/java/com/agentos/taskediting/`,
 `backend/src/main/resources/db/migration/V017__task_draft_edit.sql`, and this note.
 No commits. Main owns route/detail integration, CI selectors, native probes and fixtures.
+
+
+## Coordinator completed C3 acceptance — 27 October 2026
+
+The worker-authored local/freeze ledger above is historical. C3 candidate bf328720a139c8fbbbf8863fbf3eb5962b83c8f5 passed complete Quality verify:423tests/0failures/0errors/0skips, including all22TaskDraftEditPostgresIT and retained23TeamSettingsPostgresIT on the actual PostgreSQL service. Docker regular378tests and native PostgreSQL HTTP migration/persistence/race/rollback/lock-wait authority gates passed. New45+baseline633 browser instances and session restart/logout passed. Source app/migration bytes are unchanged from the initial candidate; migration-retention testing now uses dedicated nonpooled sessions, preserving all retained-row/constraint assertions. Main also isolated the existing AuthenticationIntegrationTest H2 fixture, without altering application security/constraints/assertions. See docs/qc/TASK_DRAFT_EDIT_QC_REPORT.md for exact run/tree/merge/visual evidence. Local offline package limitations are not a failed completed CI verify.
