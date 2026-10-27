@@ -245,12 +245,12 @@ public class TaskDraftEditService {
           OffsetDateTime time = rs.getObject("created_at", OffsetDateTime.class);
           String actorName = rs.getString("display_name");
           if (eventId == null || revision < 1 || time == null || actorName == null)
-            throw new IllegalStateException("Invalid saved task edit provenance");
+            throw new TaskHistoryFailure();
           TaskDraftEditWire.historyActorName(actorName);
           Values before = TaskDraftEditWire.historyValues(rs.getString("before_json"));
           Values after = TaskDraftEditWire.historyValues(rs.getString("after_json"), true);
           if (before.equals(after))
-            throw new IllegalStateException("Invalid saved task edit provenance");
+            throw new TaskHistoryFailure();
           return new TaskDraftEditDtos.HistoryItem(
               eventId, revision, time.toInstant().toString(), actorName, before, after);
         }, org, team, mission, task, page * 20);

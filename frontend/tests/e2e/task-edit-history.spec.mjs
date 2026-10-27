@@ -351,6 +351,37 @@ test.describe('task edit history independent QC', () => {
     }
   });
 
+  test('corrupt persisted provenance fails closed through real HTTP and clears private UI', async ({
+    page: p,
+  }, info) => {
+    const {s, data} = await open(p, info);
+    const eventId = data.items[0].eventId;
+    const original = sql(
+      `SELECT before_json FROM task_edit_events WHERE id='${eventId}';`,
+    );
+    sql(
+      `UPDATE task_edit_events SET before_json='PRIVATE_CORRUPT_HISTORY' WHERE id='${eventId}';`,
+    );
+    try {
+      const r = await response(p, s, () => focus(p));
+      expect(r.status()).toBe(500);
+      const body = await r.json();
+      expect(body.error.code).toBe('TASK_HISTORY_UNAVAILABLE');
+      expect(JSON.stringify(body)).not.toContain('PRIVATE_CORRUPT_HISTORY');
+      await expect(hook(p, 'error')).toBeVisible();
+      await erased(p, data.items[0].after.description);
+      await expect(p.locator('main')).not.toContainText(
+        'PRIVATE_CORRUPT_HISTORY',
+      );
+    } finally {
+      sql(
+        `UPDATE task_edit_events SET before_json='${original.replaceAll("'", "''")}' WHERE id='${eventId}';`,
+      );
+    }
+    await response(p, s, () => button(p, 'Tải lại lịch sử').click());
+    await render(p, s, data);
+  });
+
   test('held actual200 cannot restore rows after actual403 role loss', async ({
     page: p,
   }, info) => {

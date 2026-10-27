@@ -13,3 +13,7 @@ The current host has Java17, no Maven/Java21 or Docker. A formatter download tim
 ## Scope
 
 Read-only existing persisted task edit provenance, current ADMIN-only, before/after snapshots, actual current actor display name, fixed20 paging. Empty history has no invented baseline. No runtime/execution history or mutations. Offset pages are fresh snapshots and can shift under concurrent edits; no stable cross-request cursor is claimed. Before text is preserved verbatim; malformed selected provenance fails the whole page closed. See frozen contract and independent review/testcases.
+
+## Candidate C1 correction
+
+C1 c5bf58a647cdd04087a5538ae07dab4724ccec58 / tree771cfe7f189b064d31491e0de413071eb0564c2e: Quality40510751010 stopped at Google Java formatting (six files); no backend test execution or quality acceptance. Static QC also found history link under the Task Detail error branch; moved into successful ADMIN actions independently of DRAFT. Added a dedicated safe history-provenance exception/HTTP500 mapping and actual native/browser corruption checks. Browser suite now24 collected cases (8×3), not24 passes. A separate CI diagnostic publishes a Google formatting patch without replacing or weakening the required quality gate.

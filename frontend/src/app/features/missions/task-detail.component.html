@@ -55,23 +55,6 @@
     @if (error()) {
       <p class="auth-error" role="alert">{{ error() }}</p>
       <div class="actions">
-        @if (context()?.role === 'ADMIN') {
-          <a
-            class="button secondary"
-            [routerLink]="[
-              '/workspace',
-              id,
-              'teams',
-              teamId,
-              'missions',
-              missionId,
-              'tasks',
-              taskId,
-              'history',
-            ]"
-            >Lịch sử chỉnh sửa</a
-          >
-        }
         <button class="button secondary" (click)="load()">Try again</button
         ><button class="button secondary" (click)="changePage(0)">
           Reset activity page
@@ -91,6 +74,23 @@
         </p>
       </header>
       <div class="actions">
+        @if (context()?.role === 'ADMIN') {
+          <a
+            class="button secondary"
+            [routerLink]="[
+              '/workspace',
+              id,
+              'teams',
+              teamId,
+              'missions',
+              missionId,
+              'tasks',
+              taskId,
+              'history',
+            ]"
+            >Lịch sử chỉnh sửa</a
+          >
+        }
         @if (context()?.role === 'ADMIN' && data.task.status === 'DRAFT') {
           <a
             class="button secondary"

@@ -182,6 +182,17 @@ def main():
     event = latest['items'][0]
     for field in ('eventId', 'revision', 'committedAt', 'before', 'after'):
         assert event[field] == receipt[field]
+    # Real HTTP corrupted selected provenance returns safe500, without raw source disclosure.
+    event_id = event['eventId']
+    original = sql(f"SELECT before_json FROM task_edit_events WHERE id='{event_id}';")
+    sql(f"UPDATE task_edit_events SET before_json='PRIVATE_CORRUPT_HISTORY' WHERE id='{event_id}';")
+    try:
+        corrupt = reject(lambda: admin.request(ROOT + '/history'), 500)
+        assert corrupt[1]['error']['code'] == 'TASK_HISTORY_UNAVAILABLE'
+        assert 'PRIVATE_CORRUPT_HISTORY' not in json.dumps(corrupt[1])
+    finally:
+        escaped = original.replace("'", "''")
+        sql(f"UPDATE task_edit_events SET before_json='{escaped}' WHERE id='{event_id}';")
     account = sql("SELECT id FROM human_accounts WHERE email='task-history-native-admin@example.test';")
     def deny_account(change, restore):
         sql(change)
@@ -190,6 +201,9 @@ def main():
         finally:
             sql(restore)
     deny_account(f"UPDATE human_accounts SET enabled=false WHERE id='{account}';", f"UPDATE human_accounts SET enabled=true WHERE id='{account}';")
+    version = int(sql(f"SELECT credential_version FROM human_accounts WHERE id='{account}';"))
+    deny_account(f"UPDATE human_accounts SET credential_version=credential_version+1 WHERE id='{account}';", f"UPDATE human_accounts SET credential_version={version} WHERE id='{account}';")
+    deny_account(f"UPDATE organization_memberships SET role='MEMBER' WHERE organization_id='{ORG}' AND account_id='{account}';", f"UPDATE organization_memberships SET role='ADMIN' WHERE organization_id='{ORG}' AND account_id='{account}';")
     # Retired/paused states do not erase authorized provenance access.
     sql(f"UPDATE missions SET task_intake_paused=true WHERE id='{MISSION}';")
     try:

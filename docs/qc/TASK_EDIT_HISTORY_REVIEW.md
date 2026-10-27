@@ -6,7 +6,7 @@ Reviewed 2026-10-27 against `docs/engineering/TASK_EDIT_HISTORY_CONTRACT.md`, HE
 
 **Acceptance pending.** Static inspection only; no history API, database, browser or visual acceptance executed by this sidecar. Prior Task Draft Edit PASS evidence does not establish history acceptance. Authored test cases/spec are not passing results.
 
-Initial inspection found no history implementation. A subsequent live-worktree read found the concurrent BE endpoint/DTO/service/parser and FE route/component/validator/template. Missing implementation is therefore no longer a current finding. Source is still changing and runtime acceptance remains pending.
+Initial inspection found no history implementation. A subsequent live-worktree read found the concurrent BE endpoint/DTO/service/parser and FE route/component/validator/template. Missing implementation is therefore no longer a current finding. The follow-up reviewed the BE decoder alignment in source; runtime acceptance remains pending. See the remaining Task Detail link blocker below.
 
 ## Policy and underlying source findings
 
@@ -17,13 +17,11 @@ Initial inspection found no history implementation. A subsequent live-worktree r
 - V017 constraints do not validate JSON shape, JSON duplicate keys, field values, continuity or cryptographic integrity. The append-only comment is not a database UPDATE/DELETE prohibition. Do not claim tamper-proof provenance; no schema hardening is authorized in this scope.
 - `TaskDraftEditWire` strict UUID means lowercase canonical versions 1–5 and RFC variant, not merely UUID.fromString. GET query/body checks should preserve existing wire behavior. `Values` serialization retains nulls. Existing FE `values(v, false)` checks basic types but is not complete strict validation of legacy strings; blind reuse needs review against the history decoder.
 
-## Actual policy gaps / decisions needed
+## Resolved policy questions
 
-| Priority | Gap | Acceptance interpretation / action |
-| --- | --- | --- |
-| High | Fixed offset pages with fresh repeatable-read transactions cannot guarantee no overlap across separate requests when new edits arrive. E.g. revisions 25..6 then append 26: page 1 now starts at 6. | Require disjoint 20+5 on a static 25-row fixture. Per-response count/items must share one DB snapshot. Do not claim cross-request snapshot stability or invent a cursor/schema change. Main should record this limitation; an unconditional concurrent no-duplication requirement needs contract clarification. |
-| High | “Malformed stored provenance” lacks precise field/domain and integrity boundaries. Legacy before values may legitimately contain nulls and do not necessarily meet today's edit command rules. | Require exact four keys, proper JSON types, no duplicate/trailing JSON, valid identifiers/revision/time/name and fail the whole returned page on a malformed selected event. Main must define whether null title, unknown legacy priority, overlength/control text, revision gaps/chain mismatch, and corrupt off-page rows are rejected. Never normalize historical values or silently filter bad rows. |
-| Medium | Error status/code for corrupt provenance and exact actor-name validation are unspecified. | Use safe error with no raw JSON, SQL, actor IDs or secrets; FE displays error and clears rows. Pin exact status/code with BE before exact assertions. Do not invent it in tests. |
+The authoritative contract now defines legacy before values versus canonical strict after values, safe nonblank current actor names, rejection of no-op events, selected-page structural validation, and fresh offset snapshots. These resolve the earlier policy blockers: null title is invalid; safe unknown legacy priorities and blank legacy strings are preserved; after must be nonblank/stripped with known priority; malformed selected rows fail the whole page. Off-page corruption/chain integrity and cryptographic tamper detection are not promised.
+
+The UI now explicitly says new edits can shift page positions. Static25 traversal must remain disjoint20+5, but concurrent cross-request overlap is documented rather than misrepresented as a cursor guarantee. Count and rows still require the same repeatable-read transaction snapshot.
 
 Repeatable-read authorizes against the request's transaction snapshot. Revocation during an already-running request is not promised immediate DB linearizability; FE must erase on its next mandated authority check and fence the older response. No polling or new lock policy is implied.
 
@@ -37,17 +35,23 @@ FE assumptions reconciled against the newly created template: root `task-edit-hi
 
 BE `history` now uses current authorization then scoped resolution in a read-only repeatable-read transaction, exact scoped count and revision-desc limit20/offset, left-joining current actor name. The parser rejects duplicate/extra/missing JSON members and invalid types/strings. FE clears before load, checks session/workspace ADMIN, fences epochs/actor/destruction, validates scope/count/order/time and uses escaped interpolation. These are static observations, not runtime passes.
 
-**Concrete decoder mismatch to resolve:** BE invokes the same `historyValues` for before and after, accepting null description/criteria/priority, blank strings and before==after, while FE requires `values(after, true)` and rejects no-op events. BE also only checks actorName nonnull, whereas FE requires nonblank safe text <=255. Thus some malformed persisted events get HTTP200 containing provenance that FE refuses, rather than failing closed at the API. Main/BE should align strict post-edit/actor validation; preserve legitimate legacy before snapshots. BE rejects unknown before priority while FE before validator accepts arbitrary safe priority; record the intended legacy rule. No source changes made by QC.
+**Decoder mismatch resolved in source:** BE now preserves safe legacy before values, invokes `historyValues(after, true)` for strict canonical after values, calls `historyActorName`, and rejects `before.equals(after)`. These checks align with the clarified contract and FE. New integration/wire test source covers legacy priority/blank values, null/incomplete/noncanonical after, no-op events and unsafe actor names; those tests have not been executed by this sidecar.
+
+**Remaining confirmed source blocker:** In the inspected `frontend/src/app/features/missions/task-detail.component.html`, the only history link is under `@if (error())`. The normal `@if (snapshot(); as data)` actions contain only the edit link, without history. Consequently normal authorized Task Detail has no history link, and the browser round-trip link assertion will fail. FE must place the link in the successful view gated by current ADMIN, independently of DRAFT. QC has not modified source or relaxed the browser assertion.
+
+**Remaining transport evidence gap:** Stored-provenance failures currently throw `IllegalStateException`; the controller-scoped advice handles TaskDraftEditFailure, IllegalArgumentException and IOException, and global advice does not handle IllegalStateException. New corruption assertions invoke the service directly, not an actual HTTP corruption request. Verify through real HTTP that corruption yields a safe error without raw provenance and is not error-dispatched to denied `/error`/403 (which FE treats as denied). This is an unverified transport outcome, not a claimed observed runtime failure. Pin actual safe behavior in CI/native evidence.
 
 
 Captures after assertions only: populated, secondpage, empty, error, denied; filenames `task-edit-history-{project}-{state}.png`, manifest `task-edit-history-manifest.jsonl`. Expected inventory is 15 PNGs and 15 manifest rows only after all three projects actually run successfully. Missing/failed captures are not evidence.
 
-## Local verification and fixture blocker
+## Local verification and corrected fixture
 
-`node --check frontend/tests/e2e/task-edit-history.spec.mjs` succeeded. Prettier formatted only the new spec. `playwright test task-edit-history.spec.mjs --list` collected **21 cases** (7 cases ×3 projects); this is collection only, **zero browser tests executed by this sidecar**, and no PNG/manifest produced. Runtime/visual acceptance remains pending main's execution.
+Re-ran `node --check frontend/tests/e2e/task-edit-history.spec.mjs`: successful. Re-ran `playwright test task-edit-history.spec.mjs --list`: **21 collected cases** (7 ×3 projects). This is collection only: **zero browser/runtime tests executed by this sidecar**, no PNG/manifest produced, no runtime PASS claimed. Upcoming CI must establish actual behavior and visuals.
 
-At follow-up inspection, `scripts/task-edit-history-ci-fixture.sql` gives every `task-history-{surface}-other` account ADMIN membership in that surface's organization via its general membership INSERT. This conflicts with foreign-denial expectations in the new spec and task brief. Main owns the fixture: place `other` only in the foreign org or otherwise remove its local membership. Do not weaken the expected403. This is a fixture blocker, not proof of broken API authorization.
+The browser spec is frozen and unchanged in this follow-up: SHA-256 `3077ddd8c8c91c266777f6b59d9542321116ffae414584457a525437b7b31830`. The fixture now explicitly deletes local memberships for `other` accounts then grants ADMIN only in `52000000-0000-4000-8000-000000000005`; the prior foreign-user fixture blocker is resolved by source inspection.
+
+Final source reading includes the clarified contract, V017, history controller/DTO/service/wire/advice and new BE test source, FE route/authority component/validator/template/CSS, Task Detail template and prefix520 fixture. HEAD remains `ae1f19660b039edf1719dd9c15dee88658519dad`; implementation changes are uncommitted shared-worktree changes. Review is bound to inspected content, not a frozen CI candidate. Relevant SHA-256: contract `1321ce40895ce6e705d335857479e3ced6b278523260fa6b8a5c89823ff5986f`; service `235574628c2ad205d3895c0dafa285d6661f3e6478fb61124297d77d74a09b98`; wire `c434680d7839a36c8bf436e4d483a3e33b525ef020143f20a31aa2c4709b3d55`; Task Detail `8415fa59449a5f5279d9a1d9665f19b28bd79379783aa43ad711f7ddcdf4e35c`. Re-review subsequent fixes before clearing the source blocker.
 
 ## Ownership
 
-Only this review, `TASK_EDIT_HISTORY_TEST_CASES.md`, and the newly authorized browser spec are owned. No source, contract, existing E2E, fixture, workflow or native-probe modifications; no commits/push. Main owns implementation, actual execution, artifacts and final evidence binding.
+This follow-up changes only this review and `TASK_EDIT_HISTORY_TEST_CASES.md`. The previously authorized browser spec remains frozen. No source, contract, existing E2E, fixture, workflow or native-probe modifications; no commits/push. Main owns implementation, actual execution, artifacts and final evidence binding.

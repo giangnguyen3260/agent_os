@@ -16,6 +16,12 @@ public class TaskDraftEditAdvice {
         .body(ApiErrorResponse.of(failure.code(), "Request could not be completed"));
   }
 
+  @ExceptionHandler(TaskHistoryFailure.class)
+  public ResponseEntity<ApiErrorResponse> invalidStoredState(TaskHistoryFailure failure) {
+    return ResponseEntity.internalServerError()
+        .body(ApiErrorResponse.of("TASK_HISTORY_UNAVAILABLE", "Saved configuration is unavailable"));
+  }
+
   @ExceptionHandler({IllegalArgumentException.class, java.io.IOException.class})
   public ResponseEntity<ApiErrorResponse> malformed(Exception failure) {
     return ResponseEntity.badRequest()
