@@ -236,6 +236,14 @@ jobs:
         env:
           E2E_BASE_URL: http://127.0.0.1:18080
         run: python3 scripts/task-draft-edit-probe.py
+      - name: Provision isolated Task Edit History fixtures
+        run: |
+          docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < scripts/task-edit-history-ci-fixture.sql
+      - name: PostgreSQL Task Edit History projection and no-write boundary
+        timeout-minutes: 3
+        env:
+          E2E_BASE_URL: http://127.0.0.1:18080
+        run: python3 scripts/task-edit-history-probe.py
       - name: Install browser test dependencies
         working-directory: frontend
         run: |
@@ -249,11 +257,21 @@ jobs:
         env:
           E2E_BASE_URL: http://127.0.0.1:18080
           E2E_MAILPIT_URL: http://127.0.0.1:18025
-        # Task Draft Edit first; then the complete 633-instance baseline.
+        # Task Edit History first; then the complete retained baseline.
         # Selections are disjoint; one worker and zero retries remain unchanged.
         run: |
-          npm run test:e2e -- --max-failures=1 --grep 'task draft edit independent QC'
-          npm run test:e2e -- --max-failures=1 --grep-invert 'task draft edit independent QC'
+          node scripts/test-task-history-validation.cjs
+          npm run test:e2e -- --max-failures=1 --grep 'task edit history independent QC'
+          npm run test:e2e -- --max-failures=1 --grep-invert 'task edit history independent QC'
+      - name: Upload synthetic Task Edit History visual evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: task-edit-history-visuals
+          path: |
+            frontend/qa-visuals/task-edit-history-*.png
+            frontend/qa-visuals/task-edit-history-manifest.jsonl
+          if-no-files-found: ignore
       - name: Upload synthetic Task Draft Edit visual evidence
         if: always()
         uses: actions/upload-artifact@v4

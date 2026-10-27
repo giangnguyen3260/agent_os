@@ -56,5 +56,14 @@ public final class TaskDraftEditDtos {
   public record ReceiptLookup(Receipt receipt) {}
 
   @JsonInclude(JsonInclude.Include.ALWAYS)
+  public record History(
+      UUID organizationId, UUID teamId, UUID missionId, UUID taskId,
+      int page, int pageSize, long total, List<HistoryItem> items) {}
+
+  @JsonInclude(JsonInclude.Include.ALWAYS)
+  public record HistoryItem(
+      UUID eventId, int revision, String committedAt, String actorName, Values before, Values after) {}
+
+  @JsonInclude(JsonInclude.Include.ALWAYS)
   public record Result(Receipt receipt, boolean replay) {}
 }
