@@ -55,3 +55,7 @@ Final source reading includes the clarified contract, V017, history controller/D
 ## Ownership
 
 This follow-up changes only this review and `TASK_EDIT_HISTORY_TEST_CASES.md`. The previously authorized browser spec remains frozen. No source, contract, existing E2E, fixture, workflow or native-probe modifications; no commits/push. Main owns implementation, actual execution, artifacts and final evidence binding.
+
+## Coordinator resolution after this source review
+
+The Task Detail link is now in successful ADMIN actions outside the DRAFT edit gate. A dedicated TaskHistoryFailure maps only malformed history provenance to a safe500 TASK_HISTORY_UNAVAILABLE, without changing unrelated IllegalStateException behavior. Main added real native and browser persisted-corruption/error/privacy/restoration cases; browser collection is now24, not21. A fresh login is used after each native account/credential revocation test because the existing filter invalidates sessions. These resolve the reported source findings; actual CI/HTTP/visual acceptance is still required. Earlier inspected hashes and pending statements above identify historical review snapshots, not final test results.

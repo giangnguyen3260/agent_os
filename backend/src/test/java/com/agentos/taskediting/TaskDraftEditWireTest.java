@@ -106,8 +106,10 @@ class TaskDraftEditWireTest {
     var expected = new TaskDraftEditDtos.Values("  Legacy  ", "  Input\n\t  ", null, null);
     assertThat(TaskDraftEditWire.historyValues(mapper.writeValueAsString(expected)))
         .isEqualTo(expected);
-    assertThat(TaskDraftEditWire.historyValues(
-        mapper.writeValueAsString(new TaskDraftEditDtos.Values("😀".repeat(255), null, null, "NORMAL"))))
+    assertThat(
+            TaskDraftEditWire.historyValues(
+                mapper.writeValueAsString(
+                    new TaskDraftEditDtos.Values("😀".repeat(255), null, null, "NORMAL"))))
         .hasFieldOrPropertyWithValue("priority", "NORMAL");
   }
 
@@ -133,7 +135,8 @@ class TaskDraftEditWireTest {
       assertThatThrownBy(() -> TaskDraftEditWire.historyValues(invalid.toString()))
           .isInstanceOf(IllegalStateException.class);
     for (String field : new String[] {"title", "description", "acceptanceCriteria", "priority"}) {
-      int max = field.equals("description") ? 8000 : field.equals("acceptanceCriteria") ? 4000 : 255;
+      int max =
+          field.equals("description") ? 8000 : field.equals("acceptanceCriteria") ? 4000 : 255;
       for (String text : new String[] {"x".repeat(max + 1), "\u0000text", "text\u007f", "\ud800"}) {
         var invalid = valid.deepCopy();
         invalid.put(field, text);
@@ -153,7 +156,8 @@ class TaskDraftEditWireTest {
   @Test
   void historyAfterRequiresCompleteCanonicalCommandValues() throws Exception {
     var mapper = new ObjectMapper();
-    var valid = mapper.valueToTree(new TaskDraftEditDtos.Values("Title", "Input", "Criteria", "NORMAL"));
+    var valid =
+        mapper.valueToTree(new TaskDraftEditDtos.Values("Title", "Input", "Criteria", "NORMAL"));
     assertThat(TaskDraftEditWire.historyValues(valid.toString(), true))
         .isEqualTo(new TaskDraftEditDtos.Values("Title", "Input", "Criteria", "NORMAL"));
     for (String field : new String[] {"title", "description", "acceptanceCriteria", "priority"}) {
@@ -172,7 +176,8 @@ class TaskDraftEditWireTest {
 
   @Test
   void historyActorNamesMustBeSafeNonblankAndWithinCodepointLimit() {
-    for (String invalid : new String[] {"", " ", "\u00a0", "\ufeff", "\u3000", "name\n", "\ud800", "x".repeat(256)})
+    for (String invalid :
+        new String[] {"", " ", "\u00a0", "\ufeff", "\u3000", "name\n", "\ud800", "x".repeat(256)})
       assertThatThrownBy(() -> TaskDraftEditWire.historyActorName(invalid))
           .isInstanceOf(IllegalStateException.class);
     assertThatThrownBy(() -> TaskDraftEditWire.historyActorName(null))

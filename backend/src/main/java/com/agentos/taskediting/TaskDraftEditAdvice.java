@@ -19,7 +19,8 @@ public class TaskDraftEditAdvice {
   @ExceptionHandler(TaskHistoryFailure.class)
   public ResponseEntity<ApiErrorResponse> invalidStoredState(TaskHistoryFailure failure) {
     return ResponseEntity.internalServerError()
-        .body(ApiErrorResponse.of("TASK_HISTORY_UNAVAILABLE", "Saved configuration is unavailable"));
+        .body(
+            ApiErrorResponse.of("TASK_HISTORY_UNAVAILABLE", "Saved configuration is unavailable"));
   }
 
   @ExceptionHandler({IllegalArgumentException.class, java.io.IOException.class})

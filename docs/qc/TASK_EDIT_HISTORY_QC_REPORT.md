@@ -17,3 +17,7 @@ Read-only existing persisted task edit provenance, current ADMIN-only, before/af
 ## Candidate C1 correction
 
 C1 c5bf58a647cdd04087a5538ae07dab4724ccec58 / tree771cfe7f189b064d31491e0de413071eb0564c2e: Quality40510751010 stopped at Google Java formatting (six files); no backend test execution or quality acceptance. Static QC also found history link under the Task Detail error branch; moved into successful ADMIN actions independently of DRAFT. Added a dedicated safe history-provenance exception/HTTP500 mapping and actual native/browser corruption checks. Browser suite now24 collected cases (8×3), not24 passes. A separate CI diagnostic publishes a Google formatting patch without replacing or weakening the required quality gate.
+
+## C3 verification candidate preparation
+
+Applied actual Google Java Format patch artifact12737980398 from C2 diagnostic job122213367749 (run40511231198). The required quality check remains unchanged. Independent QC found native session reuse after disabled/credential revocation; the probe now authenticates fresh after each restored condition, and expects the existing security filter's HTTP401 for invalidated credentials/accounts versus403 for lost ADMIN. Matching new MockMvc assertions corrected. No security policy was relaxed. C3 actual runtime evidence remains pending.

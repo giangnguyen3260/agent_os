@@ -51,13 +51,18 @@ public class TaskDraftEditController {
       @PathVariable String missionId,
       @PathVariable String taskId,
       @AuthenticationPrincipal HumanIdentity human,
-      HttpServletRequest request) throws IOException {
+      HttpServletRequest request)
+      throws IOException {
     query(request, Set.of("page"));
     if (request.getInputStream().read() != -1) throw TaskDraftEditFailure.bad();
-    return ApiResponse.ok(service.history(
-        TaskDraftEditWire.uuid(organizationId), TaskDraftEditWire.uuid(teamId),
-        TaskDraftEditWire.uuid(missionId), TaskDraftEditWire.uuid(taskId), human,
-        TaskDraftEditWire.page(request.getParameter("page"))));
+    return ApiResponse.ok(
+        service.history(
+            TaskDraftEditWire.uuid(organizationId),
+            TaskDraftEditWire.uuid(teamId),
+            TaskDraftEditWire.uuid(missionId),
+            TaskDraftEditWire.uuid(taskId),
+            human,
+            TaskDraftEditWire.page(request.getParameter("page"))));
   }
 
   @GetMapping("/receipts/{key}")

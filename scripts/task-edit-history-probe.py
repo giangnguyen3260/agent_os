@@ -194,15 +194,17 @@ def main():
         escaped = original.replace("'", "''")
         sql(f"UPDATE task_edit_events SET before_json='{escaped}' WHERE id='{event_id}';")
     account = sql("SELECT id FROM human_accounts WHERE email='task-history-native-admin@example.test';")
-    def deny_account(change, restore):
+    def deny_account(change, restore, status=403):
+        nonlocal admin
         sql(change)
         try:
-            reject(lambda: admin.request(ROOT + '/history'), 403)
+            reject(lambda: admin.request(ROOT + '/history'), status)
         finally:
             sql(restore)
-    deny_account(f"UPDATE human_accounts SET enabled=false WHERE id='{account}';", f"UPDATE human_accounts SET enabled=true WHERE id='{account}';")
+        admin = Client()  # Disabled/version-mismatch checks invalidate the prior session.
+    deny_account(f"UPDATE human_accounts SET enabled=false WHERE id='{account}';", f"UPDATE human_accounts SET enabled=true WHERE id='{account}';", 401)
     version = int(sql(f"SELECT credential_version FROM human_accounts WHERE id='{account}';"))
-    deny_account(f"UPDATE human_accounts SET credential_version=credential_version+1 WHERE id='{account}';", f"UPDATE human_accounts SET credential_version={version} WHERE id='{account}';")
+    deny_account(f"UPDATE human_accounts SET credential_version=credential_version+1 WHERE id='{account}';", f"UPDATE human_accounts SET credential_version={version} WHERE id='{account}';", 401)
     deny_account(f"UPDATE organization_memberships SET role='MEMBER' WHERE organization_id='{ORG}' AND account_id='{account}';", f"UPDATE organization_memberships SET role='ADMIN' WHERE organization_id='{ORG}' AND account_id='{account}';")
     # Retired/paused states do not erase authorized provenance access.
     sql(f"UPDATE missions SET task_intake_paused=true WHERE id='{MISSION}';")

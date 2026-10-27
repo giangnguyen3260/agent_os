@@ -49,15 +49,13 @@ final class TaskDraftEditWire {
         throw new TaskHistoryFailure();
       for (String name : names) {
         JsonNode value = root.get(name);
-        if (!value.isNull() && !value.isTextual())
-          throw new TaskHistoryFailure();
+        if (!value.isNull() && !value.isTextual()) throw new TaskHistoryFailure();
       }
       String title = root.get("title").textValue();
       String description = root.get("description").textValue();
       String criteria = root.get("acceptanceCriteria").textValue();
       String priority = root.get("priority").textValue();
-      if (title == null)
-        throw new TaskHistoryFailure();
+      if (title == null) throw new TaskHistoryFailure();
       historyText(title, 255, false);
       historyText(description, 8000, true);
       historyText(criteria, 4000, true);
@@ -88,14 +86,14 @@ final class TaskDraftEditWire {
     historyText(value, 255, false);
     // Match the history UI's ECMAScript trim-based nonblank check without changing the name.
     if (value == null
-        || value.matches("[\\x{0009}-\\x{000d}\\x{0020}\\x{00a0}\\x{1680}\\x{2000}-\\x{200a}\\x{2028}\\x{2029}\\x{202f}\\x{205f}\\x{3000}\\x{feff}]*"))
+        || value.matches(
+            "[\\x{0009}-\\x{000d}\\x{0020}\\x{00a0}\\x{1680}\\x{2000}-\\x{200a}\\x{2028}\\x{2029}\\x{202f}\\x{205f}\\x{3000}\\x{feff}]*"))
       throw new TaskHistoryFailure();
   }
 
   private static void historyText(String value, int max, boolean multiline) {
     if (value == null) return;
-    if (value.codePointCount(0, value.length()) > max)
-      throw new TaskHistoryFailure();
+    if (value.codePointCount(0, value.length()) > max) throw new TaskHistoryFailure();
     for (int i = 0; i < value.length(); i++) {
       char c = value.charAt(i);
       if ((c < 32 && !(multiline && (c == 9 || c == 10 || c == 13))) || c == 127)
@@ -103,8 +101,7 @@ final class TaskDraftEditWire {
       if (Character.isHighSurrogate(c)) {
         if (++i >= value.length() || !Character.isLowSurrogate(value.charAt(i)))
           throw new TaskHistoryFailure();
-      } else if (Character.isLowSurrogate(c))
-        throw new TaskHistoryFailure();
+      } else if (Character.isLowSurrogate(c)) throw new TaskHistoryFailure();
     }
   }
 
