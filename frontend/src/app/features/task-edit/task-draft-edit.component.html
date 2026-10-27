@@ -1,0 +1,213 @@
+<div class="forest-shell">
+  <aside class="desktop-sidebar">
+    <div class="brand">agentos</div>
+    <nav aria-label="Workspace navigation">
+      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a
+      ><a [routerLink]="['/workspace', id, 'organization-map']"
+        >Organization map</a
+      ><a [routerLink]="['/workspace', id, 'teams']">Teams</a
+      ><a [routerLink]="['/workspace', id, 'agents']">Agents</a
+      ><a [routerLink]="['/workspace', id, 'missions']" class="selected"
+        >Missions</a
+      ><button disabled>Approvals</button
+      ><a [routerLink]="['/workspace', id, 'trace']">Trace</a>
+    </nav>
+  </aside>
+  <header class="compact-header">
+    <span class="brand">agentos</span
+    ><button
+      class="button secondary"
+      type="button"
+      aria-controls="task-edit-menu"
+      [attr.aria-expanded]="menuOpen()"
+      (click)="toggleMenu()"
+    >
+      Menu
+    </button>
+  </header>
+  <dialog
+    id="task-edit-menu"
+    aria-label="Workspace navigation"
+    (cancel)="closeMenu()"
+    (close)="closeMenu()"
+  >
+    <button class="button secondary" type="button" (click)="closeMenu()">
+      Close menu
+    </button>
+    <nav>
+      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a
+      ><a [routerLink]="['/workspace', id, 'teams']">Teams</a
+      ><a [routerLink]="['/workspace', id, 'agents']">Agents</a
+      ><a [routerLink]="['/workspace', id, 'missions']" class="selected"
+        >Missions</a
+      ><a [routerLink]="['/workspace', id, 'trace']">Trace</a
+      ><a routerLink="/workspace">Change workspace</a>
+    </nav>
+  </dialog>
+  <main data-testid="task-draft-edit" [attr.aria-busy]="loading() || busy()">
+    <h1 tabindex="-1">Sửa task draft</h1>
+    <p>
+      Chỉ sửa cấu hình task DRAFT. Thao tác này không chạy task hoặc thay đổi
+      quyền của Agent.
+    </p>
+    @if (loading()) {
+      <p data-testid="task-edit-loading" role="status">
+        Đang kiểm tra dữ liệu…
+      </p>
+    }
+    @if (denied()) {
+      <p data-testid="task-edit-denied" role="alert">
+        Cần quyền ADMIN hiện tại để sửa task draft.
+      </p>
+    }
+    @if (error()) {
+      <p data-testid="task-edit-error" role="alert">{{ error() }}</p>
+    }
+    @if (context(); as c) {
+      <div class="breadcrumb">{{ c.teamName }} / {{ c.missionTitle }}</div>
+      <h2>{{ c.values.title }}</h2>
+      @if (!c.canEdit) {
+        <section data-testid="task-edit-blocked" role="alert">
+          <h2>Không thể sửa task draft</h2>
+          @for (b of c.blockers; track b) {
+            <p>{{ b }}</p>
+          }
+        </section>
+      }
+      @if (phase() === 'edit') {
+        <form (ngSubmit)="review()" novalidate>
+          <fieldset [disabled]="!editable()">
+            <label for="edit-title">Title</label
+            ><input
+              id="edit-title"
+              name="title"
+              [(ngModel)]="draft.title"
+              (ngModelChange)="edit()"
+              required
+            />
+            <label for="edit-description">Description / input</label
+            ><textarea
+              id="edit-description"
+              name="description"
+              [(ngModel)]="draft.description"
+              (ngModelChange)="edit()"
+              required
+              rows="4"
+            ></textarea>
+            <label for="edit-criteria">Acceptance criteria</label
+            ><textarea
+              id="edit-criteria"
+              name="acceptanceCriteria"
+              [(ngModel)]="draft.acceptanceCriteria"
+              (ngModelChange)="edit()"
+              required
+              rows="4"
+            ></textarea>
+            <label for="edit-priority">Priority</label
+            ><select
+              id="edit-priority"
+              name="priority"
+              [(ngModel)]="draft.priority"
+              (ngModelChange)="edit()"
+              required
+            >
+              <option value="">Chọn Priority</option>
+              @for (p of ['LOW', 'NORMAL', 'HIGH', 'URGENT']; track p) {
+                <option [value]="p">{{ p }}</option>
+              }
+            </select>
+          </fieldset>
+          <div class="actions">
+            <button
+              class="button primary"
+              type="submit"
+              [disabled]="!editable()"
+            >
+              Xem lại thay đổi</button
+            ><a class="button secondary" [routerLink]="detailLink()">Hủy</a>
+          </div>
+        </form>
+      }
+      @if (phase() === 'review') {
+        <section data-testid="task-edit-review">
+          <h2>Xem lại thay đổi</h2>
+          @for (f of fields; track f; let i = $index) {
+            <article class="diff">
+              <h3>{{ labels[i] }}</h3>
+              <strong>Trước</strong>
+              <p>{{ show(c.values[f]) }}</p>
+              <strong>Sau</strong>
+              <p>{{ body()?.[f] }}</p>
+            </article>
+          }
+          <label class="ack"
+            ><input
+              type="checkbox"
+              [(ngModel)]="acknowledged"
+              [disabled]="busy() || loading() || !verified()"
+            />Tôi đã xem lại thay đổi của task draft.</label
+          >
+          <div class="actions">
+            <button
+              class="button primary"
+              (click)="save()"
+              [disabled]="!acknowledged || busy() || loading() || !verified()"
+            >
+              Lưu thay đổi</button
+            ><button
+              class="button secondary"
+              (click)="back()"
+              [disabled]="busy()"
+            >
+              Quay lại chỉnh sửa
+            </button>
+          </div>
+        </section>
+      }
+    }
+    @if (phase() === 'unknown') {
+      <section data-testid="task-edit-unknown" role="status">
+        <h2>Chưa xác định kết quả</h2>
+        <p>
+          Yêu cầu có thể đã được lưu. Biên nhận trống không chứng minh lưu thất
+          bại.
+        </p>
+        <div class="actions">
+          <button
+            class="button secondary"
+            (click)="recover()"
+            [disabled]="busy() || loading()"
+          >
+            Kiểm tra biên nhận</button
+          ><button
+            class="button secondary"
+            (click)="recover(true)"
+            [disabled]="!canReplay() || busy() || loading()"
+          >
+            Gửi lại đúng yêu cầu này
+          </button>
+        </div>
+      </section>
+    }
+    @if (receipt(); as r) {
+      <section data-testid="task-edit-saved" role="status">
+        <h2>Đã ghi nhận sửa task draft</h2>
+        <p>Biên nhận lịch sử không chứng minh task hiện tại chưa thay đổi.</p>
+        <p>{{ r.committedAt }} · {{ r.revision }}</p>
+        @for (f of fields; track f; let i = $index) {
+          <article class="diff">
+            <h3>{{ labels[i] }}</h3>
+            <p>{{ show(r.before[f]) }}</p>
+            <p>{{ show(r.after[f]) }}</p>
+          </article>
+        }
+        <a class="button primary" [routerLink]="detailLink()">Mở task</a>
+      </section>
+    }
+    @if (phase() !== 'unknown' && !busy()) {
+      <button class="button secondary" (click)="load()" [disabled]="loading()">
+        Tải lại dữ liệu
+      </button>
+    }
+  </main>
+</div>

@@ -228,6 +228,14 @@ jobs:
         env:
           E2E_BASE_URL: http://127.0.0.1:18080
         run: python3 scripts/trace-explorer-probe.py
+      - name: Provision isolated Task Draft Edit fixtures
+        run: |
+          docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < scripts/task-draft-edit-ci-fixture.sql
+      - name: PostgreSQL Task Draft Edit atomicity and authority
+        timeout-minutes: 5
+        env:
+          E2E_BASE_URL: http://127.0.0.1:18080
+        run: python3 scripts/task-draft-edit-probe.py
       - name: Install browser test dependencies
         working-directory: frontend
         run: |
@@ -241,11 +249,20 @@ jobs:
         env:
           E2E_BASE_URL: http://127.0.0.1:18080
           E2E_MAILPIT_URL: http://127.0.0.1:18025
-        # Trace Explorer first; then the complete 609-instance baseline.
+        # Task Draft Edit first; then the complete 633-instance baseline.
         # Selections are disjoint; one worker and zero retries remain unchanged.
         run: |
-          npm run test:e2e -- --max-failures=1 --grep 'trace explorer independent QC'
-          npm run test:e2e -- --max-failures=1 --grep-invert 'trace explorer independent QC'
+          npm run test:e2e -- --max-failures=1 --grep 'task draft edit independent QC'
+          npm run test:e2e -- --max-failures=1 --grep-invert 'task draft edit independent QC'
+      - name: Upload synthetic Task Draft Edit visual evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: task-draft-edit-visuals
+          path: |
+            frontend/qa-visuals/task-draft-edit-*.png
+            frontend/qa-visuals/task-draft-edit-manifest.jsonl
+          if-no-files-found: ignore
       - name: Upload synthetic Trace Explorer visual evidence
         if: always()
         uses: actions/upload-artifact@v4

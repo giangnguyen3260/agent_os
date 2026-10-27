@@ -22,7 +22,10 @@ import org.springframework.session.FindByIndexNameSessionRepository;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
-@SpringBootTest
+@SpringBootTest(
+    properties =
+        "spring.datasource.url=jdbc:h2:mem:authentication_isolated;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1;INIT=CREATE"
+            + " DOMAIN IF NOT EXISTS TIMESTAMPTZ AS TIMESTAMP WITH TIME ZONE")
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 class AuthenticationIntegrationTest {

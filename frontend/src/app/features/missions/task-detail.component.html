@@ -74,6 +74,23 @@
         </p>
       </header>
       <div class="actions">
+        @if (context()?.role === 'ADMIN' && data.task.status === 'DRAFT') {
+          <a
+            class="button secondary"
+            [routerLink]="[
+              '/workspace',
+              id,
+              'teams',
+              teamId,
+              'missions',
+              missionId,
+              'tasks',
+              taskId,
+              'edit',
+            ]"
+            >Sửa task draft</a
+          >
+        }
         <button
           class="button secondary"
           disabled
@@ -99,8 +116,8 @@
         ><button class="button secondary" (click)="load()">Refresh</button>
       </div>
       <p id="task-actions-unavailable" class="caption">
-        Approval decisions, task changes and execution are unavailable. Status
-        is saved state.
+        Approval decisions, runtime task actions and execution are unavailable.
+        Status is saved state.
       </p>
       @if (data.task.waitingSince) {
         <section class="status-banner" aria-label="Waiting details">

@@ -1,4 +1,8 @@
 import {
+  taskEditNavigationGuard,
+  taskEditLeaveGuard,
+} from './features/task-edit/task-edit-navigation.guard';
+import {
   teamSettingsNavigationGuard,
   teamSettingsLeaveGuard,
 } from './features/teams/team-settings-navigation.guard';
@@ -13,6 +17,16 @@ import {authGuard, previewGuard} from './core/auth/auth.guard';
 import {approvalDetailNavigationGuard} from './features/approvals/approval-navigation.guard';
 
 export const routes: Routes = [
+  {
+    path: 'workspace/:id/teams/:teamId/missions/:missionId/tasks/:taskId/edit',
+    canActivate: [authGuard, taskEditNavigationGuard],
+    canDeactivate: [taskEditLeaveGuard],
+    runGuardsAndResolvers: 'always',
+    loadComponent: () =>
+      import('./features/task-edit/task-draft-edit.component').then(
+        module => module.TaskDraftEditComponent,
+      ),
+  },
   {
     path: 'workspace/:id/trace',
     canActivate: [authGuard],
