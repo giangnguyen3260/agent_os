@@ -1,4 +1,8 @@
 import {
+  missionIntakeNavigationGuard,
+  missionIntakeLeaveGuard,
+} from './features/mission-intake/mission-intake-navigation.guard';
+import {
   taskEditNavigationGuard,
   taskEditLeaveGuard,
 } from './features/task-edit/task-edit-navigation.guard';
@@ -17,6 +21,16 @@ import {authGuard, previewGuard} from './core/auth/auth.guard';
 import {approvalDetailNavigationGuard} from './features/approvals/approval-navigation.guard';
 
 export const routes: Routes = [
+  {
+    path: 'workspace/:id/teams/:teamId/missions/:missionId/intake',
+    canActivate: [authGuard, missionIntakeNavigationGuard],
+    canDeactivate: [missionIntakeLeaveGuard],
+    runGuardsAndResolvers: 'always',
+    loadComponent: () =>
+      import('./features/mission-intake/mission-intake.component').then(
+        m => m.MissionIntakeComponent,
+      ),
+  },
   {
     path: 'workspace/:id/teams/:teamId/missions/:missionId/tasks/:taskId/history',
     canActivate: [authGuard],

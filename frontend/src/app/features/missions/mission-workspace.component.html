@@ -101,6 +101,19 @@
       <div class="actions">
         @if (context()?.role === 'ADMIN') {
           <a
+            class="button secondary"
+            [routerLink]="[
+              '/workspace',
+              id,
+              'teams',
+              teamId,
+              'missions',
+              missionId,
+              'intake',
+            ]"
+            >Quản lý nhận task</a
+          >
+          <a
             class="button primary"
             [routerLink]="[
               '/workspace',

@@ -244,25 +244,58 @@ jobs:
         env:
           E2E_BASE_URL: http://127.0.0.1:18080
         run: python3 scripts/task-edit-history-probe.py
+      - name: Provision isolated Mission intake fixtures
+        run: |
+          docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < scripts/mission-intake-ci-fixture.sql
+      - name: PostgreSQL Mission intake atomicity and task boundary
+        timeout-minutes: 5
+        env:
+          E2E_BASE_URL: http://127.0.0.1:18080
+        run: python3 scripts/mission-intake-probe.py
       - name: Install browser test dependencies
         working-directory: frontend
         run: |
           npm ci
           # The Azure Ubuntu mirror transferred 20 MB at 28.6 kB/s in run40001723419.
           # Keep the signed Ubuntu packages; change only this disposable runner's mirror.
-          sudo sed -i -E 's|https?://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
+          sudo python3 - <<'PYAPT'
+          from pathlib import Path
+          files = [p for p in Path('/etc/apt').rglob('*')
+                   if p.is_file() and p.suffix in ('.list', '.sources')]
+          for p in files:
+              source = p.read_text()
+              updated = source.replace('http://azure.archive.ubuntu.com/ubuntu', 'https://archive.ubuntu.com/ubuntu').replace('https://azure.archive.ubuntu.com/ubuntu', 'https://archive.ubuntu.com/ubuntu')
+              if updated != source:
+                  p.write_text(updated)
+          assert all('azure.archive.ubuntu.com' not in p.read_text() for p in files)
+          PYAPT
           npx playwright install --with-deps chromium
-      - name: Real backend browser login across three viewports
+      - name: Mission intake browser acceptance across three viewports
         working-directory: frontend
         env:
           E2E_BASE_URL: http://127.0.0.1:18080
           E2E_MAILPIT_URL: http://127.0.0.1:18025
-        # Task Edit History first; then the complete retained baseline.
-        # Selections are disjoint; one worker and zero retries remain unchanged.
+        run: |
+          node scripts/test-mission-intake-validation.cjs
+          npm run test:e2e -- --max-failures=1 --grep 'mission intake independent QC'
+      - name: Upload synthetic Mission intake visual evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mission-intake-visuals
+          path: |
+            frontend/qa-visuals/mission-intake-*.png
+            frontend/qa-visuals/mission-intake-manifest.jsonl
+          if-no-files-found: ignore
+      - name: Retained real backend browser regression
+        working-directory: frontend
+        env:
+          E2E_BASE_URL: http://127.0.0.1:18080
+          E2E_MAILPIT_URL: http://127.0.0.1:18025
+        # Disjoint selections; full retained baseline, one worker and zero retries.
         run: |
           node scripts/test-task-history-validation.cjs
-          npm run test:e2e -- --max-failures=1 --grep 'task edit history independent QC'
-          npm run test:e2e -- --max-failures=1 --grep-invert 'task edit history independent QC'
+          npm run test:e2e -- --max-failures=1 --grep-invert 'mission intake independent QC'
       - name: Upload synthetic Task Edit History visual evidence
         if: always()
         uses: actions/upload-artifact@v4
