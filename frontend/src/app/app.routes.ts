@@ -18,6 +18,15 @@ import {approvalDetailNavigationGuard} from './features/approvals/approval-navig
 
 export const routes: Routes = [
   {
+    path: 'workspace/:id/teams/:teamId/missions/:missionId/tasks/:taskId/history',
+    canActivate: [authGuard],
+    runGuardsAndResolvers: 'always',
+    loadComponent: () =>
+      import('./features/task-history/task-history.component').then(
+        m => m.TaskHistoryComponent,
+      ),
+  },
+  {
     path: 'workspace/:id/teams/:teamId/missions/:missionId/tasks/:taskId/edit',
     canActivate: [authGuard, taskEditNavigationGuard],
     canDeactivate: [taskEditLeaveGuard],

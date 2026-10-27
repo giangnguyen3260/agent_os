@@ -1,0 +1,153 @@
+<div class="forest-shell">
+  <aside class="desktop-sidebar">
+    <div class="brand">agentos</div>
+    <nav aria-label="Workspace navigation">
+      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a
+      ><a [routerLink]="['/workspace', id, 'organization-map']"
+        >Organization map</a
+      ><a [routerLink]="['/workspace', id, 'teams']">Teams</a
+      ><a [routerLink]="['/workspace', id, 'agents']">Agents</a
+      ><a [routerLink]="['/workspace', id, 'missions']" class="selected"
+        >Missions</a
+      ><button disabled>Approvals</button
+      ><a [routerLink]="['/workspace', id, 'trace']">Trace</a>
+    </nav>
+  </aside>
+  <header class="compact-header">
+    <span class="brand">agentos</span
+    ><button
+      class="button secondary"
+      type="button"
+      aria-controls="task-history-menu"
+      [attr.aria-expanded]="menuOpen()"
+      (click)="toggleMenu()"
+    >
+      Menu
+    </button>
+  </header>
+  <dialog
+    id="task-history-menu"
+    aria-label="Workspace navigation"
+    (cancel)="closeMenu()"
+    (close)="closeMenu()"
+  >
+    <button class="button secondary" type="button" (click)="closeMenu()">
+      Close menu
+    </button>
+    <nav>
+      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a
+      ><a [routerLink]="['/workspace', id, 'teams']">Teams</a
+      ><a [routerLink]="['/workspace', id, 'agents']">Agents</a
+      ><a [routerLink]="['/workspace', id, 'missions']" class="selected"
+        >Missions</a
+      ><a [routerLink]="['/workspace', id, 'trace']">Trace</a
+      ><a routerLink="/workspace">Change workspace</a>
+    </nav>
+  </dialog>
+  <main data-testid="task-edit-history" [attr.aria-busy]="loading()">
+    <a class="button secondary" [routerLink]="detailLink()">Quay lại task</a>
+    <h1>Lịch sử chỉnh sửa</h1>
+    <p>Các thay đổi cấu hình task đã được lưu, mới nhất trước.</p>
+    <button
+      class="button secondary"
+      type="button"
+      (click)="load()"
+      [disabled]="loading()"
+    >
+      Tải lại lịch sử
+    </button>
+    @if (loading()) {
+      <p data-testid="task-history-loading" role="status">
+        Đang kiểm tra quyền và tải lịch sử…
+      </p>
+    }
+    @if (denied()) {
+      <p data-testid="task-history-denied" role="alert">
+        Lịch sử không khả dụng. Cần tài khoản và quyền ADMIN hiện tại trong
+        workspace.
+      </p>
+    }
+    @if (error()) {
+      <p data-testid="task-history-error" role="alert">{{ error() }}</p>
+    }
+    @if (history(); as h) {
+      <section class="history-card" aria-label="Phạm vi task">
+        <h2>{{ workspaceName() }}</h2>
+        <dl class="scope">
+          <dt>Workspace</dt>
+          <dd>{{ h.organizationId }}</dd>
+          <dt>Team</dt>
+          <dd>{{ h.teamId }}</dd>
+          <dt>Mission</dt>
+          <dd>{{ h.missionId }}</dd>
+          <dt>Task</dt>
+          <dd>{{ h.taskId }}</dd>
+        </dl>
+      </section>
+      <p>
+        Tên người chỉnh sửa là tên hiển thị hiện tại, không phải tên tại thời
+        điểm chỉnh sửa.
+      </p>
+      <p role="status">{{ h.total }} lần chỉnh sửa · Trang {{ h.page + 1 }}</p>
+      <p>
+        Những chỉnh sửa mới trong lúc xem có thể làm thay đổi vị trí các trang.
+        Tải lại để xem dữ liệu mới nhất.
+      </p>
+      @if (!h.items.length) {
+        <p data-testid="task-history-empty" role="status">
+          {{
+            h.total === 0
+              ? 'Chưa có lịch sử chỉnh sửa được lưu.'
+              : 'Không có lần chỉnh sửa ở trang này.'
+          }}
+        </p>
+      }
+      @for (item of h.items; track item.eventId) {
+        <article class="history-card" data-testid="task-history-event">
+          <h2>Revision {{ item.revision }}</h2>
+          <p>
+            <time [attr.datetime]="item.committedAt">{{
+              item.committedAt
+            }}</time>
+            · {{ item.actorName }}
+          </p>
+          @for (field of fields; track field; let i = $index) {
+            <section class="diff">
+              <h3>{{ labels[i] }}</h3>
+              <div class="comparison">
+                <div>
+                  <h4>Trước</h4>
+                  <p>{{ show(item.before[field]) }}</p>
+                </div>
+                <div>
+                  <h4>Sau</h4>
+                  <p>{{ show(item.after[field]) }}</p>
+                </div>
+              </div>
+            </section>
+          }
+        </article>
+      }
+      <nav class="actions" aria-label="Phân trang lịch sử">
+        <button
+          class="button secondary"
+          type="button"
+          (click)="changePage(-1)"
+          [disabled]="loading() || h.page === 0"
+        >
+          Trang trước
+        </button>
+        <button
+          class="button secondary"
+          type="button"
+          (click)="changePage(1)"
+          [disabled]="
+            loading() || h.page >= 100000 || (h.page + 1) * 20 >= h.total
+          "
+        >
+          Trang sau
+        </button>
+      </nav>
+    }
+  </main>
+</div>

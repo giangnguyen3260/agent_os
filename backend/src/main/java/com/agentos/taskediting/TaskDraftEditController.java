@@ -44,6 +44,27 @@ public class TaskDraftEditController {
             human));
   }
 
+  @GetMapping("/history")
+  public ApiResponse<TaskDraftEditDtos.History> history(
+      @PathVariable String organizationId,
+      @PathVariable String teamId,
+      @PathVariable String missionId,
+      @PathVariable String taskId,
+      @AuthenticationPrincipal HumanIdentity human,
+      HttpServletRequest request)
+      throws IOException {
+    query(request, Set.of("page"));
+    if (request.getInputStream().read() != -1) throw TaskDraftEditFailure.bad();
+    return ApiResponse.ok(
+        service.history(
+            TaskDraftEditWire.uuid(organizationId),
+            TaskDraftEditWire.uuid(teamId),
+            TaskDraftEditWire.uuid(missionId),
+            TaskDraftEditWire.uuid(taskId),
+            human,
+            TaskDraftEditWire.page(request.getParameter("page"))));
+  }
+
   @GetMapping("/receipts/{key}")
   public ApiResponse<TaskDraftEditDtos.ReceiptLookup> receipt(
       @PathVariable String organizationId,

@@ -30,6 +30,81 @@ final class TaskDraftEditWire {
 
   private TaskDraftEditWire() {}
 
+  static int page(String value) {
+    if (value == null) return 0;
+    if (!value.matches("0|[1-9][0-9]{0,5}")) throw TaskDraftEditFailure.bad();
+    int page = Integer.parseInt(value);
+    if (page > 100000) throw TaskDraftEditFailure.bad();
+    return page;
+  }
+
+  static TaskDraftEditDtos.Values historyValues(String source) {
+    try (var parser = JSON.getFactory().createParser(source)) {
+      JsonNode root = JSON.readTree(parser);
+      if (root == null || !root.isObject() || parser.nextToken() != null)
+        throw new TaskHistoryFailure();
+      Set<String> names = new HashSet<>();
+      root.fieldNames().forEachRemaining(names::add);
+      if (!names.equals(Set.of("title", "description", "acceptanceCriteria", "priority")))
+        throw new TaskHistoryFailure();
+      for (String name : names) {
+        JsonNode value = root.get(name);
+        if (!value.isNull() && !value.isTextual()) throw new TaskHistoryFailure();
+      }
+      String title = root.get("title").textValue();
+      String description = root.get("description").textValue();
+      String criteria = root.get("acceptanceCriteria").textValue();
+      String priority = root.get("priority").textValue();
+      if (title == null) throw new TaskHistoryFailure();
+      historyText(title, 255, false);
+      historyText(description, 8000, true);
+      historyText(criteria, 4000, true);
+      historyText(priority, 255, false);
+      return new TaskDraftEditDtos.Values(title, description, criteria, priority);
+    } catch (IOException | IllegalArgumentException ex) {
+      throw new TaskHistoryFailure(ex);
+    }
+  }
+
+  static TaskDraftEditDtos.Values historyValues(String source, boolean after) {
+    var values = historyValues(source);
+    if (!after) return values;
+    try {
+      if (!safe(values.title(), 255, false).equals(values.title())
+          || !safe(values.description(), 8000, true).equals(values.description())
+          || !safe(values.acceptanceCriteria(), 4000, true).equals(values.acceptanceCriteria())
+          || values.priority() == null
+          || !Set.of("LOW", "NORMAL", "HIGH", "URGENT").contains(values.priority()))
+        throw new TaskHistoryFailure();
+      return values;
+    } catch (TaskDraftEditFailure ex) {
+      throw new TaskHistoryFailure(ex);
+    }
+  }
+
+  static void historyActorName(String value) {
+    historyText(value, 255, false);
+    // Match the history UI's ECMAScript trim-based nonblank check without changing the name.
+    if (value == null
+        || value.matches(
+            "[\\x{0009}-\\x{000d}\\x{0020}\\x{00a0}\\x{1680}\\x{2000}-\\x{200a}\\x{2028}\\x{2029}\\x{202f}\\x{205f}\\x{3000}\\x{feff}]*"))
+      throw new TaskHistoryFailure();
+  }
+
+  private static void historyText(String value, int max, boolean multiline) {
+    if (value == null) return;
+    if (value.codePointCount(0, value.length()) > max) throw new TaskHistoryFailure();
+    for (int i = 0; i < value.length(); i++) {
+      char c = value.charAt(i);
+      if ((c < 32 && !(multiline && (c == 9 || c == 10 || c == 13))) || c == 127)
+        throw new TaskHistoryFailure();
+      if (Character.isHighSurrogate(c)) {
+        if (++i >= value.length() || !Character.isLowSurrogate(value.charAt(i)))
+          throw new TaskHistoryFailure();
+      } else if (Character.isLowSurrogate(c)) throw new TaskHistoryFailure();
+    }
+  }
+
   static UUID uuid(String value) {
     if (value == null
         || !value.matches(

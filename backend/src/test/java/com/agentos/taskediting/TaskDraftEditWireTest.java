@@ -101,6 +101,92 @@ class TaskDraftEditWireTest {
   }
 
   @Test
+  void historySnapshotsPreserveHistoricalWhitespaceAndNullableFields() throws Exception {
+    var mapper = new ObjectMapper();
+    var expected = new TaskDraftEditDtos.Values("  Legacy  ", "  Input\n\t  ", null, null);
+    assertThat(TaskDraftEditWire.historyValues(mapper.writeValueAsString(expected)))
+        .isEqualTo(expected);
+    assertThat(
+            TaskDraftEditWire.historyValues(
+                mapper.writeValueAsString(
+                    new TaskDraftEditDtos.Values("😀".repeat(255), null, null, "NORMAL"))))
+        .hasFieldOrPropertyWithValue("priority", "NORMAL");
+  }
+
+  @Test
+  void historySnapshotsRejectMalformedValuesWithoutCoercionOrNormalization() throws Exception {
+    var mapper = new ObjectMapper();
+    var valid = mapper.createObjectNode();
+    valid.put("title", "Legacy");
+    valid.putNull("description");
+    valid.putNull("acceptanceCriteria");
+    valid.putNull("priority");
+    for (String field : new String[] {"title", "description", "acceptanceCriteria", "priority"}) {
+      var wrongType = valid.deepCopy();
+      wrongType.put(field, 123);
+      assertThatThrownBy(() -> TaskDraftEditWire.historyValues(wrongType.toString()))
+          .isInstanceOf(IllegalStateException.class);
+    }
+    var nullTitle = valid.deepCopy();
+    nullTitle.putNull("title");
+    var unknownField = valid.deepCopy();
+    unknownField.put("actorId", "private");
+    for (var invalid : java.util.List.of(nullTitle, unknownField))
+      assertThatThrownBy(() -> TaskDraftEditWire.historyValues(invalid.toString()))
+          .isInstanceOf(IllegalStateException.class);
+    for (String field : new String[] {"title", "description", "acceptanceCriteria", "priority"}) {
+      int max =
+          field.equals("description") ? 8000 : field.equals("acceptanceCriteria") ? 4000 : 255;
+      for (String text : new String[] {"x".repeat(max + 1), "\u0000text", "text\u007f", "\ud800"}) {
+        var invalid = valid.deepCopy();
+        invalid.put(field, text);
+        assertThatThrownBy(() -> TaskDraftEditWire.historyValues(invalid.toString()))
+            .isInstanceOf(IllegalStateException.class);
+      }
+    }
+  }
+
+  @Test
+  void historyBeforePreservesSafeLegacyPriorityAndBlankText() throws Exception {
+    var expected = new TaskDraftEditDtos.Values("  ", "", null, "  Old priority  ");
+    assertThat(TaskDraftEditWire.historyValues(new ObjectMapper().writeValueAsString(expected)))
+        .isEqualTo(expected);
+  }
+
+  @Test
+  void historyAfterRequiresCompleteCanonicalCommandValues() throws Exception {
+    var mapper = new ObjectMapper();
+    var valid =
+        mapper.valueToTree(new TaskDraftEditDtos.Values("Title", "Input", "Criteria", "NORMAL"));
+    assertThat(TaskDraftEditWire.historyValues(valid.toString(), true))
+        .isEqualTo(new TaskDraftEditDtos.Values("Title", "Input", "Criteria", "NORMAL"));
+    for (String field : new String[] {"title", "description", "acceptanceCriteria", "priority"}) {
+      for (String value : new String[] {null, "", " ", "  Padded  ", "\u3000"}) {
+        var invalid = (com.fasterxml.jackson.databind.node.ObjectNode) valid.deepCopy();
+        invalid.put(field, value);
+        assertThatThrownBy(() -> TaskDraftEditWire.historyValues(invalid.toString(), true))
+            .isInstanceOf(IllegalStateException.class);
+      }
+    }
+    var unknown = (com.fasterxml.jackson.databind.node.ObjectNode) valid.deepCopy();
+    unknown.put("priority", "MEDIUM");
+    assertThatThrownBy(() -> TaskDraftEditWire.historyValues(unknown.toString(), true))
+        .isInstanceOf(IllegalStateException.class);
+  }
+
+  @Test
+  void historyActorNamesMustBeSafeNonblankAndWithinCodepointLimit() {
+    for (String invalid :
+        new String[] {"", " ", "\u00a0", "\ufeff", "\u3000", "name\n", "\ud800", "x".repeat(256)})
+      assertThatThrownBy(() -> TaskDraftEditWire.historyActorName(invalid))
+          .isInstanceOf(IllegalStateException.class);
+    assertThatThrownBy(() -> TaskDraftEditWire.historyActorName(null))
+        .isInstanceOf(IllegalStateException.class);
+    TaskDraftEditWire.historyActorName("  Current name  ");
+    TaskDraftEditWire.historyActorName("😀".repeat(255));
+  }
+
+  @Test
   void legacyAndMissingReceiptNullsRemainExplicitWithGlobalNonNullInclusion() {
     ObjectMapper mapper =
         new ObjectMapper()

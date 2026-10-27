@@ -1,0 +1,39 @@
+# Task edit history — acceptance test cases
+
+All cases below are **NOT RUN by independent QC**. These are concrete acceptance oracles, not executed results. Browser automation covers a subset; native/DB assertions belong to main. Source baseline and policy caveats are in `TASK_EDIT_HISTORY_REVIEW.md`.
+
+| ID | Setup / action | Required result |
+| --- | --- | --- |
+| H01 | ADMIN reads task with 25 persisted prefix520 fixture events, page omitted / 0 / 1. | Exact data keys organizationId,teamId,missionId,taskId,page,pageSize,total,items; pageSize=20; total=25; revisions 25..6 then 5..1; 20+5 unique event IDs, equal to DB events. Static dataset during traversal. |
+| H02 | Read legacy task with no events; read populated task page2 and page100000. | No synthetic baseline; items=[]; total respectively 0 or 25; requested page preserved. No exception for valid out-of-range page. |
+| H03 | Perform one actual valid HTTP edit; reread history and DB. | One new exact event matching receipt eventId/revision/time/before/after. First legacy before retains explicit nullable fields. Do not count synthetic fixture rows as HTTP edit coverage. |
+| H04 | Replay exact original key/body; submit no-op, conflicting/stale and blocked edits. | Existing edit statuses/receipts unchanged; replay adds no event, failures add no event/receipt/business mutation. |
+| H05 | Rename actor; disable actor or remove actor membership, retain authorized viewer. | Current actor display name shown with current-name caption; stored snapshots/time/revision/eventId unchanged; actor membership is not viewer authorization. No email/account/credential/session fields. |
+| H06 | MEMBER, foreign org user, removed membership, disabled viewer, stale credential, unauthenticated. Test known and unknown task scopes. | Current authority denial before scoped business lookup; no private payload. Preserve established unauthenticated transport handling; no unauthorized existence oracle. |
+| H07 | Authorized ADMIN combines real IDs with wrong org/team/mission/task parent. | Exact scoped resolution rejects (existing service policy 404); cannot fetch event by task UUID alone. No writes. |
+| H08 | Change task out of DRAFT, archive team, change mission lifecycle, pause intake; read API and open detail history link. | History still readable to current ADMIN. MEMBER has no link; DRAFT edit eligibility does not gate history. Restore test fixtures. |
+| H09 | page=-1,01,+1,1.0,1e0,empty,space,100001,huge; duplicate page; unknown query/pageSize/sort. | Strict 400; valid 0 and100000 accepted. Duplicate even identical values rejected. For percent encoding apply existing decoded wire rules; do not invent raw URL canonicalization. |
+| H10 | Each path ID uppercase, short UUID, invalid version/variant, whitespace; GET with body and chunked body. | Existing canonical UUID/body rules reject; no writes or private error fields. |
+| H11 | Corrupt selected stored before/after: invalid JSON, duplicate/missing/extra keys, array, numeric value, trailing JSON. | Whole response fails closed, no skipped row, fabricated value or raw JSON disclosure. Restore each corruption. Clarified policy: preserve blank/safe unknown legacy before text; reject null title, unsafe/overlength before text; require canonical complete after values and reject no-op. Selected-page structural validation only; no off-page/chain/tamper guarantee. |
+| H12 | Concurrent append between count and item query in one response, using real PostgreSQL scheduling. | Repeatable-read/read-only keeps count and rows consistent within response; no row locking or mutation. Across separate page requests offset overlap is possible; do not assert unsupported snapshot continuity. |
+| H13 | Snapshot business tables before/after successful/denied/invalid reads and browser actions. | No task/event/receipt/audit/runtime/owner/dependency/intake/grant writes caused by history; distinguish legitimate session/auth bookkeeping. Browser must emit no modifying history/task requests. |
+| H14 | Render real API25 rows then Next/Previous; compare each row with its API item. | Scope, revision,time,current name and all four before/after values match; null says Chưa có dữ liệu; dates represent same instant; no execution-history claim/form/save. API total and navigation truthful. |
+| H15 | Rewrite actual fetched success into malformed JSON, wrong scope, extra keys, invalid timestamp/count/values/duplicate IDs/order. | Error clears previous private rows; no partial render, no denied misclassification; explicit retry refetches real API. These are transport fault injections, not backend corruption evidence. |
+| H16 | Actual 403 after DB viewer role loss; also inject503 based on actual fetched response. | Denied vs error correct; existing private rows erased before revalidation and remain absent after failure. Restore membership in finally. |
+| H17 | Hold actual200 history response, change role, trigger focus/visibility authority refresh, release. | Old rows cleared immediately, current denied visible, released response cannot restore secrets. Confirm actual delivery completion or original request cancellation before final assertion. |
+| H18 | Hold old response then SPA-switch to empty task; release. Also destroy component / navigate away. | Old scope reply cannot populate new route or resurrect destroyed component. Back points to actual new scope. |
+| H19 | Swap shared-session identity to admin2 or other using sibling page, trigger focus/visibility; paginate. | Erase before checking; previous actor's response fenced even when replacement actor is ADMIN; no cached authority reuse. Use actual session/workspace reads. |
+| H20 | Long text, literal script/HTML, Unicode and nullable fields at1440/768/390; keyboard Tab/Enter. | Text escaped, no script execution, all values readable/wrapped, no horizontal overflow, usable controls and clear focus. Capture five required states per width after assertions. |
+
+## Execution ledger
+
+No runtime assertions, screenshots, native probes or browser tests executed by this sidecar at authoring. Syntax/format checks, if performed, are reported separately and never counted as browser passes. Main must bind final execution counts to candidate source, completed logs and actual PNG/manifest inventory. Sonar paused; no merge/deployment authorized.
+
+Local authoring validation: Node syntax check succeeded; Playwright list collected 21 cases across desktop/tablet/mobile. Collection is not execution; zero runtime passes claimed. Follow-up source inspection confirms `other` is now foreign-only; that fixture issue is resolved. Syntax and collection checks were rerun successfully; still zero runtime passes claimed.
+
+## Follow-up acceptance gates
+
+- Contract clarification is authoritative: H11 must explicitly cover verbatim safe blank/unknown-priority legacy before, strict canonical after, nonblank safe actor and no-op rejection.
+- H14 currently has a source blocker: the only Task Detail history link is inside the error branch; require it in the successful ADMIN view regardless of DRAFT status. Keep the browser round-trip assertion frozen.
+- H11/H16 need real HTTP stored-corruption evidence: safe error response and error UI, with no raw JSON/secret leakage or accidental denied classification through `/error`. Service-only exception assertions do not establish HTTP behavior.
+- Collection remains 21 across three inherited viewports, not21 passes. Upcoming CI owns runtime/native/visual execution, exact count and candidate binding.

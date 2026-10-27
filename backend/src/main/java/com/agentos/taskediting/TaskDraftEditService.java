@@ -224,6 +224,50 @@ public class TaskDraftEditService {
         blockers);
   }
 
+  @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+  public TaskDraftEditDtos.History history(
+      UUID org, UUID team, UUID mission, UUID task, HumanIdentity human, int page) {
+    if (page < 0 || page > 100000) throw TaskDraftEditFailure.bad();
+    authorize(org, human, false);
+    Scope scope = new Scope(org, team, mission, task);
+    resolve(scope, false);
+    long total =
+        jdbc.queryForObject(
+            "select count(*) from task_edit_events where organization_id=? and team_id=? and mission_id=? and task_id=?",
+            Long.class,
+            org,
+            team,
+            mission,
+            task);
+    var items =
+        jdbc.query(
+            "select e.id,e.revision,e.created_at,a.display_name,e.before_json,e.after_json"
+                + " from task_edit_events e left join human_accounts a on a.id=e.actor_id"
+                + " where e.organization_id=? and e.team_id=? and e.mission_id=? and e.task_id=?"
+                + " order by e.revision desc limit 20 offset ?",
+            (rs, n) -> {
+              UUID eventId = rs.getObject("id", UUID.class);
+              int revision = rs.getInt("revision");
+              OffsetDateTime time = rs.getObject("created_at", OffsetDateTime.class);
+              String actorName = rs.getString("display_name");
+              if (eventId == null || revision < 1 || time == null || actorName == null)
+                throw new TaskHistoryFailure();
+              TaskDraftEditWire.historyActorName(actorName);
+              Values before = TaskDraftEditWire.historyValues(rs.getString("before_json"));
+              Values after = TaskDraftEditWire.historyValues(rs.getString("after_json"), true);
+              if (before.equals(after)) throw new TaskHistoryFailure();
+              return new TaskDraftEditDtos.HistoryItem(
+                  eventId, revision, time.toInstant().toString(), actorName, before, after);
+            },
+            org,
+            team,
+            mission,
+            task,
+            page * 20);
+    return new TaskDraftEditDtos.History(
+        org, team, mission, task, page, 20, total, List.copyOf(items));
+  }
+
   private Stored stored(Scope s, HumanIdentity human, UUID key) {
     var rows =
         jdbc.query(

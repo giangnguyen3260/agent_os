@@ -74,6 +74,23 @@
         </p>
       </header>
       <div class="actions">
+        @if (context()?.role === 'ADMIN') {
+          <a
+            class="button secondary"
+            [routerLink]="[
+              '/workspace',
+              id,
+              'teams',
+              teamId,
+              'missions',
+              missionId,
+              'tasks',
+              taskId,
+              'history',
+            ]"
+            >Lịch sử chỉnh sửa</a
+          >
+        }
         @if (context()?.role === 'ADMIN' && data.task.status === 'DRAFT') {
           <a
             class="button secondary"
