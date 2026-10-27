@@ -714,6 +714,6 @@ ADMIN-only scoped Context/candidates/receipts and reviewed atomic settings updat
 
 Current ADMIN/MEMBER GET `/api/v1/organizations/{organizationId}/organization-map` and `/organization-map/agents` expose bounded scoped Team/Agent projections with20-row pages. Reporting target IDs/names are disclosed only within the same organization and Team; cycles remain flat labels. No ownership/permission graph, runtime metrics, config bodies or write effects. See [contract](docs/engineering/ORGANIZATION_MAP_CONTRACT.md) and [verified QC](docs/qc/ORGANIZATION_MAP_QC_REPORT.md). No schema migration.
 
-## Task edit history (implementation candidate)
+## Task edit history (verified C4)
 
-GET `/api/v1/organizations/{org}/teams/{team}/missions/{mission}/tasks/{task}/draft-settings/history?page=0` is a current-ADMIN-only read of persisted configuration provenance, with fixed20 paging, actual count and exact nullable before/after snapshots. Lifecycle gates do not hide history. No receipt internals or execution history; see [contract](docs/engineering/TASK_EDIT_HISTORY_CONTRACT.md). Runtime acceptance pending.
+GET `/api/v1/organizations/{org}/teams/{team}/missions/{mission}/tasks/{task}/draft-settings/history?page=0` is a current-ADMIN-only read of persisted configuration provenance, with fixed20 paging, actual count and exact nullable before/after snapshots. Lifecycle gates do not hide history. No receipt internals or execution history; see [contract](docs/engineering/TASK_EDIT_HISTORY_CONTRACT.md). Current history candidate77733d1 passed480BE/702browser, native PostgreSQL and15responsive visual checks; see [QC evidence](docs/qc/TASK_EDIT_HISTORY_QC_REPORT.md). Draft PR31 remains unmerged.
