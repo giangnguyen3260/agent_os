@@ -52,7 +52,7 @@ def task():
 def snapshot():
     # Compare every persisted business table, including all other organizations,
     # history, runtime/grants and receipts. Authentication tables alone are excluded.
-    tables = sql("SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename NOT IN ('flyway_schema_history','human_accounts','organization_memberships') AND tablename NOT LIKE 'spring_session%' ORDER BY tablename;").splitlines()
+    tables = sql("SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename NOT IN ('flyway_schema_history','human_accounts','organization_memberships','authentication_audit','authentication_attempts') AND tablename NOT LIKE 'spring_session%' ORDER BY tablename;").splitlines()
     entries = [f"'{table}',(SELECT md5(coalesce(string_agg(row_to_json(x)::text,'|' ORDER BY row_to_json(x)::text),'')) FROM {table} x)" for table in tables]
     return json.loads(sql('SELECT json_build_object(' + ','.join(entries) + ');'))
 
