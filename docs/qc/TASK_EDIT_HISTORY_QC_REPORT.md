@@ -21,3 +21,7 @@ C1 c5bf58a647cdd04087a5538ae07dab4724ccec58 / tree771cfe7f189b064d31491e0de41307
 ## C3 verification candidate preparation
 
 Applied actual Google Java Format patch artifact12737980398 from C2 diagnostic job122213367749 (run40511231198). The required quality check remains unchanged. Independent QC found native session reuse after disabled/credential revocation; the probe now authenticates fresh after each restored condition, and expects the existing security filter's HTTP401 for invalidated credentials/accounts versus403 for lost ADMIN. Matching new MockMvc assertions corrected. No security policy was relaxed. C3 actual runtime evidence remains pending.
+
+## C3 runtime finding / C4 correction
+
+C3 Docker40511651266/job122214836398 passed formatting/compilation and executed409 regular tests with1 failure,0errors,0skips. The new noncanonical-ID test substituted a different unauthorized organization and incorrectly expected controller400; established security transport denies that organization403 before controller parsing. C4 adjusts only that assertion to403 for the foreign organization and retains400 for malformed child IDs and zero-write checks. No application or security behavior changes. Native/browser/visual stages were not reached on C3.

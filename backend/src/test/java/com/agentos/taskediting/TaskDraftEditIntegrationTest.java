@@ -351,7 +351,7 @@ public class TaskDraftEditIntegrationTest {
               get((url() + "/history")
                       .replace(id.toString(), "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA"))
                   .with(auth()))
-          .andExpect(status().isBadRequest());
+          .andExpect(id.equals(org) ? status().isForbidden() : status().isBadRequest());
     }
     assertThat(businessState()).isEqualTo(state);
   }
