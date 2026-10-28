@@ -410,10 +410,11 @@ test.describe('mission intake independent QC', () => {
       expect(d.type()).toBe('beforeunload');
       await d.dismiss();
     });
-    await p.reload().catch(error => {
-      if (!error.message.includes('ERR_ABORTED')) throw error;
-    });
+    // A dismissed beforeunload deliberately has no completed navigation.
+    // Trigger the browser action without waiting for a new document to load.
+    await p.evaluate(() => location.reload());
     await unload;
+    await expect(p).toHaveURL(s.url);
     await expect(flag(p)).toBeChecked({checked: !s.source.intakePaused});
     p.once('dialog', d => d.accept());
     await p.getByRole('link', {name: 'Hủy', exact: true}).click();
