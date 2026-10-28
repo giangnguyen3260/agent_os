@@ -342,6 +342,14 @@ test.describe('mission intake independent QC', () => {
       expect(source.blockers).toContain(blocker);
       if (m === 4) expect(source.intakeVersion).toBe('9223372036854775807');
       await expect(hook(p, 'blocked')).toBeVisible();
+      await expect(hook(p, 'blocked')).not.toContainText(blocker);
+      await expect(hook(p, 'blocked')).toContainText(
+        m === 4
+          ? 'Đã đạt giới hạn số lần thay đổi.'
+          : m === 5
+            ? 'Team đã được lưu trữ.'
+            : 'Trạng thái hiện tại của Mission',
+      );
       if (m === 4) await capture(p, info, 'blocked');
       expect(posts).toHaveLength(0);
       const r = await command(p, s, source, !source.intakePaused);

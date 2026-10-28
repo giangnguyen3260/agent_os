@@ -75,7 +75,7 @@
         <section data-testid="intake-blocked" role="alert">
           <h2>Không thể thay đổi nhận task</h2>
           @for (b of c.blockers; track b) {
-            <p>{{ b }}</p>
+            <p>{{ blockerLabel(b) }}</p>
           }
         </section>
       }

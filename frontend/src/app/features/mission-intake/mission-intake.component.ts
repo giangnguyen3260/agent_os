@@ -320,6 +320,18 @@ export class MissionIntakeComponent {
       if (this.active(e)) this.loading.set(false);
     }
   }
+  blockerLabel(code: string): string {
+    switch (code) {
+      case 'TEAM_ARCHIVED':
+        return 'Team đã được lưu trữ. Không thể thay đổi việc nhận task.';
+      case 'MISSION_NOT_EDITABLE':
+        return 'Trạng thái hiện tại của Mission không cho phép thay đổi việc nhận task.';
+      case 'REVISION_EXHAUSTED':
+        return 'Đã đạt giới hạn số lần thay đổi. Vui lòng liên hệ quản trị hệ thống.';
+      default:
+        return 'Trạng thái hiện tại chưa được hỗ trợ. Không thể thay đổi việc nhận task.';
+    }
+  }
   editable() {
     return (
       !!this.context()?.canChange &&
