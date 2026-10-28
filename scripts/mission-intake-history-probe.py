@@ -225,7 +225,7 @@ def main():
     reject(lambda:a.request(HISTORY.replace(TEAM,ident('54010000',102))),404)
     reject(lambda:a.request(HISTORY.replace(MISSION,ident('54020000',501))),404)
     reject(lambda:a.request(HISTORY.replace(ORG,ident('54000000',5))),403)
-    for query in ('?page=-1','?page=01','?page=','?page=1e0','?page=100001','?page=0&page=1','?unknown=0','?page=0&unknown=1'):
+    for query in ('?page=-1','?page=01','?page=','?page=1e0','?page=100001','?page=0&page=1','?unknown=0','?page=0&unknown=1','?page=0&','?p%61ge=0','?page=%30'):
         reject(lambda query=query:a.request(HISTORY+query),400)
     before=snapshot()
     try:

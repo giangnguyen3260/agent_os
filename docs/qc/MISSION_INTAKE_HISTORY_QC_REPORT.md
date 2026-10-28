@@ -10,3 +10,8 @@ Dedicated new browser slice precedes full753retained baseline and uploads its vi
 
 
 Independent source/probe review before first publication identified QC-H1 (C1 control rejection mismatch in history names), H2 (Python microsecond truncation in ordering oracle) and H3 (loose native UUID/name validation). Coordinator strengthens only the new history name decoder (including visible workspace name), preserves all9 timestamp fraction digits and cross-page order checks, enforces canonical UUID/safe nonblank255 names, and keeps a foreign membership while testing same-org author removal. These are source corrections; runtime acceptance still pending.
+
+
+## C1 actual CI failure
+
+C1 a5820736f290b1c8e43678a2f8996bd83b71e418, treea40675cd145a7c1022ad98f70953add6a3d94739. Quality40699538936/job122855269333 executed639 tests,4 failures/4 errors/0 skips, not a pass. Two malformed query inputs per H2/native history suite were normalized by MockMvc URL construction before reaching the controller. Existing inherited intake rollback fixtures used global table CHECK constraints and could not be installed after history tests had created other-org receipt/audit rows. Corrections preserve malformed-wire400 expectations by explicitly setting the raw request query and scope fault-injection constraints to each test organization, without deleting prior data or weakening rollback assertions. No production semantics change is needed. Runtime acceptance still pending on corrected candidate.

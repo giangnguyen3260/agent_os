@@ -201,7 +201,15 @@ class MissionIntakeHistoryTest extends MissionIntakeIntegrationTest {
         "page=0&"
       })
   void strictQueryRejectsWithoutWrites(String query) throws Exception {
-    mvc.perform(get(url() + "/history?" + query).with(auth())).andExpect(status().isBadRequest());
+    mvc.perform(
+            get(url() + "/history")
+                .with(auth())
+                .with(
+                    request -> {
+                      request.setQueryString(query);
+                      return request;
+                    }))
+        .andExpect(status().isBadRequest());
     assertThat(count("mission_intake_receipts")).isZero();
     assertThat(count("audit_events")).isZero();
   }
