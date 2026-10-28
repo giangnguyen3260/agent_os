@@ -46,6 +46,21 @@
   </dialog>
   <main data-testid="mission-intake" [attr.aria-busy]="loading() || busy()">
     <a [routerLink]="detailLink()">Mission Control</a>
+    @if (verified() && context() && !denied() && !loading()) {
+      <a
+        [routerLink]="[
+          '/workspace',
+          id,
+          'teams',
+          teamId,
+          'missions',
+          missionId,
+          'intake',
+          'history',
+        ]"
+        >Lịch sử nhận task</a
+      >
+    }
     <h1 tabindex="-1">Quản lý nhận task</h1>
     <p>
       Tạm dừng nhận task sẽ chặn tạo task mới và sửa task draft. Công việc đang

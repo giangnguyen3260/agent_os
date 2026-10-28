@@ -20,6 +20,14 @@ final class MissionIntakeWire {
 
   private MissionIntakeWire() {}
 
+  static int historyPage(String query) {
+    if (query == null) return 0;
+    if (!query.matches("page=(0|[1-9][0-9]{0,5})")) throw MissionIntakeFailure.bad();
+    int page = Integer.parseInt(query.substring(5));
+    if (page > 100000) throw MissionIntakeFailure.bad();
+    return page;
+  }
+
   static UUID uuid(String value) {
     if (value == null
         || !value.matches(

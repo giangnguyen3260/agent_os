@@ -1,0 +1,161 @@
+<div class="forest-shell">
+  <aside class="desktop-sidebar">
+    <div class="brand">agentos</div>
+    <nav aria-label="Workspace navigation">
+      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a
+      ><a [routerLink]="['/workspace', id, 'organization-map']"
+        >Organization map</a
+      ><a [routerLink]="['/workspace', id, 'teams']">Teams</a
+      ><a [routerLink]="['/workspace', id, 'agents']">Agents</a
+      ><a [routerLink]="['/workspace', id, 'missions']" class="selected"
+        >Missions</a
+      ><button disabled>Approvals</button
+      ><a [routerLink]="['/workspace', id, 'trace']">Trace</a>
+    </nav>
+  </aside>
+  <header class="compact-header">
+    <span class="brand">agentos</span
+    ><button
+      class="button secondary"
+      type="button"
+      aria-controls="mission-intake-menu"
+      [attr.aria-expanded]="menuOpen()"
+      (click)="toggleMenu()"
+    >
+      Menu
+    </button>
+  </header>
+  <dialog
+    id="mission-intake-menu"
+    aria-label="Workspace navigation"
+    (cancel)="closeMenu()"
+    (close)="closeMenu()"
+  >
+    <button class="button secondary" type="button" (click)="closeMenu()">
+      Close menu
+    </button>
+    <nav>
+      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a
+      ><a [routerLink]="['/workspace', id, 'teams']">Teams</a
+      ><a [routerLink]="['/workspace', id, 'agents']">Agents</a
+      ><a [routerLink]="['/workspace', id, 'missions']" class="selected"
+        >Missions</a
+      ><a [routerLink]="['/workspace', id, 'trace']">Trace</a
+      ><a routerLink="/workspace">Change workspace</a>
+    </nav>
+  </dialog>
+  <main data-testid="mission-intake-history" [attr.aria-busy]="loading()">
+    <a class="button secondary" [routerLink]="detailLink()">Mission Control</a>
+    <h1>Lịch sử nhận task</h1>
+    <p>
+      Các thay đổi nhận task đã được lưu, theo thời gian ghi nhận mới nhất
+      trước.
+    </p>
+    <button
+      class="button secondary"
+      type="button"
+      (click)="load()"
+      [disabled]="loading()"
+    >
+      Tải lại lịch sử
+    </button>
+    @if (loading()) {
+      <p data-testid="mission-intake-history-loading" role="status">
+        Đang kiểm tra quyền và tải lịch sử…
+      </p>
+    }
+    @if (denied()) {
+      <p data-testid="mission-intake-history-denied" role="alert">
+        Lịch sử không khả dụng. Cần tài khoản và quyền ADMIN hiện tại trong
+        workspace.
+      </p>
+    }
+    @if (error()) {
+      <p data-testid="mission-intake-history-error" role="alert">
+        {{ error() }}
+      </p>
+    }
+    @if (history(); as h) {
+      <a class="button secondary" [routerLink]="intakeLink()"
+        >Quản lý nhận task</a
+      >
+      <section class="history-card" aria-label="Phạm vi Mission">
+        <h2>{{ h.missionTitle }}</h2>
+        <dl class="scope">
+          <dt>Workspace</dt>
+          <dd>{{ workspaceName() }}</dd>
+          <dt>Team</dt>
+          <dd>{{ h.teamName }}</dd>
+          <dt>Mission</dt>
+          <dd>{{ h.missionTitle }}</dd>
+        </dl>
+      </section>
+      <p>
+        Tên người thay đổi là tên hiển thị hiện tại, không phải tên tại thời
+        điểm thay đổi.
+      </p>
+      <p role="status">
+        {{ h.total }} thay đổi nhận task · Trang {{ h.page + 1 }} · 20 mục mỗi
+        trang
+      </p>
+      <p>
+        Những thay đổi mới trong lúc xem có thể làm thay đổi vị trí các trang.
+        Mỗi trang là một lần đọc độc lập; các mục có thể lặp lại hoặc chuyển
+        trang. Tải lại để xem dữ liệu mới nhất.
+      </p>
+      @if (!h.items.length) {
+        <p data-testid="mission-intake-history-empty" role="status">
+          {{
+            h.total === 0
+              ? 'Chưa có thay đổi nhận task nào được ghi nhận.'
+              : 'Không có thay đổi nhận task ở trang này.'
+          }}
+        </p>
+      }
+      @for (item of h.items; track item.eventId) {
+        <article
+          class="history-card"
+          data-testid="mission-intake-history-event"
+        >
+          <h2>Phiên bản {{ item.versionBefore }} → {{ item.versionAfter }}</h2>
+          <p>
+            <time [attr.datetime]="item.committedAt">{{
+              item.committedAt
+            }}</time>
+            · {{ item.actorName ?? 'Không còn thông tin người thay đổi' }}
+          </p>
+          <section class="diff comparison">
+            <div>
+              <h3>Trước</h3>
+              <p>{{ state(item.pausedBefore) }}</p>
+            </div>
+            <div>
+              <h3>Sau</h3>
+              <p>{{ state(item.pausedAfter) }}</p>
+            </div>
+          </section>
+        </article>
+      }
+      <nav class="actions" aria-label="Phân trang lịch sử">
+        <button
+          class="button secondary"
+          type="button"
+          (click)="changePage(-1)"
+          [disabled]="loading() || h.page === 0"
+        >
+          Trang trước
+        </button>
+        <button
+          class="button secondary"
+          type="button"
+          (click)="changePage(1)"
+          [disabled]="
+            loading() || h.page >= 100000 || (h.page + 1) * 20 >= h.total
+          "
+        >
+          Trang sau
+        </button>
+      </nav>
+    }
+  </main>
+</div>

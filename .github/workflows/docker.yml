@@ -252,6 +252,14 @@ jobs:
         env:
           E2E_BASE_URL: http://127.0.0.1:18080
         run: python3 scripts/mission-intake-probe.py
+      - name: Provision isolated Mission intake history fixtures
+        run: |
+          docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < scripts/mission-intake-history-ci-fixture.sql
+      - name: PostgreSQL Mission intake history projection and no-write boundary
+        timeout-minutes: 4
+        env:
+          E2E_BASE_URL: http://127.0.0.1:18080
+        run: python3 scripts/mission-intake-history-probe.py
       - name: Install browser test dependencies
         working-directory: frontend
         run: |
@@ -270,14 +278,33 @@ jobs:
           assert all('azure.archive.ubuntu.com' not in p.read_text() for p in files)
           PYAPT
           npx playwright install --with-deps chromium
-      - name: Mission intake browser acceptance across three viewports
+      - name: Mission intake history browser acceptance across three viewports
         working-directory: frontend
         env:
           E2E_BASE_URL: http://127.0.0.1:18080
           E2E_MAILPIT_URL: http://127.0.0.1:18025
         run: |
+          node scripts/test-mission-intake-history-validation.cjs
+          npm run test:e2e -- --max-failures=1 --grep 'mission intake history independent QC'
+      - name: Upload synthetic Mission intake history visual evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mission-intake-history-visuals
+          path: |
+            frontend/qa-visuals/intake-history-*.png
+            frontend/qa-visuals/intake-history-manifest.jsonl
+          if-no-files-found: ignore
+      - name: Retained real backend browser regression
+        working-directory: frontend
+        env:
+          E2E_BASE_URL: http://127.0.0.1:18080
+          E2E_MAILPIT_URL: http://127.0.0.1:18025
+        # Disjoint selections; full retained baseline, one worker and zero retries.
+        run: |
           node scripts/test-mission-intake-validation.cjs
-          npm run test:e2e -- --max-failures=1 --grep 'mission intake independent QC'
+          node scripts/test-task-history-validation.cjs
+          npm run test:e2e -- --max-failures=1 --grep-invert 'mission intake history independent QC'
       - name: Upload synthetic Mission intake visual evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -287,15 +314,6 @@ jobs:
             frontend/qa-visuals/mission-intake-*.png
             frontend/qa-visuals/mission-intake-manifest.jsonl
           if-no-files-found: ignore
-      - name: Retained real backend browser regression
-        working-directory: frontend
-        env:
-          E2E_BASE_URL: http://127.0.0.1:18080
-          E2E_MAILPIT_URL: http://127.0.0.1:18025
-        # Disjoint selections; full retained baseline, one worker and zero retries.
-        run: |
-          node scripts/test-task-history-validation.cjs
-          npm run test:e2e -- --max-failures=1 --grep-invert 'mission intake independent QC'
       - name: Upload synthetic Task Edit History visual evidence
         if: always()
         uses: actions/upload-artifact@v4

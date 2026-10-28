@@ -177,8 +177,13 @@ public class MissionIntakeIntegrationTest {
   @Test
   void receiptFailureRollsBackMissionAndAudit() {
     var before = context();
+    String constraint = "intake_test_reject_" + org.toString().replace("-", "");
     jdbc.execute(
-        "alter table mission_intake_receipts add constraint intake_test_reject check (original_response='REJECT')");
+        "alter table mission_intake_receipts add constraint "
+            + constraint
+            + " check (organization_id <> '"
+            + org
+            + "' or original_response='REJECT')");
     try {
       assertThatThrownBy(() -> save(UUID.randomUUID(), command(before)))
           .isInstanceOf(DataAccessException.class);
@@ -186,7 +191,7 @@ public class MissionIntakeIntegrationTest {
       assertThat(context().intakePaused()).isFalse();
       assertThat(count("audit_events")).isZero();
     } finally {
-      jdbc.execute("alter table mission_intake_receipts drop constraint intake_test_reject");
+      jdbc.execute("alter table mission_intake_receipts drop constraint " + constraint);
     }
   }
 
@@ -327,8 +332,13 @@ public class MissionIntakeIntegrationTest {
   @Test
   void auditFailureRollsBackReceiptAndMission() {
     var before = context();
+    String constraint = "intake_audit_reject_" + org.toString().replace("-", "");
     jdbc.execute(
-        "alter table audit_events add constraint intake_audit_reject check (event_type <> 'MISSION_TASK_INTAKE_UPDATED')");
+        "alter table audit_events add constraint "
+            + constraint
+            + " check (organization_id <> '"
+            + org
+            + "' or event_type <> 'MISSION_TASK_INTAKE_UPDATED')");
     try {
       assertThatThrownBy(() -> save(UUID.randomUUID(), command(before)))
           .isInstanceOf(DataAccessException.class);
@@ -336,7 +346,7 @@ public class MissionIntakeIntegrationTest {
       assertThat(context().intakePaused()).isFalse();
       assertThat(count("mission_intake_receipts")).isZero();
     } finally {
-      jdbc.execute("alter table audit_events drop constraint intake_audit_reject");
+      jdbc.execute("alter table audit_events drop constraint " + constraint);
     }
   }
 
@@ -357,7 +367,8 @@ public class MissionIntakeIntegrationTest {
         .andExpect(jsonPath("error.code").value("UNAUTHORIZED"));
     jdbc.update("update human_accounts set credential_version=0 where id=?", actor);
     jdbc.update(
-        "update organization_memberships set role='MEMBER' where organization_id=? and account_id=?",
+        "update organization_memberships set role='MEMBER' where organization_id=? and"
+            + " account_id=?",
         org,
         actor);
     mvc.perform(get(url() + "?invalid=1").content("invalid").with(auth()))
@@ -371,11 +382,13 @@ public class MissionIntakeIntegrationTest {
     save(key, command(context()));
     UUID other = UUID.randomUUID();
     jdbc.update(
-        "insert into human_accounts(id,email,display_name,password_hash) values (?,?,'Other','unused')",
+        "insert into human_accounts(id,email,display_name,password_hash) values"
+            + " (?,?,'Other','unused')",
         other,
         other + "@example.test");
     jdbc.update(
-        "insert into organization_memberships(account_id,organization_id,role) values (?,?,'ADMIN')",
+        "insert into organization_memberships(account_id,organization_id,role) values"
+            + " (?,?,'ADMIN')",
         other,
         org);
     var otherHuman = new HumanIdentity(other, other + "@example.test", "Session");

@@ -721,3 +721,8 @@ GET `/api/v1/organizations/{org}/teams/{team}/missions/{mission}/tasks/{task}/dr
 ## Mission task intake controls (verified candidate)
 
 ADMIN-only scoped GET/POST `/api/v1/organizations/{org}/teams/{team}/missions/{mission}/task-intake` and GET `/receipts/{key}` expose reviewed flag/version mutation and own-command recovery. Int64 versions are canonical decimal strings. Atomic parent-locked update, receipt and safe Mission audit serialize with Task Create/Draft Edit; existing task/runtime state is preserved. No dispatch pause. See [contract](docs/engineering/MISSION_INTAKE_CONTRACT.md). Candidate `562ef49` passed526 backend tests,753 browser instances, native PostgreSQL and Docker restart/logout;24 responsive captures reviewed. See [QC](docs/qc/MISSION_INTAKE_QC_REPORT.md). Draft PR32 remains unmerged.
+
+
+## Mission intake history (verified candidate)
+
+Current ADMIN-only GET `/api/v1/organizations/{org}/teams/{team}/missions/{mission}/task-intake/history?page=0` projects accepted receipt provenance, string int64 versions and current same-org actor names (explicit null after membership removal), fixed20 recorded-time/UUID order and actual total. Strict selected-page decoding fails closed; no receipt keys/digests/raw JSON or business writes. Lifecycle-independent read, offset snapshot caveat and exact DTO in [contract](docs/engineering/MISSION_INTAKE_HISTORY_CONTRACT.md). Candidate `db94e94` passed639 backend tests,780 browser instances, native PostgreSQL and Docker restart/logout;15 responsive captures reviewed. See [QC](docs/qc/MISSION_INTAKE_HISTORY_QC_REPORT.md). Draft PR33 remains unmerged.

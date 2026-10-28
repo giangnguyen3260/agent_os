@@ -49,7 +49,7 @@ jobs:
           TASK_EDIT_TEST_DB_USER: agentos
           TASK_EDIT_TEST_DB_PASSWORD: agentos_ci_only
         # Default tests plus the explicit real-PostgreSQL suite, no silent skips.
-        run: mvn --batch-mode --no-transfer-progress -f backend/pom.xml '-Dtest=*Test,TeamSettingsPostgresIT,TaskDraftEditPostgresIT,MissionIntakePostgresIT' verify
+        run: mvn --batch-mode --no-transfer-progress -f backend/pom.xml '-Dtest=*Test,TeamSettingsPostgresIT,TaskDraftEditPostgresIT,MissionIntakePostgresIT,MissionIntakeHistoryPostgresIT' verify
       - name: Frontend dependencies
         working-directory: frontend
         run: npm ci

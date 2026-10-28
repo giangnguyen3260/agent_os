@@ -22,6 +22,15 @@ import {approvalDetailNavigationGuard} from './features/approvals/approval-navig
 
 export const routes: Routes = [
   {
+    path: 'workspace/:id/teams/:teamId/missions/:missionId/intake/history',
+    canActivate: [authGuard],
+    runGuardsAndResolvers: 'always',
+    loadComponent: () =>
+      import(
+        './features/mission-intake-history/mission-intake-history.component'
+      ).then(m => m.MissionIntakeHistoryComponent),
+  },
+  {
     path: 'workspace/:id/teams/:teamId/missions/:missionId/intake',
     canActivate: [authGuard, missionIntakeNavigationGuard],
     canDeactivate: [missionIntakeLeaveGuard],
