@@ -31,7 +31,8 @@ public class MissionIntakeController {
       @PathVariable String teamId,
       @PathVariable String missionId,
       @AuthenticationPrincipal HumanIdentity human,
-      HttpServletRequest request) throws IOException {
+      HttpServletRequest request)
+      throws IOException {
     query(request);
     return ApiResponse.ok(
         service.context(
@@ -48,7 +49,8 @@ public class MissionIntakeController {
       @PathVariable String missionId,
       @PathVariable String key,
       @AuthenticationPrincipal HumanIdentity human,
-      HttpServletRequest request) throws IOException {
+      HttpServletRequest request)
+      throws IOException {
     query(request);
     return ApiResponse.ok(
         new MissionIntakeDtos.ReceiptLookup(
@@ -56,7 +58,7 @@ public class MissionIntakeController {
                 MissionIntakeWire.uuid(organizationId),
                 MissionIntakeWire.uuid(teamId),
                 MissionIntakeWire.uuid(missionId),
-                    human,
+                human,
                 MissionIntakeWire.uuid(key))));
   }
 
@@ -101,6 +103,7 @@ public class MissionIntakeController {
 
   private static void query(HttpServletRequest request) throws IOException {
     if (request.getQueryString() != null) throw MissionIntakeFailure.bad();
-    if (!"POST".equals(request.getMethod()) && request.getInputStream().read() != -1) throw MissionIntakeFailure.bad();
+    if (!"POST".equals(request.getMethod()) && request.getInputStream().read() != -1)
+      throw MissionIntakeFailure.bad();
   }
 }

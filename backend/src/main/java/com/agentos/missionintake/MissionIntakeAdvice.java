@@ -18,7 +18,10 @@ public class MissionIntakeAdvice {
 
   @ExceptionHandler(Exception.class)
   public ResponseEntity<ApiErrorResponse> unavailable(Exception failure) {
-    return ResponseEntity.internalServerError().body(ApiErrorResponse.of("MISSION_INTAKE_UNAVAILABLE", "Saved intake configuration is unavailable"));
+    return ResponseEntity.internalServerError()
+        .body(
+            ApiErrorResponse.of(
+                "MISSION_INTAKE_UNAVAILABLE", "Saved intake configuration is unavailable"));
   }
 
   @ExceptionHandler({IllegalArgumentException.class, java.io.IOException.class})

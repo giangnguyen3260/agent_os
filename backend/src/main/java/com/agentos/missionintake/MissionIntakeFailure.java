@@ -21,5 +21,4 @@ final class MissionIntakeFailure extends RuntimeException {
   static MissionIntakeFailure bad() {
     return new MissionIntakeFailure(400, "BAD_REQUEST");
   }
-
 }
