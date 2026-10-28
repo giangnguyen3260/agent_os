@@ -25,3 +25,8 @@ Browser page request observer rejects organization business writes in every case
 Visual output: exactly five named states per project: `intake-history-{project}-{populated|second-page|empty|error|denied}.png` (15 PNGs). `intake-history-manifest.jsonl` appends file/project/viewport/state/test/path/capturetimestamp/imageSHA256. Use a fresh E2E_VISUAL_DIR per acceptance run; captures enforce no horizontal document overflow.
 
 Main owns runtime CI acceptance, backend/probe checks for provenance corruption, renamed/removed membership, disabled/stale authority, version gaps, timestamp ties and lifecycle/exhausted reads, plus business-table preservation. Browser validation allows legitimate gaps; this suite does not fabricate backend rows to force them.
+
+
+## Coordinator executed outcome — 2026-10-28
+
+C2db94e94: all9 scenarios ×3projects ran,27passed, one worker/zero retries. Retained753 also passed on the same candidate; total780browser instances. Quality639test invocations passed with zero failures/errors/skips; nativehistory/retained probes and restart/logout passed. All15 original captures were hash/width-verified and reviewed. See MISSION_INTAKE_HISTORY_QC_REPORT.md, FINAL_REVIEW.md and VISUAL_MANIFEST.md for exact candidate/tree/merge/run/job/artifact evidence and review limits. This supersedes historical runtime-pending statements for this executable suite, without turning the broader design matrix into an exhaustive-coverage claim.
