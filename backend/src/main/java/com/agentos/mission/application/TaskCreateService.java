@@ -80,10 +80,11 @@ public class TaskCreateService {
                     rs.getString(2),
                     rs.getLong(3),
                     rs.getBoolean(4),
-                    !"ARCHIVED".equals(teams.getFirst()[1])
+                    List.of("DRAFT", "ACTIVE").contains(teams.getFirst()[1])
                         && List.of("CREATED", "READY", "RUNNING", "WAITING_APPROVAL")
                             .contains(rs.getString(2))
-                        && !rs.getBoolean(4)),
+                        && !rs.getBoolean(4)
+                        && rs.getLong(3) < Long.MAX_VALUE),
             org,
             team,
             mission);

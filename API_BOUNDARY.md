@@ -717,3 +717,7 @@ Current ADMIN/MEMBER GET `/api/v1/organizations/{organizationId}/organization-ma
 ## Task edit history (verified C4)
 
 GET `/api/v1/organizations/{org}/teams/{team}/missions/{mission}/tasks/{task}/draft-settings/history?page=0` is a current-ADMIN-only read of persisted configuration provenance, with fixed20 paging, actual count and exact nullable before/after snapshots. Lifecycle gates do not hide history. No receipt internals or execution history; see [contract](docs/engineering/TASK_EDIT_HISTORY_CONTRACT.md). Current history candidate77733d1 passed480BE/702browser, native PostgreSQL and15responsive visual checks; see [QC evidence](docs/qc/TASK_EDIT_HISTORY_QC_REPORT.md). Draft PR31 remains unmerged.
+
+## Mission task intake controls (verified candidate)
+
+ADMIN-only scoped GET/POST `/api/v1/organizations/{org}/teams/{team}/missions/{mission}/task-intake` and GET `/receipts/{key}` expose reviewed flag/version mutation and own-command recovery. Int64 versions are canonical decimal strings. Atomic parent-locked update, receipt and safe Mission audit serialize with Task Create/Draft Edit; existing task/runtime state is preserved. No dispatch pause. See [contract](docs/engineering/MISSION_INTAKE_CONTRACT.md). Candidate `562ef49` passed526 backend tests,753 browser instances, native PostgreSQL and Docker restart/logout;24 responsive captures reviewed. See [QC](docs/qc/MISSION_INTAKE_QC_REPORT.md). Draft PR32 remains unmerged.

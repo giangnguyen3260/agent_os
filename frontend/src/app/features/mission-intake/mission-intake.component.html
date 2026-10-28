@@ -1,0 +1,184 @@
+<div class="forest-shell">
+  <aside class="desktop-sidebar">
+    <div class="brand">agentos</div>
+    <nav aria-label="Workspace navigation">
+      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a
+      ><a [routerLink]="['/workspace', id, 'organization-map']"
+        >Organization map</a
+      ><a [routerLink]="['/workspace', id, 'teams']">Teams</a
+      ><a [routerLink]="['/workspace', id, 'agents']">Agents</a
+      ><a [routerLink]="['/workspace', id, 'missions']" class="selected"
+        >Missions</a
+      ><button disabled>Approvals</button
+      ><a [routerLink]="['/workspace', id, 'trace']">Trace</a>
+    </nav>
+  </aside>
+  <header class="compact-header">
+    <span class="brand">agentos</span
+    ><button
+      class="button secondary"
+      type="button"
+      aria-controls="mission-intake-menu"
+      [attr.aria-expanded]="menuOpen()"
+      (click)="toggleMenu()"
+    >
+      Menu
+    </button>
+  </header>
+  <dialog
+    id="mission-intake-menu"
+    aria-label="Workspace navigation"
+    (cancel)="closeMenu()"
+    (close)="closeMenu()"
+  >
+    <button class="button secondary" type="button" (click)="closeMenu()">
+      Close menu
+    </button>
+    <nav>
+      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a
+      ><a [routerLink]="['/workspace', id, 'teams']">Teams</a
+      ><a [routerLink]="['/workspace', id, 'agents']">Agents</a
+      ><a [routerLink]="['/workspace', id, 'missions']" class="selected"
+        >Missions</a
+      ><a [routerLink]="['/workspace', id, 'trace']">Trace</a
+      ><a routerLink="/workspace">Change workspace</a>
+    </nav>
+  </dialog>
+  <main data-testid="mission-intake" [attr.aria-busy]="loading() || busy()">
+    <a [routerLink]="detailLink()">Mission Control</a>
+    <h1 tabindex="-1">Quản lý nhận task</h1>
+    <p>
+      Tạm dừng nhận task sẽ chặn tạo task mới và sửa task draft. Công việc đang
+      chạy, trạng thái, người phụ trách, phụ thuộc và phê duyệt hiện có không
+      thay đổi.
+    </p>
+    @if (loading()) {
+      <p data-testid="intake-loading" role="status">Đang kiểm tra dữ liệu…</p>
+    }
+    @if (denied()) {
+      <p data-testid="intake-denied" role="alert">
+        Cần quyền ADMIN hiện tại để quản lý nhận task.
+      </p>
+    }
+    @if (error()) {
+      <p data-testid="intake-error" role="alert">{{ error() }}</p>
+    }
+    @if (context(); as c) {
+      <div class="breadcrumb">{{ c.teamName }} / {{ c.missionTitle }}</div>
+      <p>Team: {{ c.teamStatus }} · Mission: {{ c.missionStatus }}</p>
+      <p>
+        Hiện tại:
+        {{ c.intakePaused ? 'Tạm dừng nhận task' : 'Đang nhận task' }} · Phiên
+        bản {{ c.intakeVersion }}
+      </p>
+      @if (!c.canChange) {
+        <section data-testid="intake-blocked" role="alert">
+          <h2>Không thể thay đổi nhận task</h2>
+          @for (b of c.blockers; track b) {
+            <p>{{ blockerLabel(b) }}</p>
+          }
+        </section>
+      }
+      @if (phase() === 'edit') {
+        <form (ngSubmit)="review()">
+          <fieldset [disabled]="!editable()">
+            <label class="ack"
+              ><input
+                type="checkbox"
+                name="paused"
+                [(ngModel)]="draft.paused"
+                (ngModelChange)="edit()"
+              />Tạm dừng nhận task</label
+            >
+          </fieldset>
+          <div class="actions">
+            <button
+              type="submit"
+              class="button primary"
+              [disabled]="!editable() || !dirty()"
+            >
+              Xem lại thay đổi</button
+            ><a class="button secondary" [routerLink]="detailLink()">Hủy</a>
+          </div>
+        </form>
+      }
+      @if (phase() === 'review') {
+        <section data-testid="intake-review">
+          <h2>Xem lại thay đổi</h2>
+          <article class="diff">
+            <h3>Nhận task</h3>
+            <p>Trước: {{ c.intakePaused ? 'Tạm dừng' : 'Đang nhận' }}</p>
+            <p>Sau: {{ draft.paused ? 'Tạm dừng' : 'Đang nhận' }}</p>
+          </article>
+          <label class="ack"
+            ><input
+              type="checkbox"
+              [(ngModel)]="acknowledged"
+              [disabled]="busy() || loading() || !verified()"
+            />Tôi đã xem lại thay đổi nhận task.</label
+          >
+          <div class="actions">
+            <button
+              class="button primary"
+              (click)="save()"
+              [disabled]="!acknowledged || busy() || loading() || !verified()"
+            >
+              Lưu thay đổi</button
+            ><button
+              class="button secondary"
+              (click)="back()"
+              [disabled]="busy()"
+            >
+              Quay lại chỉnh sửa
+            </button>
+          </div>
+        </section>
+      }
+    }
+    @if (phase() === 'unknown') {
+      <section data-testid="intake-unknown" role="status">
+        <h2>Chưa xác định kết quả</h2>
+        <p>
+          Yêu cầu có thể đã được lưu. Biên nhận trống không chứng minh lưu thất
+          bại.
+        </p>
+        <div class="actions">
+          <button
+            class="button secondary"
+            (click)="recover()"
+            [disabled]="busy() || loading()"
+          >
+            Kiểm tra biên nhận</button
+          ><button
+            class="button secondary"
+            (click)="recover(true)"
+            [disabled]="!canReplay() || busy() || loading()"
+          >
+            Gửi lại đúng yêu cầu này
+          </button>
+        </div>
+      </section>
+    }
+    @if (receipt(); as r) {
+      <section data-testid="intake-saved" role="status">
+        <h2>Đã ghi nhận thay đổi nhận task</h2>
+        <p>Biên nhận lịch sử; trạng thái hiện tại có thể đã thay đổi.</p>
+        <p>
+          {{ r.committedAt }} · {{ r.versionBefore }} → {{ r.versionAfter }}
+        </p>
+        <p>
+          {{ r.pausedBefore ? 'Tạm dừng' : 'Đang nhận' }} →
+          {{ r.pausedAfter ? 'Tạm dừng' : 'Đang nhận' }}
+        </p>
+        <a class="button primary" [routerLink]="detailLink()"
+          >Mission Control</a
+        >
+      </section>
+    }
+    @if (phase() !== 'unknown' && !busy()) {
+      <button class="button secondary" (click)="load()" [disabled]="loading()">
+        Tải lại dữ liệu
+      </button>
+    }
+  </main>
+</div>
