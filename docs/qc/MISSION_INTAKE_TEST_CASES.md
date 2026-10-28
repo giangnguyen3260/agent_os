@@ -48,3 +48,7 @@ Current result: syntax and 51-case discovery pass; runtime browser/native/visual
 
 
 Read-only native probe review is recorded in MISSION_INTAKE_REVIEW.md (MI-P1–MI-P5). The presence of real requests, races and failure triggers does not by itself establish original replay response equality, exact race effect counts, complete safe audit metadata or full parser coverage. Keep those acceptance rows pending unless supported by strengthened probe assertions or separately named executed backend tests. MI-R2's explicit DRAFT/ACTIVE source fix and unknown-state/replay regression test are now visible; execution remains independently unverified here.
+
+## Coordinator executed outcome — 2026-10-28
+
+Candidate562ef49: all17 browser scenarios ran across three projects,51 passed, one worker, zero retries. Existing702 instances also passed on the same candidate. Quality526 tests and Docker/native/restart/logout passed;24 final captures accepted. This supersedes the historical pending execution status above for the executable browser cases. The native/database table remains a design matrix: see MISSION_INTAKE_FINAL_REVIEW.md for named suite/probe coverage and explicit unexercised permutations. See MISSION_INTAKE_QC_REPORT.md for run/job/commit/tree evidence; no independent final reviewer result is implied.
