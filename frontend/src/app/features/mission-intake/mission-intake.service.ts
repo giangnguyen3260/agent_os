@@ -17,6 +17,9 @@ export class MissionIntakeService {
       )
     )?.data;
   }
+  history(s: Scope, page: number, cancel: Subject<void>) {
+    return this.get(`${this.base(s)}/history?page=${page}`, cancel);
+  }
   context(s: Scope, cancel: Subject<void>) {
     return this.get(this.base(s), cancel);
   }

@@ -39,5 +39,26 @@ public final class MissionIntakeDtos {
   @JsonInclude(JsonInclude.Include.ALWAYS)
   public record ReceiptLookup(Receipt receipt) {}
 
+  @JsonInclude(JsonInclude.Include.ALWAYS)
+  public record HistoryItem(
+      UUID eventId,
+      String versionBefore,
+      String versionAfter,
+      boolean pausedBefore,
+      boolean pausedAfter,
+      String committedAt,
+      String actorName) {}
+
+  public record History(
+      UUID organizationId,
+      UUID teamId,
+      UUID missionId,
+      String teamName,
+      String missionTitle,
+      int page,
+      int pageSize,
+      long total,
+      List<HistoryItem> items) {}
+
   public record Result(Receipt receipt, boolean replay) {}
 }

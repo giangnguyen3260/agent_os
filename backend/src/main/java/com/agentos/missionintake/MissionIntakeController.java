@@ -42,6 +42,25 @@ public class MissionIntakeController {
             human));
   }
 
+  @GetMapping("/history")
+  public ApiResponse<MissionIntakeDtos.History> history(
+      @PathVariable String organizationId,
+      @PathVariable String teamId,
+      @PathVariable String missionId,
+      @AuthenticationPrincipal HumanIdentity human,
+      HttpServletRequest request)
+      throws IOException {
+    int page = MissionIntakeWire.historyPage(request.getQueryString());
+    if (request.getInputStream().read() != -1) throw MissionIntakeFailure.bad();
+    return ApiResponse.ok(
+        service.history(
+            MissionIntakeWire.uuid(organizationId),
+            MissionIntakeWire.uuid(teamId),
+            MissionIntakeWire.uuid(missionId),
+            human,
+            page));
+  }
+
   @GetMapping("/receipts/{key}")
   public ApiResponse<MissionIntakeDtos.ReceiptLookup> receipt(
       @PathVariable String organizationId,

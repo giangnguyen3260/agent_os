@@ -89,7 +89,10 @@ public class MissionIntakeService {
 
   private Snapshot snapshot(Scope s) {
     return jdbc.queryForObject(
-        "select g.name,g.status,m.title,m.status as mission_status,m.task_intake_paused,m.task_intake_version,m.updated_at from teams g join missions m on m.organization_id=g.organization_id and m.team_id=g.id where m.organization_id=? and m.team_id=? and m.id=?",
+        "select g.name,g.status,m.title,m.status as"
+            + " mission_status,m.task_intake_paused,m.task_intake_version,m.updated_at from teams g"
+            + " join missions m on m.organization_id=g.organization_id and m.team_id=g.id where"
+            + " m.organization_id=? and m.team_id=? and m.id=?",
         (rs, n) -> {
           long version = rs.getLong("task_intake_version");
           String fingerprint =
@@ -168,11 +171,89 @@ public class MissionIntakeService {
         blockers);
   }
 
+  @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+  public MissionIntakeDtos.History history(
+      UUID org, UUID team, UUID mission, HumanIdentity human, int page) {
+    authorize(org, human, false);
+    Scope scope = new Scope(org, team, mission);
+    resolve(scope, false);
+    if (page < 0 || page > 100000) throw MissionIntakeFailure.bad();
+    try {
+      var names =
+          jdbc.queryForMap(
+              "select t.name,m.title from teams t join missions m on"
+                  + " m.organization_id=t.organization_id and m.team_id=t.id where"
+                  + " m.organization_id=? and m.team_id=? and m.id=?",
+              org,
+              team,
+              mission);
+      String teamName = historyName((String) names.get("name"), 255);
+      String missionTitle = historyName((String) names.get("title"), 255);
+      Long total =
+          jdbc.queryForObject(
+              "select count(*) from mission_intake_receipts where organization_id=? and team_id=?"
+                  + " and mission_id=?",
+              Long.class,
+              org,
+              team,
+              mission);
+      if (total == null || total < 0 || total > 9007199254740991L)
+        throw new IllegalStateException();
+      var items =
+          jdbc.query(
+              "select r.body_sha256,r.original_response,r.event_id,r.created_at,a.display_name from"
+                  + " mission_intake_receipts r left join organization_memberships om on"
+                  + " om.organization_id=r.organization_id and om.account_id=r.actor_id left join"
+                  + " human_accounts a on a.id=om.account_id where r.organization_id=? and"
+                  + " r.team_id=? and r.mission_id=? order by r.created_at desc,r.event_id desc"
+                  + " limit 20 offset ?",
+              (rs, n) -> {
+                Receipt receipt =
+                    decode(
+                        new Stored(rs.getString(1), rs.getString(2), rs.getObject(3, UUID.class)),
+                        scope);
+                OffsetDateTime recorded = rs.getObject(4, OffsetDateTime.class);
+                if (recorded == null
+                    || !recorded.toInstant().equals(java.time.Instant.parse(receipt.committedAt())))
+                  throw new IllegalStateException();
+                String actorName = rs.getString(5);
+                if (actorName != null) actorName = historyName(actorName, 255);
+                return new MissionIntakeDtos.HistoryItem(
+                    receipt.eventId(),
+                    receipt.versionBefore(),
+                    receipt.versionAfter(),
+                    receipt.pausedBefore(),
+                    receipt.pausedAfter(),
+                    receipt.committedAt(),
+                    actorName);
+              },
+              org,
+              team,
+              mission,
+              page * 20);
+      return new MissionIntakeDtos.History(
+          org, team, mission, teamName, missionTitle, page, 20, total, List.copyOf(items));
+    } catch (Exception ex) {
+      throw failure(500, "MISSION_INTAKE_HISTORY_UNAVAILABLE");
+    }
+  }
+
+  private static String historyName(String value, int limit) {
+    if (value == null
+        || value.isBlank()
+        || value.codePointCount(0, value.length()) > limit
+        || value
+            .codePoints()
+            .anyMatch(c -> Character.isISOControl(c) || (c >= 0xd800 && c <= 0xdfff)))
+      throw new IllegalStateException();
+    return value;
+  }
+
   private Stored stored(Scope s, HumanIdentity human, UUID key) {
     var rows =
         jdbc.query(
-            "select body_sha256,original_response,event_id from mission_intake_receipts where organization_id=?"
-                + " and team_id=? and mission_id=? and actor_id=? and"
+            "select body_sha256,original_response,event_id from mission_intake_receipts where"
+                + " organization_id=? and team_id=? and mission_id=? and actor_id=? and"
                 + " idempotency_key=?",
             (rs, n) -> new Stored(rs.getString(1), rs.getString(2), rs.getObject(3, UUID.class)),
             s.organizationId(),
@@ -267,7 +348,8 @@ public class MissionIntakeService {
     OffsetDateTime timestamp = OffsetDateTime.parse(time);
     UUID event = UUID.randomUUID();
     if (jdbc.update(
-            "update missions set task_intake_paused=?,task_intake_version=?,updated_at=? where organization_id=? and team_id=? and id=? and task_intake_version=?",
+            "update missions set task_intake_paused=?,task_intake_version=?,updated_at=? where"
+                + " organization_id=? and team_id=? and id=? and task_intake_version=?",
             command.paused(),
             version,
             timestamp,
@@ -288,7 +370,9 @@ public class MissionIntakeService {
             command.paused(),
             time);
     jdbc.update(
-        "insert into mission_intake_receipts(organization_id,team_id,mission_id,actor_id,idempotency_key,event_id,body_sha256,original_response,created_at) values (?,?,?,?,?,?,?,?,?)",
+        "insert into"
+            + " mission_intake_receipts(organization_id,team_id,mission_id,actor_id,idempotency_key,event_id,body_sha256,original_response,created_at)"
+            + " values (?,?,?,?,?,?,?,?,?)",
         org,
         team,
         mission,
@@ -299,7 +383,9 @@ public class MissionIntakeService {
         encode(receipt),
         timestamp);
     jdbc.update(
-        "insert into audit_events(id,organization_id,mission_id,actor_type,actor_id,event_type,payload,created_at) values (?,?,?,'HUMAN',?,'MISSION_TASK_INTAKE_UPDATED',?,?)",
+        "insert into"
+            + " audit_events(id,organization_id,mission_id,actor_type,actor_id,event_type,payload,created_at)"
+            + " values (?,?,?,'HUMAN',?,'MISSION_TASK_INTAKE_UPDATED',?,?)",
         UUID.randomUUID(),
         org,
         mission,

@@ -1,0 +1,25 @@
+# Mission task intake history
+
+Branch feature/mission-intake-history, base PR32 closure188098c65cb68232022486826a7f6bcb5053ee55. Bounded ADMIN-only read of actual accepted Mission task-intake changes. No new writer, execution history, dispatch pause or invented baseline. Existing intake mutations/receipts remain unchanged. V019 adds only an index on mission_intake_receipts(organization_id,team_id,mission_id,created_at DESC,event_id DESC); no data backfill or seeds.
+
+## API
+
+GET `/api/v1/organizations/{org}/teams/{team}/missions/{mission}/task-intake/history?page=0`. Fresh enabled credential-version-matching current organization ADMIN before wire parsing and exact structural parent scope. Lifecycle, intake pause and current version do not restrict history. GET only; no business writes. Read-only REPEATABLE_READ count/page/scope-name projection.
+
+Exact ApiResponse.data `{organizationId,teamId,missionId,teamName,missionTitle,page,pageSize,total,items}`. Fixed pageSize20; optional canonical page0..100000 default0; reject unknown/duplicate query keys, GET bodies and malformed canonical IDs. Existing transport denies foreign organization403 before wire; wrong scoped Team/Mission404. total integer0..Number.MAX_SAFE_INTEGER, empty/out-of-range pages actual total with items[].
+
+Each item exact `{eventId,versionBefore,versionAfter,pausedBefore,pausedAfter,committedAt,actorName}`. Version strings canonical nonnegative signed-int64, after=before+1 and before<MAX; paused booleans must flip. Event UUID canonical v1-5. Reuse original accepted receipt decoder for exact private storage shape/scope/digest/event validation; committedAt must represent the same instant as receipt row created_at. Never expose actor ID, key, digest, original_response, credentials, email or arbitrary audit payload. Selected corrupt provenance fails entire page500 MISSION_INTAKE_HISTORY_UNAVAILABLE; no skip or fabricated fallback. This is structural checking, not cryptographic integrity or database immutability enforcement.
+
+actorName is current human display name only when that actor still has membership in this exact organization; role or enabled state does not rewrite history. A removed membership yields explicit null actorName. Non-null name must be safe nonblank <=255 code points, with no forbidden controls/unpaired surrogates. Current names are not historical identity snapshots. Team/Mission names are actual stored safe nonblank strings <=255 code points, not fabricated labels; unsafe legacy values fail the page closed.
+
+Sort receipt rows by created_at DESC,event_id DESC. Timestamp tie uses canonical UUID descending. This is recorded-time order, not guaranteed version order across clock corrections; Task Create can create legitimate gaps between intake versions. Validate item timestamps/order/unique event IDs in FE; do not require adjacent versions. Offset pages are independent snapshots: concurrent writes may shift/repeat items across requests; explain this in UI. No cursor/snapshot guarantee.
+
+## UI
+
+Route `/workspace/:id/teams/:teamId/missions/:missionId/intake/history`; ADMIN existing intake page link `Lịch sử nhận task`, all lifecycle states. History links back to actual scoped Mission Control and intake controls. Heading `Lịch sử nhận task`; show actual Team/Mission names, recorded time, before/after receiving state, version transition, current actor display name with clear current-name caption. Null actor label `Không còn thông tin người thay đổi`. Empty state says no recorded intake changes; never invent a legacy initial event. Fixed20 paging with actual count, previous/next and offset limitation. No save/form/write or automatic POST.
+
+Use existing Forest read-history conventions, readable dark text, responsive1440/768/390, wrapped names/version/time, native accessible controls/mobile dialog. Explicit loading/empty/error/denied, refresh/retry GET-only. Strict DTO keys/scope/count/page/receipt/order/privacy validation. Recheck live auth session and raw workspace ADMIN on initial/refresh/focus/visibility/paging; clear private data before authorization, on hidden tab/auth loss/account/scope changes and destruction. Cancel/epoch/actor/scope fences discard late successes/errors. No data/authority storage in browser persistence.
+
+## Verification
+
+Real accepted POST receipts produce actual history; >20 records, static pages nonduplicated, tie order, version gaps, current renamed actor and removed membership null; terminal/archived/exhausted lifecycle still readable. Empty/out-of-range/strict wire, MEMBER/foreign/disabled/stale authority deny; corruption safely fails; all reads/rejections preserve business tables. Existing intake replay/effect boundaries unchanged. Backend, real PostgreSQL probe and browser tests plus actual five states (populated,second-page,empty,error,denied) × three widths. Local discovery is not execution. No retries/skips or reuse of old counts as new acceptance. Sonar paused. No merge/deploy. No claim to a newly edited Figma frame: this extends the existing Forest history pattern in code.
