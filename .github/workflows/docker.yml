@@ -79,6 +79,50 @@ jobs:
           SELECT id, '11111111-1111-4111-8111-111111111111', 'MEMBER'
           FROM human_accounts WHERE email = 'workspace-qc@example.test';
           SQL
+      # Fail early on the new slice; every retained probe and browser case still runs below.
+      - name: Provision isolated Task owner fixtures
+        run: |
+          docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < scripts/task-owner-ci-fixture.sql
+      - name: PostgreSQL Task owner atomicity, recovery and authority
+        timeout-minutes: 5
+        env:
+          E2E_BASE_URL: http://127.0.0.1:18080
+        run: python3 scripts/task-owner-probe.py
+      - name: Install browser test dependencies
+        working-directory: frontend
+        run: |
+          npm ci
+          # The Azure Ubuntu mirror transferred 20 MB at 28.6 kB/s in run40001723419.
+          # Keep the signed Ubuntu packages; change only this disposable runner's mirror.
+          sudo python3 - <<'PYAPT'
+          from pathlib import Path
+          files = [p for p in Path('/etc/apt').rglob('*')
+                   if p.is_file() and p.suffix in ('.list', '.sources')]
+          for p in files:
+              source = p.read_text()
+              updated = source.replace('http://azure.archive.ubuntu.com/ubuntu', 'https://archive.ubuntu.com/ubuntu').replace('https://azure.archive.ubuntu.com/ubuntu', 'https://archive.ubuntu.com/ubuntu')
+              if updated != source:
+                  p.write_text(updated)
+          assert all('azure.archive.ubuntu.com' not in p.read_text() for p in files)
+          PYAPT
+          npx playwright install --with-deps chromium
+      - name: Task owner browser acceptance across three viewports
+        working-directory: frontend
+        env:
+          E2E_BASE_URL: http://127.0.0.1:18080
+          E2E_MAILPIT_URL: http://127.0.0.1:18025
+        run: |
+          node scripts/test-task-owner-validation.cjs
+          npm run test:e2e -- --max-failures=1 --grep 'task owner independent QC'
+      - name: Upload synthetic Task owner visual evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: task-owner-visuals
+          path: |
+            frontend/qa-visuals/task-owner-*.png
+            frontend/qa-visuals/task-owner-manifest.jsonl
+          if-no-files-found: ignore
       - name: Provision isolated dashboard tasks
         run: |
           docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < scripts/dashboard-ci-fixture.sql
@@ -260,49 +304,6 @@ jobs:
         env:
           E2E_BASE_URL: http://127.0.0.1:18080
         run: python3 scripts/mission-intake-history-probe.py
-      - name: Provision isolated Task owner fixtures
-        run: |
-          docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < scripts/task-owner-ci-fixture.sql
-      - name: PostgreSQL Task owner atomicity, recovery and authority
-        timeout-minutes: 5
-        env:
-          E2E_BASE_URL: http://127.0.0.1:18080
-        run: python3 scripts/task-owner-probe.py
-      - name: Install browser test dependencies
-        working-directory: frontend
-        run: |
-          npm ci
-          # The Azure Ubuntu mirror transferred 20 MB at 28.6 kB/s in run40001723419.
-          # Keep the signed Ubuntu packages; change only this disposable runner's mirror.
-          sudo python3 - <<'PYAPT'
-          from pathlib import Path
-          files = [p for p in Path('/etc/apt').rglob('*')
-                   if p.is_file() and p.suffix in ('.list', '.sources')]
-          for p in files:
-              source = p.read_text()
-              updated = source.replace('http://azure.archive.ubuntu.com/ubuntu', 'https://archive.ubuntu.com/ubuntu').replace('https://azure.archive.ubuntu.com/ubuntu', 'https://archive.ubuntu.com/ubuntu')
-              if updated != source:
-                  p.write_text(updated)
-          assert all('azure.archive.ubuntu.com' not in p.read_text() for p in files)
-          PYAPT
-          npx playwright install --with-deps chromium
-      - name: Task owner browser acceptance across three viewports
-        working-directory: frontend
-        env:
-          E2E_BASE_URL: http://127.0.0.1:18080
-          E2E_MAILPIT_URL: http://127.0.0.1:18025
-        run: |
-          node scripts/test-task-owner-validation.cjs
-          npm run test:e2e -- --max-failures=1 --grep 'task owner independent QC'
-      - name: Upload synthetic Task owner visual evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: task-owner-visuals
-          path: |
-            frontend/qa-visuals/task-owner-*.png
-            frontend/qa-visuals/task-owner-manifest.jsonl
-          if-no-files-found: ignore
       - name: Retained real backend browser regression
         working-directory: frontend
         env:

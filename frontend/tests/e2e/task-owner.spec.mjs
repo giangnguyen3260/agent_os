@@ -423,14 +423,39 @@ test.describe('task owner independent QC', () => {
     await expect(dialog).not.toBeVisible();
     await expect(button(p, 'Chọn Agent')).toBeFocused();
     await expect(hook(p, 'selection')).toHaveCount(0);
-    await button(p, 'Menu').click();
-    await expect(
-      p.getByRole('dialog').filter({
-        has: p.getByRole('link', {name: 'Change workspace', exact: true}),
-      }),
-    ).toBeVisible();
-    await p.keyboard.press('Escape');
-    await expect(button(p, 'Menu')).toBeFocused();
+    const workspaceNavigation = p.getByRole('navigation', {
+      name: 'Workspace navigation',
+      exact: true,
+    });
+    if (p.viewportSize().width < 1024) {
+      await expect(workspaceNavigation).toBeHidden();
+      await button(p, 'Menu').click();
+      const menu = p.getByRole('dialog', {
+        name: 'Workspace navigation',
+        exact: true,
+      });
+      await expect(menu).toBeVisible();
+      await expect(
+        menu.getByRole('link', {name: 'Change workspace', exact: true}),
+      ).toBeVisible();
+      await p.keyboard.press('Escape');
+      await expect(menu).not.toBeVisible();
+      await expect(button(p, 'Menu')).toBeFocused();
+    } else {
+      await expect(button(p, 'Menu')).toBeHidden();
+      await expect(workspaceNavigation).toBeVisible();
+      for (const name of [
+        'Overview',
+        'Organization map',
+        'Teams',
+        'Agents',
+        'Missions',
+        'Trace',
+      ])
+        await expect(
+          workspaceNavigation.getByRole('link', {name, exact: true}),
+        ).toBeVisible();
+    }
     expect(posts).toHaveLength(0);
   });
 
