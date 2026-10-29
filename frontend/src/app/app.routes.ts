@@ -1,4 +1,8 @@
 import {
+  taskOwnerNavigationGuard,
+  taskOwnerLeaveGuard,
+} from './features/task-owner/task-owner-navigation.guard';
+import {
   missionIntakeNavigationGuard,
   missionIntakeLeaveGuard,
 } from './features/mission-intake/mission-intake-navigation.guard';
@@ -21,6 +25,16 @@ import {authGuard, previewGuard} from './core/auth/auth.guard';
 import {approvalDetailNavigationGuard} from './features/approvals/approval-navigation.guard';
 
 export const routes: Routes = [
+  {
+    path: 'workspace/:id/teams/:teamId/missions/:missionId/tasks/:taskId/owner',
+    canActivate: [authGuard, taskOwnerNavigationGuard],
+    canDeactivate: [taskOwnerLeaveGuard],
+    runGuardsAndResolvers: 'always',
+    loadComponent: () =>
+      import('./features/task-owner/task-owner.component').then(
+        m => m.TaskOwnerComponent,
+      ),
+  },
   {
     path: 'workspace/:id/teams/:teamId/missions/:missionId/intake/history',
     canActivate: [authGuard],

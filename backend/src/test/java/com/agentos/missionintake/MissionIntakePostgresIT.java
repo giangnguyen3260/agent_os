@@ -209,6 +209,7 @@ class MissionIntakePostgresIT extends MissionIntakeIntegrationTest {
             .dataSource(source)
             .schemas(schema)
             .defaultSchema(schema)
+            .target("18")
             .load()
             .migrate();
         assertThat(isolated.queryForMap("select * from missions where id=?", mission))
