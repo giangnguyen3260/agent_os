@@ -232,6 +232,13 @@ jobs:
       - name: Provision isolated Member invitation fixtures
         run: |
           docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < scripts/member-invitations-ci-fixture.sql
+      - name: Focused invitation native-dialog regression across three viewports
+        working-directory: frontend
+        env:
+          E2E_BASE_URL: http://127.0.0.1:18080
+          E2E_MAILPIT_URL: http://127.0.0.1:18025
+        # Observed C5 teardown race: prove the fix early, retaining all780 below.
+        run: npm run test:e2e -- --max-failures=1 member-invitations.spec.mjs --grep 'INV-B08'
       - name: PostgreSQL and SMTP Member invitation authority and acceptance
         timeout-minutes: 5
         env:

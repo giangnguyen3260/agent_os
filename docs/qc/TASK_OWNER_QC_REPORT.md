@@ -35,3 +35,19 @@ C3 `e876ab1f4a5a1a8d40b799613f41adbe7c6434e9`, tree `05c3bae508eecafd755c6e85d3b
 ## C4 browser synchronization finding and C5 correction
 
 C4 `d18275a4cb1c10872a5077234c5b004f395bf859`, tree `c2e0553bde5740f04de36d9d7691ef589ed48842`, merge `7241d3883a31ed571f533f7d4ef9782f6fd794cd`, passed Quality40804171284/job123219021745 with762 tests0/0/0. Docker40804171283/job123219022075 re-passed native owner checks; browser reached **13 passes, one failure** at malformed committed reply + exact retry. The response listener intended for retry200 captured the first malformed201: UI enters UNKNOWN before the first POST settles, while recovery buttons are still disabled. Registering a POST listener before waiting for that busy state to finish can observe the original response during click auto-wait. C5 waits for the actual recovery controls to become enabled before installing the explicit retry listener; other injected-fault cases similarly wait for receipt recovery readiness before inspecting committed results. Original receipt, exact body/key, second-attempt200, one revision and unchanged protected-state assertions remain. No app change, extra retry, timeout increase or accepted201 replay is introduced. Remaining browser/runtime/visual gates still pending.
+
+
+## C5 current evidence checkpoint
+
+C5 source `8a5af735a7b52a252ca914b7f705ae42053eee69`, tree `06d3018b282cfc9cbd7d8df5c2b692741b5010a2`, tested merge `63d853ff9d67f65a7150af2a4281960355c1d51b`, base `ef94202a4d98b16c0804f0f32a69c8fce7d89d85`. Quality40805177660/job123222292544 completed/success; full log confirms762 tests0/0/0, source binding and all frontend gates.
+
+Docker40805177734/job123222293193 is still running retained browser regression. Job metadata independently records new owner native, new owner browser and visual upload steps completed/success. Exact new-browser count and full native output await completed job logs; authored/collected count remains81. Retained780 and final restart/logout remain pending; no combined acceptance yet.
+
+Artifact12867957654 `task-owner-visuals`,1433402 bytes, ZIP SHA256 `6fd4e8992f7f15dfd9a4bba34a3418e49583f8a95874a816a13e0d0291a07da5` matched REST and downloaded bytes. Main and independent QC verified all30 original PNG hashes, unique ten-state × three-viewport JSONL records and1440/768/390 widths, then visually inspected the captures. No blocking captured visual finding. See [manifest](TASK_OWNER_VISUAL_MANIFEST.md) and [preliminary independent final review](TASK_OWNER_FINAL_REVIEW.md). These are real API-backed synthetic fixture captures; no Figma frame was edited or independently matched.
+
+
+## C5 completed failure and C6 retained-dialog correction
+
+Completed Docker40805177734/job123222293193 logs confirm **81 new browser passes**, the actual owner native PASS, and556 regular backend tests0/0/0. Retained regression reached618 passes, then INV-B08 mobile failed with `dialog.accept: Test ended` at the persistent final `p.on('dialog',d=>d.accept())` listener.161 retained cases and later restart/logout did not run. Overall Docker failed; C5 is not combined acceptance despite the new feature/visual steps passing.
+
+C6 repairs only that retained testcase's native dialog lifecycle: remove the default persistent handler for this case; assert and await each Back dismissal, unload dismissal and accepted exit through separate owned event promises; await accept completion before final URL/no-write assertions and teardown. Production invitation and owner code remain unchanged. A focused three-viewport INV-B08 step runs after its real fixture is provisioned for faster feedback. The complete retained780 step remains unchanged, so the focused3 are additional repeated verification, not a smaller baseline. One worker, zero retries and timeouts remain unchanged. New81 +retained780 still form the861 disjoint full regression instances; focused3 are reported separately.
