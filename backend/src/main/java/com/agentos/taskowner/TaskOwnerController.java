@@ -45,6 +45,26 @@ public class TaskOwnerController {
             human));
   }
 
+  @GetMapping("/history")
+  public ApiResponse<TaskOwnerDtos.History> history(
+      @PathVariable String organizationId,
+      @PathVariable String teamId,
+      @PathVariable String missionId,
+      @PathVariable String taskId,
+      @AuthenticationPrincipal HumanIdentity human,
+      HttpServletRequest request)
+      throws IOException {
+    query(request, Set.of("page"));
+    return ApiResponse.ok(
+        service.history(
+            TaskOwnerWire.uuid(organizationId),
+            TaskOwnerWire.uuid(teamId),
+            TaskOwnerWire.uuid(missionId),
+            TaskOwnerWire.uuid(taskId),
+            human,
+            TaskOwnerWire.page(request.getParameter("page"))));
+  }
+
   @GetMapping("/eligible-owners")
   public ApiResponse<TaskOwnerDtos.Candidates> owners(
       @PathVariable String organizationId,

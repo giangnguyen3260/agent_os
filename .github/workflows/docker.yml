@@ -9,8 +9,9 @@ permissions:
 jobs:
   compose-smoke:
     runs-on: ubuntu-latest
-    # Full regression plus package-mirror download time; no test/retry scope change.
-    timeout-minutes: 45
+    # C6 took43+ minutes; allow the additional history probe/browser slice.
+    # Runtime budget only: all test timeouts, retries and retained selections remain.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -80,6 +81,14 @@ jobs:
           FROM human_accounts WHERE email = 'workspace-qc@example.test';
           SQL
       # Fail early on the new slice; every retained probe and browser case still runs below.
+      - name: Provision isolated Task owner history fixtures
+        run: |
+          docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < scripts/task-owner-history-ci-fixture.sql
+      - name: PostgreSQL Task owner history projection and no-write boundary
+        timeout-minutes: 5
+        env:
+          E2E_BASE_URL: http://127.0.0.1:18080
+        run: python3 scripts/task-owner-history-probe.py
       - name: Provision isolated Task owner fixtures
         run: |
           docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < scripts/task-owner-ci-fixture.sql
@@ -106,6 +115,23 @@ jobs:
           assert all('azure.archive.ubuntu.com' not in p.read_text() for p in files)
           PYAPT
           npx playwright install --with-deps chromium
+      - name: Task owner history browser acceptance across three viewports
+        working-directory: frontend
+        env:
+          E2E_BASE_URL: http://127.0.0.1:18080
+          E2E_MAILPIT_URL: http://127.0.0.1:18025
+        run: |
+          node scripts/test-task-owner-history-validation.cjs
+          npm run test:e2e -- --max-failures=1 --grep 'task owner history independent QC'
+      - name: Upload synthetic Task owner history visual evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: task-owner-history-visuals
+          path: |
+            frontend/qa-visuals/owner-history-*.png
+            frontend/qa-visuals/owner-history-manifest.jsonl
+          if-no-files-found: ignore
       - name: Task owner browser acceptance across three viewports
         working-directory: frontend
         env:
@@ -321,7 +347,7 @@ jobs:
           node scripts/test-mission-intake-history-validation.cjs
           node scripts/test-mission-intake-validation.cjs
           node scripts/test-task-history-validation.cjs
-          npm run test:e2e -- --max-failures=1 --grep-invert 'task owner independent QC'
+          npm run test:e2e -- --max-failures=1 --grep-invert 'task owner independent QC|task owner history independent QC'
       - name: Upload synthetic Mission intake history visual evidence
         if: always()
         uses: actions/upload-artifact@v4
