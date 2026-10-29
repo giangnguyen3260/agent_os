@@ -638,6 +638,11 @@ test.describe('task owner independent QC', () => {
         const f = await fault(p, s, mode);
         await button(p, 'Lưu phân công').click();
         await expect(hook(p, 'unknown')).toBeVisible();
+        // UNKNOWN is entered before POST delivery; wait until its busy state has
+        // settled before registering a retry response listener. Otherwise the
+        // first malformed 201 can satisfy the listener intended for replay 200.
+        await expect(button(p, 'Kiểm tra biên nhận')).toBeEnabled();
+        await expect(button(p, 'Gửi lại đúng yêu cầu này')).toBeEnabled();
         expect(f.attempts).toHaveLength(1);
         const committed = row(s);
         expect(JSON.parse(f.attempts[0].body)).toEqual({
@@ -833,6 +838,7 @@ test.describe('task owner independent QC', () => {
     const f = await fault(p, s, 'lost');
     await button(p, 'Lưu phân công').click();
     await expect(hook(p, 'unknown')).toBeVisible();
+    await expect(button(p, 'Kiểm tra biên nhận')).toBeEnabled();
     try {
       membership(s, info, 'MEMBER');
       await focus(p);
@@ -865,6 +871,7 @@ test.describe('task owner independent QC', () => {
           f = await fault(p, s, 'lost');
           await button(p, 'Lưu phân công').click();
           await expect(hook(p, 'unknown')).toBeVisible();
+          await expect(button(p, 'Kiểm tra biên nhận')).toBeEnabled();
         }
         const before = row(s),
           posts = observe(p, s);
@@ -915,6 +922,7 @@ test.describe('task owner independent QC', () => {
     const f = await fault(p, s, 'lost');
     await button(p, 'Lưu phân công').click();
     await expect(hook(p, 'unknown')).toBeVisible();
+    await expect(button(p, 'Kiểm tra biên nhận')).toBeEnabled();
     const path = `${s.api}/receipts/${f.attempts[0].key}`;
     await p.route(`**${path}`, async route => {
       const actual = await route.fetch();
