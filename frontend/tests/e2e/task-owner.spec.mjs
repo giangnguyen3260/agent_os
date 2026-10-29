@@ -466,7 +466,9 @@ test.describe('task owner independent QC', () => {
       before = row(s);
     expect(s.source.owner).toEqual({state: 'UNAVAILABLE', agent: null});
     expect(before.owner_agent_id).not.toBeNull();
-    await expect(hook(p, 'current')).toContainText('không khả dụng');
+    await expect(hook(p, 'current')).toContainText(
+      'Agent đã được cấu hình nhưng không còn khả dụng trong team này',
+    );
     await expect(p.locator('main')).not.toContainText('PRIVATE_FOREIGN_OWNER');
     await expect(p.locator('main')).not.toContainText(uuid('55040000', 5001));
     await expect(button(p, 'Xem lại phân công')).toBeDisabled();
