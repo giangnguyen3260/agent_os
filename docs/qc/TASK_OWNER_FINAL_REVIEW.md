@@ -1,92 +1,61 @@
-# Task owner independent final review — C5 preliminary evidence
+# Task owner independent final review — C6 completed evidence
 
-Status: **source and captured visual review complete; final combined runtime acceptance pending completed C5 Docker logs and retained regression**. This is a bounded review of draft Task owner configuration. No merge/deploy recommendation, runtime execution/Agent authority claim, or newly edited Figma frame claim is made.
+Status: **C6 bounded acceptance: completed Quality and Docker evidence, source review and captured visual review support the frozen Task owner configuration slice, with no blocking finding.** This is not merge/deploy authorization or a production-readiness claim.
 
-## Candidate and evidence identity
+## C6 evidence identity and attribution
 
-| Item                                  | Independently checked identity                                                                                                                           |
-| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Local source HEAD                     | `8a5af735a7b52a252ca914b7f705ae42053eee69`                                                                                                               |
-| Local source tree                     | `06d3018b282cfc9cbd7d8df5c2b692741b5010a2`                                                                                                               |
-| Quality checkout in completed job log | Merge `63d853ff9d67f65a7150af2a4281960355c1d51b`: source `8a5af735a7b52a252ca914b7f705ae42053eee69` into base `ef94202a4d98b16c0804f0f32a69c8fce7d89d85` |
-| Quality run / job                     | [40805177660 / 123222292544](https://github.com/giangnguyen3260/agent_os/actions/runs/40805177660/job/123222292544)                                      |
-| Docker run / job                      | [40805177734 / 123222293193](https://github.com/giangnguyen3260/agent_os/actions/runs/40805177734/job/123222293193)                                      |
-| Visual artifact                       | `12867957654`, `task-owner-visuals`, associated by GitHub metadata with Docker run 40805177734 and C5 source HEAD                                        |
-| Artifact bytes / SHA-256              | `1433402` / `6fd4e8992f7f15dfd9a4bba34a3418e49583f8a95874a816a13e0d0291a07da5`                                                                           |
-| Reviewed browser suite SHA-256        | `f56c543115caba3b2ee1ff52c0fee9a635d46a7d70eb32560a37696f65a70f61`                                                                                       |
-| Reviewed FE component TS SHA-256      | `686cfcad2a177e46057d4b59e20cee3a85fd53da45969179ac870c2c91753867`                                                                                       |
-| Reviewed FE component HTML SHA-256    | `a16b839059734bb5b3c919c402fb5c6f692d61ae85f523c25dc07b500330281c`                                                                                       |
+This continuation reviewer independently inspected the current source, downloaded the C6 visual artifact through the GitHub connector, recomputed its integrity checks, inspected the new captures, and retrieved both completed Quality and Docker job logs plus fresh all-jobs metadata. No local Docker, Maven or Java21 runtime execution is claimed. The condensed C5 history below belongs to the previous reviewer/coordinator and is not attributed to this continuation reviewer's execution.
 
-The artifact was independently downloaded through the GitHub connector. Its downloaded byte count and digest match both GitHub artifact metadata and main's reported values. All 31 archive files byte-match the supplied local 30 original PNGs and manifest under `/tmp/task-owner-c5-visuals/`; generated contact sheets are local review aids, not additional evidence records. The supplied summary JSON was not used as a substitute for recomputing these checks.
+| Item | C6 identity |
+| --- | --- |
+| Source HEAD | `4fd55ccc90518a20f01967631380d642138498c3` |
+| Source tree, locally checked | `1edcca1ad3a809f710b7dcd12c4c118c186853a1` |
+| Quality checkout, from completed log | `f7f4a02984a4e99097d03fe060f5cb5a35daeef6`, merging source into `ef94202a4d98b16c0804f0f32a69c8fce7d89d85` |
+| Quality run / job | [40892374253 / 123512317309](https://github.com/giangnguyen3260/agent_os/actions/runs/40892374253/job/123512317309) |
+| Docker run / job | [40892374203 / 123512317793](https://github.com/giangnguyen3260/agent_os/actions/runs/40892374203/job/123512317793) |
+| New visual artifact | `12906556221`, `task-owner-visuals` |
+| Downloaded ZIP bytes / SHA-256 | `1435181` / `446a20ec730855be42cbcd0ebb3ef4dd938e8c1f2af9bc3b1a05501c3781b7f9` |
 
-## Completed Quality verification
+GitHub artifact metadata independently binds this artifact to Docker run 40892374203 and C6 source HEAD. Downloaded bytes match its REST digest and size. The same merge checkout is independently confirmed by both completed logs; the merge object was not available locally for an independent merge-tree comparison. Main reports the merge tree matches the source tree.
 
-Completed Quality job metadata reports success. Its full log independently confirms:
+## Completed C6 Quality and bounded source review
 
-- **762 backend tests, failures 0, errors 0, skipped 0**, followed by Maven `BUILD SUCCESS`.
-- TaskOwnerPostgresIT **59**, TaskOwnerIntegrationTest **52**, TaskOwnerWireTest **10**, each with zero failures/errors/skips. These 121 tests are included in 762, not additional tests.
-- Java import-rule step, frontend lint, format check, dependency security audit, tooling security checks, production validation/state harnesses and Angular build succeeded. Audit reports zero vulnerabilities for this run.
-- Owner harness output explicitly covers saved retirement, failed/malformed authority checks, fresh session/workspace ADMIN checks, search epoch fences, direct exact retry after 503/malformed delivery, receipt lookup and authority-failure body erasure.
+The retrieved full Quality log confirms **762 backend tests, failures 0, errors 0, skipped 0**, then `BUILD SUCCESS`. Included owner suites are TaskOwnerPostgresIT59, TaskOwnerWireTest10 and TaskOwnerIntegrationTest52, each 0/0/0; these are not extra tests. Java import checking, Maven verification, frontend dependency audit (zero vulnerabilities), lint, Prettier, tooling/security and production validation/state harnesses, and Angular build completed successfully. Owner harness output explicitly covers private-state clearing, saved retirement, failed/malformed authority checks, fresh session/workspace ADMIN checks, search epoch fences, exact retry/recovery and authority-failure command erasure. Harness results do not substitute for browser acceptance.
 
-These are observed CI results for the bound checkout, not local runtime results. Prototype/state harness output alone is not browser evidence; Angular build and real browser evidence remain separately identified.
+The bounded C6 source review found no concrete critical issue in the INV-B08 correction. It removes the default dialog listener in this case and registers separate owned promises before triggering Back, reload and accepted Back; each promise checks the native dialog type and awaits dismissal or acceptance. Confirm text, retained email, final URL and zero observed invitation writes remain asserted. This addresses the reported persistent asynchronous `dialog.accept: Test ended` teardown race at source level; C6 focused and full retained runs now provide the runtime closure for this observed failure. The focused INV-B08 step follows the real Member invitation fixture and uses the existing three projects, one worker and zero retries. The full retained selection is unchanged. Focused3 are additional repeat verification, not part of the disjoint new81 + retained780 =861 baseline. Production invitation and owner implementation are unchanged by C6.
 
-## Docker and browser status at preliminary review
+## New C6 artifact and visual verification
 
-Independently retrieved Docker job metadata currently shows the Task owner PostgreSQL atomicity/recovery/authority step, owner browser acceptance step and owner visual upload step **completed/success**. The overall compose-smoke job is still in progress, with retained work pending at the observed snapshot.
+The independently downloaded archive contains exactly30 PNGs and one JSONL manifest. Every archive file byte-matches the supplied original under `/tmp/task-owner-c6-visuals/`. Independent checks recomputed every manifest SHA-256, decoded all30 PNGs, verified30 unique filenames and30 unique project/state pairs, and checked the1440/768/390 image widths against manifest viewports. All capture timestamps parse and range from **2026-10-29T14:38:19.917Z to14:40:50.598Z**. The supplied summary JSON was not used as a substitute for these checks.
 
-The source selects `task owner independent QC` for the new slice and the inverse selection for retained regression. The authored/previously collected new slice is **81 invocations (27 scenarios × three viewports)**. This preliminary review does **not** promote that collection count to a completed-log pass count. Exact C5 native PASS output, browser summary, regular Docker backend count, retained **780** result and overall Docker outcome await completed job logs. Earlier C2–C4 failures are historical failed candidates, not C5 acceptance evidence.
+All30 new views were inspected through the five supplied contact sheets: edit, chooser, review, saved, blocked, conflict, unknown, denied, recovered and unavailable at each width. Full-size mobile chooser, review and UNKNOWN originals were additionally inspected. No blocking visible clipping, overlapping primary controls or obscured main action was found. Text is dark and readable, mobile headings/actions wrap, review shows explicit acknowledgment and before/after values, saved/recovered views show historical receipts, denied views remove private context, and UNAVAILABLE exposes no foreign identity. The chooser scrolls internally; full-page screenshots do not imply all content fits without vertical scrolling.
 
-## Manifest and visual verification
+These are captured actual application/backend fixture states. Screenshots do not independently prove all keyboard/accessibility behavior, arbitrary content lengths, every blocker, persistence boundary or transaction property. No Figma frame was created, edited or independently matched. Prior C5 captures and hashes remain historical evidence and are not relabeled as C6.
 
-Independent local verification established:
+## Completed C6 Docker and required gates
 
-- Exactly **30 JSONL records**, 30 distinct filenames and 30 distinct project/state pairs, covering every combination below once.
-- Every SHA-256 matches its original PNG bytes; every PNG decodes successfully.
-- Manifest viewport dimensions are desktop **1440×1000**, tablet **768×1024**, mobile **390×844**. Original PNG widths match; full-page mobile captures may exceed viewport height, as expected.
-- Every browser pathname exactly matches its project-specific prefix-550 organization/Team/Mission/Task fixture scope. UNAVAILABLE uses task 3, blocked uses task 5, other captured states use task 1.
-- Capture timestamps parse as UTC ISO instants and fall on this C5 capture sequence, approximately 02:20:36–02:22:29 UTC on 2026-10-29.
+Fresh GitHub jobs metadata (`filter=all&per_page=100`) confirms compose-smoke **completed/success**, ending2026-10-29T15:15:07Z; the formatting diagnostic job also completed/success. Every returned step in both jobs is completed/success, with none failed, skipped or cancelled. The full Docker log independently binds checkout to merge `f7f4a02984a4e99097d03fe060f5cb5a35daeef6`, source `4fd55ccc90518a20f01967631380d642138498c3` and the stated base.
 
-| Captured state | Desktop  | Tablet   | Mobile   | Visual semantics inspected                                                           |
-| -------------- | -------- | -------- | -------- | ------------------------------------------------------------------------------------ |
-| edit           | Reviewed | Reviewed | Reviewed | Actual unassigned source, no default explicit choice                                 |
-| chooser        | Reviewed | Reviewed | Reviewed | Native modal, searchable real eligible rows, deliberate clear, internal scrolling    |
-| review         | Reviewed | Reviewed | Reviewed | Before/after values, checked acknowledgment and final save controls                  |
-| saved          | Reviewed | Reviewed | Reviewed | Historical receipt with revision/time and actual before/after; no stale-source error |
-| blocked        | Reviewed | Reviewed | Reviewed | Human Task-not-draft reason and disabled editing                                     |
-| conflict       | Reviewed | Reviewed | Reviewed | Human source-change message, retained choice and disabled review                     |
-| unknown        | Reviewed | Reviewed | Reviewed | Explicit uncertainty, manual receipt/retry controls, no false failure claim          |
-| denied         | Reviewed | Reviewed | Reviewed | ADMIN-required message; private owner/selection/review absent; replay disabled       |
-| recovered      | Reviewed | Reviewed | Reviewed | Historical saved receipt after explicit recovery, no source-stale message            |
-| unavailable    | Reviewed | Reviewed | Reviewed | Human unavailable-owner explanation, no private foreign identity                     |
+| Completed-log result | Observed evidence |
+| --- | --- |
+| Regular Docker backend tests | **556**, failures0, errors0, skipped0; `BUILD SUCCESS` |
+| New Task owner browser cases | **81 passed (2.9m)**, summary14:41:12UTC |
+| Focused INV-B08 | **3 passed (6.0s)**, summary14:42:46UTC |
+| Full retained browser baseline | **780 passed (26.1m)**, summary15:14:04UTC |
+| Restart/logout | `PASS: exact session survives backend restart; logout rejects replay`,15:14:58UTC |
 
-All 30 original views were visually inspected through the five supplied contact sheets. Full-size originals were additionally inspected for all three chooser widths and mobile review, conflict and UNKNOWN. Primary text is dark and readable; headings and action rows wrap on mobile; no visible horizontal clipping, overlapping primary controls or obscured main action was found in the reviewed captures. Chooser content extending below the modal viewport is intentional internal scrolling, not proof that all 20 rows fit simultaneously. Full-page height does not imply all content fits without vertical scrolling.
+Thus **861 disjoint browser instances (81 new +780 retained) passed, plus3 extra focused repeats**. The focused cases are also present in the retained suite and are not counted as extra baseline coverage. Browser configuration uses one worker and zero retries; completed summaries show all selected instances passed, without a failed/skipped remainder. Backend762 Quality and556 Docker totals overlap and are not added together.
 
-These screenshots demonstrate the captured synthetic fixture states rendered by the actual application/backend, not fabricated business DTO success. The upload step's name uses “synthetic” for disposable fixture evidence. Image inspection does not independently establish keyboard behavior, every blocker, transaction atomicity, all accessibility requirements, every possible content length or every persistence channel.
+The owner native probe explicitly reports `PASS: task owner actual persistence/clear/privacy/candidates/ABA/replay/races/rollback/strict wire/authority and protected business data`. This is actual completed CI output, not inferred from a step title. The new visual upload log carries the independently verified artifact/digest above.
 
-## Final source dispositions
+All required workflow stages completed successfully, including Compose validation/build/healthy start; frontend/SPA/API/private-management checks; migrated identity/session schema; isolated recovery, membership and feature fixtures; owner native/browser/visual steps; and the full retained browser step. Completed native PASS output covers Mission creation/directory/workspace; Task detail/create; Approval Center, Detail and Information; Member access, grant management, role management and invitations with real SMTP; Team settings; Organization Map; Agent Permissions; Trace; Task Draft Edit/history; Mission intake/history; concurrent Agent Draft creation, Studio replay, activation preflight, Agent/Team directories and Team workspace; and the real PostgreSQL concurrent-login/password-reset barrier. All retained visual uploads, session save/restart/resume/logout, container status and disposable-stack cleanup also completed successfully. These retained probe passes preserve each probe's own scope; the Team settings log explicitly refers to its QC matrix for unexecuted gaps.
 
-The frozen contract and previously recorded QC findings were rechecked against current C5 component/template, owner receipt validation and owned browser oracles. The following closures are source-level conclusions, supplemented only by the completed evidence identified above:
+## Acceptance boundaries and attributed history
 
-| Finding | Current disposition                                                                                                                                                                                                          |
-| ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| QC-01   | Stray unresolved history helper removed; completed Quality now compiles and executes owner suites.                                                                                                                           |
-| QC-02   | Current/review test hooks enclose semantic values.                                                                                                                                                                           |
-| QC-03   | Accepted receipt retires dirty draft/selection/source; no automatic discard prompt should remain after success.                                                                                                              |
-| QC-04   | Failed/malformed fresh authority verification clears private state and frozen command; same-actor opaque receipt locator may remain. Review requires verified context.                                                       |
-| QC-05   | Explicit clear opens the native chooser first and acts on its visible clear control.                                                                                                                                         |
-| QC-06   | Conflict oracles require intended human text, absent review and disabled controls before capture.                                                                                                                            |
-| QC-07   | Stored receipt decode validates canonical identity/time, event correlation, historical snapshots and raw provenance, rejecting impossible no-op transitions; semantic corruption cases exist in executed owner test classes. |
-| QC-08   | Accepted success clears the pre-save source, preventing own receipt focus from falsely marking it stale.                                                                                                                     |
+No blocking finding remains in this bounded continuation's source, completed CI and captured visual review. This accepts the specified DRAFT owner configuration evidence; it does not establish Agent activation, execution, scheduling or effective grants. Sonar remains paused and is not a passing gate. No merge or deployment occurred in this review, and no production-readiness or all-accessibility certification is made.
 
-Subsequent integration corrections are retained: `SUSPENDED` is asserted in the real backend source while UI expects `Tạm ngừng`; the UNAVAILABLE oracle matches the actual `không còn khả dụng` explanation; Menu checks branch at actual viewport width 1024 with desktop navigation assertions; direct identical retry can freshly authorize from retained UNKNOWN. Recovery tests now await enabled recovery controls before registering the retry listener, so the original malformed 201 cannot satisfy the listener intended for historical replay 200. Exact raw command/key, second-response 200 and persisted-state assertions remain.
+The previous worker's C5 source/visual review reported no blocking captured visual finding and documented QC-01 through QC-08 closures. Its full original document remains preserved at git commit `4fd55ccc90518a20f01967631380d642138498c3`, path `docs/qc/TASK_OWNER_FINAL_REVIEW.md`. Those earlier executions and downloaded C5 artifacts are historical attribution, not fresh execution by this reviewer. Coordinator-provided completed C5 evidence records81 new passes and618 retained passes before INV-B08 mobile failed with `dialog.accept: Test ended`;161 retained cases and later restart/logout did not run. C5 remains an overall failed candidate. C6 repairs only the retained test's dialog ownership plus the added focused workflow step; the successful C6 full baseline supplies its closure.
 
-The prior three native probe evidence gaps are addressed for its isolated sequential run: bounded observed lock-wait attribution, retained old event/receipt/audit row comparison, and complete candidate page/detail/fingerprint comparison. Lock attribution remains bounded to the controlled no-other-traffic fixture run rather than full HTTP request-ID proof. Browser snapshots protect the asserted Task/dependency/Mission/Agent data; complete effects rely on the separate native checks. Local/session storage assertions do not prove IndexedDB or all possible persistence channels are empty.
+Existing evidence limits remain: native lock-wait attribution is bounded to controlled isolated traffic rather than full HTTP request-ID proof; browser protected-state snapshots rely on separate native checks for complete transactional effects; local/session-storage assertions do not prove all possible persistence channels empty. Screenshot limits and the absence of a new or independently matched Figma frame are stated above. Local runtime execution is not claimed.
 
-## Outstanding final amendment
-
-Before final combined acceptance, inspect completed C5 Docker logs for checkout binding, actual native owner output, exact new-browser summary and full retained regression summary, and reconcile any failures/skips/retries with the frozen command selections. Record the overall Docker conclusion and any material limits. Until then, this document accepts the artifact integrity and captured visual/source review only; it does not declare the entire delivery or retained baseline passed.
-
-This reviewer created only `docs/qc/TASK_OWNER_FINAL_REVIEW.md`. Main retains browser suite ownership. No other source, suite, contract, review, workflow, fixture, probe or git changes were made by this pass.
-
-
-Coordinator continuation note: C5 Docker40805177734/job123222293193 subsequently completed/failure. Completed logs confirm81 new passes and618 retained passes before INV-B08 mobile failed with `dialog.accept: Test ended`;161 retained cases and later restart/logout did not run. The visual/source observations above remain scoped evidence, not combined runtime acceptance. C6 awaits each native dialog dismissal/acceptance in that retained testcase and adds a focused three-viewport check while keeping the full780 retained step unchanged. Latest full acceptance remains pending. This note is by the coordinator, not a new independent reviewer sign-off.
+This continuation changed only `docs/qc/TASK_OWNER_FINAL_REVIEW.md`. Source, tests, workflow and other documents remain under main's ownership. No commit was made. Review frozen on the C6 source identity and completed evidence recorded here.

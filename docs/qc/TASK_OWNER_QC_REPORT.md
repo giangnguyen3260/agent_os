@@ -1,53 +1,63 @@
 # Task owner configuration QC
 
-Status: implementation and source corrections in progress on `feature/task-draft-owner`, based on PR33 closure `ef94202a4d98b16c0804f0f32a69c8fce7d89d85`. No runtime acceptance, merge or deployment is claimed.
+Status: **C6 accepted for the bounded draft Task owner configuration contract.** Both required workflows completed/success. Draft [PR34](https://github.com/giangnguyen3260/agent_os/pull/34) is stacked on PR33, unmerged and undeployed. SonarQube scanning remains paused.
 
-The [frozen contract](../engineering/TASK_OWNER_CONTRACT.md) defines explicit assignment/replacement/clear of a DRAFT task's configured owner. Real same-organization, same-Team DRAFT/ACTIVE candidates are required. Unavailable foreign owner projection is safe and explicitly clearable. This slice adds no runtime, grants, status or dependency writer.
+## Candidate identity
 
-Required acceptance: Google Java style and actual backend compilation/tests; V019→20 retention and native PostgreSQL lock/revocation/races/rollback; strict HTTP and historical exact receipt recovery; frontend lint/format/build and validator checks; new real-backend browser cases plus all 780 retained instances; 30 actual responsive captures with hashes and independent review; Docker session restart/logout. Counts and links will be recorded from completed runs, not inferred from authored tests.
+- Source: `4fd55ccc90518a20f01967631380d642138498c3`.
+- Tree: `1edcca1ad3a809f710b7dcd12c4c118c186853a1`.
+- Tested merge: `f7f4a02984a4e99097d03fe060f5cb5a35daeef6`.
+- Base: `ef94202a4d98b16c0804f0f32a69c8fce7d89d85`.
+- [Quality40892374253/job123512317309](https://github.com/giangnguyen3260/agent_os/actions/runs/40892374253/job/123512317309).
+- [Docker40892374203/job123512317793](https://github.com/giangnguyen3260/agent_os/actions/runs/40892374203/job/123512317793).
 
-Local environment has Java17, without Maven/Java21 or Docker. Backend runtime must be verified by the configured CI runners. SonarQube remains paused and is not a passing gate. The independent source [review](TASK_OWNER_REVIEW.md) records concrete corrections and evidence limits; [cases](TASK_OWNER_TEST_CASES.md) are authored acceptance requirements, not pass results.
+Completed Quality logs bind the checkout to that merge and confirm **762 tests, zero failures/errors/skips**, followed by BUILD SUCCESS. Owner integration52, native PostgreSQL59 and wire10 are included in762, not additional tests. Google Java formatting/import rules, frontend dependency audit (zero vulnerabilities in this run), lint, full source formatting, tooling/security/state harnesses and Angular production build passed.
 
+Completed Docker logs bind the same merge and confirm the following. Counts describe separate CI invocations, not unique assertions.
 
-## C2 completed quality evidence
+| Gate | Completed C6 result |
+| --- | --- |
+| Regular backend tests during Docker build | 556; failures/errors/skips all zero; subset repeated separately from Quality762 |
+| Actual owner PostgreSQL/HTTP probe | PASS: persistence, clear, privacy, candidates, ABA, replay, races, rollback, strict wire, authority and protected business data |
+| New owner browser slice | 81 passed, one worker, zero retries |
+| Focused retained INV-B08 check | 3 passed at desktop/tablet/mobile; additional repeated checks |
+| Complete retained browser regression | 780 passed, one worker, zero retries; INV-B08 also passed in all three projects here |
+| Disjoint new + retained browser instances | 861 passed; the focused3 are additional, not silently included in861 |
+| Other retained native/concurrency probes | Completed/success, including account and recovery barriers |
+| Backend restart/session/logout | PASS: exact session survives restart; logout rejects replay |
 
-Source `9091874f4d67deb3f0a142d00cff44c8a4a7d700`, tree `12d81c991325845a4bc69b17a5c90c7b15879654`, tested merge `5f177e993cc44c2a0646e3bc76b87848ceae2f82`, base `ef94202a4d98b16c0804f0f32a69c8fce7d89d85`. Draft [PR34](https://github.com/giangnguyen3260/agent_os/pull/34), stacked on PR33; unmerged and undeployed.
+The completed visual upload log confirms ZIP SHA256 `446a20ec730855be42cbcd0ebb3ef4dd938e8c1f2af9bc3b1a05501c3781b7f9`, matching REST and downloaded bytes. No browser failures, skips or retry passes are used as acceptance. Native and browser tests run against disposable real services; they were not run locally where Maven/Java21/Docker are unavailable.
 
-[Code quality run40801695696](https://github.com/giangnguyen3260/agent_os/actions/runs/40801695696), job123211050516, completed/success. Completed log confirms merge checkout and **762 tests, zero failures/errors/skips**: owner integration52, wire10, native owner59; retained native suites and reciprocal input-edit ABA cases included. Google Java formatting/import rules, frontend dependency audit (zero vulnerabilities), lint, full source formatting, tooling/security/state harnesses and production build passed.
+## Delivered scope
 
-C1 `cd37acb0186cd9a0681e1022ff758202905fd438` failed the required Java formatting gate before test acceptance. Applied the canonical CI Google-format patch from artifact12866257107; downloaded ZIP SHA256 `db1b8eeef03d2cb6e98f27b8819b6052dc6eb2dfdf19544d42997c66cca96b00` matched REST digest. C2 is that formatting correction, with no disabled gate.
+Current ADMIN enters **Task Detail → Phân công Agent** for an existing DRAFT task. The screen reads persisted current ownership, distinguishes unassigned from unavailable without foreign identity disclosure, and offers a native searchable paginated chooser. An explicit choice or clear must be reviewed and acknowledged before saving. The actual receipt records before/after, revision and time; Task Detail reload shows persisted current configuration.
 
-[Docker run40801695688](https://github.com/giangnguyen3260/agent_os/actions/runs/40801695688), compose job123211050994, remains in progress. Step metadata records successful retained native checks through Mission intake history and the new Task owner PostgreSQL probe; full job log, browser results, artifacts and final restart/logout remain pending. New browser collection is **81** cases (27×3); retained collection is **780**. These collection counts are not browser pass claims.
+New targets must be same-organization, same-Team DRAFT/ACTIVE Agents. A currently ineligible scoped owner remains visible and replaceable; a raw foreign/different-Team owner is UNAVAILABLE/null and explicitly clearable. No-op uses the raw pointer, so unavailable-to-unassigned is a real change. Parent lifecycle/intake gates and owner-revision exhaustion block fresh writes; unrelated exhausted input/intake counters do not consume owner revision.
 
+V020 retains existing Task rows/owner pointers and creates no synthetic baseline. Each accepted command changes only owner ID, owner revision and updated time, atomically with restricted owner event, actor-scoped receipt and safe TASK_OWNER_UPDATED audit. Task input, dependencies, lifecycle/pending data, input revision, Mission intake and Agent/runtime/grant state are preserved. The input-edit snapshot domainV2 additionally binds owner revision to reject owner ABA; old input-command digests and receipt replay remain unchanged.
 
-## C2 Docker result and C3 correction
+## Security, concurrency and recovery evidence boundary
 
-Docker40801695688/job123211050994 completed/failure at the second new desktop browser case. Completed log confirms **556 regular backend tests, zero failures/errors/skips**, all preceding retained native steps, and `PASS: task owner actual persistence/clear/privacy/candidates/ABA/replay/races/rollback/strict wire/authority and protected business data`. The first actual assignment/change/clear/reload browser case passed. The next case timed out clicking `Menu` on desktop, where the intended layout uses the visible sidebar; this is a responsive testcase defect, not an established missing desktop Menu requirement. Totals: one browser pass, one failure, 79 unrun; retained browser and restart/logout did not run. Partial artifact12866449133 is not visual acceptance.
+The real PostgreSQL/HTTP probe and owner native suite cover actual assign/change/clear, scoped candidates and literal paging, foreign redaction, safe Trace, exact same-key historical replay, actor-private receipt lookup, competing writes, candidate rename/move, reciprocal input-edit/source conflicts and owner ABA with restored timestamp. Injected event/receipt/audit insert failures must roll back the entire transaction. Strict real HTTP rejects malformed body/header/query/media/UTF8 inputs and returns safe errors for malformed or event-inconsistent persisted receipts.
 
-C3 corrects the responsive navigation oracle (desktop sidebar versus compact Menu). The workflow moves the isolated owner fixture/probe/new browser step earlier to shorten feedback; every retained fixture/probe and all 780 retained browser instances remain required, with one worker, zero retries and max-failure early stop unchanged. No backend or frontend application change is needed for this observed failure. C3 results remain pending.
+Native write effects compare every business-table hash, all protected Task/other Task/Team/Mission/Agent/dependency data and all preexisting event/receipt/audit rows, plus exact new provenance. Authentication state is deliberately excluded from business snapshots. Row-lock revocation uses one newly observed organization-lock waiter, the same PID on a second observation and a still-pending HTTP future before role/enable/credential revocation. This is bounded attribution under an isolated sequential no-other-traffic run, not full request-ID tracing.
 
+Browser cases use actual backend successes and real DB effects. Lost/malformed delivery faults first fetch a real committed201, then alter only transport delivery. Explicit retry must preserve raw body/key and return historical200 without a second mutation. UNKNOWN is entered before delivery finishes, so retry observation waits for recovery controls to become enabled. Role/account/route/epoch fences, fresh preflight, failed/malformed authority clearing, saved-focus/no-discard behavior and opaque same-actor receipt recovery are separately asserted. Held requests are drained before late-response checks. Local/session storage checks are limited to their asserted strings; they do not certify every persistence channel.
 
-## C3 result and C4 message-oracle correction
+## Visual evidence
 
-C3 `e876ab1f4a5a1a8d40b799613f41adbe7c6434e9`, tree `05c3bae508eecafd755c6e85d3b1e03b071acece`, merge `f2f1619dcda6124ac66825b997ea12063d27c7c2`, passed [Quality40803417461](https://github.com/giangnguyen3260/agent_os/actions/runs/40803417461)/job123216600318 with762 tests0/0/0 and frontend gates. Docker40803417451/job123216600174 re-passed owner native checks, then failed browser case3 after two passes. The unavailable-owner oracle required substring `không khả dụng`; the actual intended human message is `Agent đã được cấu hình nhưng không còn khả dụng trong team này`. The full source message and the test's shorter substring do not match. C4 requires the full semantic message, preserving foreign-owner state/API/raw-pointer/clear/receipt/privacy assertions. No application change or timeout/retry increase is made. Main compared remaining explicit messages, state hooks, action labels and viewport branches to production source; further runtime evidence remains required rather than inferred.
+C6 artifact12906556221 `task-owner-visuals`,1435181bytes; ZIP SHA256 `446a20ec730855be42cbcd0ebb3ef4dd938e8c1f2af9bc3b1a05501c3781b7f9` matches REST and downloaded bytes. Exactly30 original PNG and30 unique JSONL records cover edit, chooser, review, saved, blocked, conflict, unknown, denied, recovered and unavailable at1440/768/390. All image hashes, scope paths and viewport widths are checked; coordinator and independent QC inspect the actual captures. See [visual manifest](TASK_OWNER_VISUAL_MANIFEST.md) and [independent review](TASK_OWNER_FINAL_REVIEW.md).
 
+No blocking captured visual finding was observed. This extends existing Forest conventions; no Figma frame was edited or independently matched. Chromium at three widths is not all-browser/every-pixel testing or formal accessibility certification. This feature does not activate Agents, dispatch tasks, supply effective grants, edit dependencies or implement execution/owner-history UI. No Mac or production deployment is claimed.
 
-## C4 browser synchronization finding and C5 correction
+## Failed candidates and corrections
 
-C4 `d18275a4cb1c10872a5077234c5b004f395bf859`, tree `c2e0553bde5740f04de36d9d7691ef589ed48842`, merge `7241d3883a31ed571f533f7d4ef9782f6fd794cd`, passed Quality40804171284/job123219021745 with762 tests0/0/0. Docker40804171283/job123219022075 re-passed native owner checks; browser reached **13 passes, one failure** at malformed committed reply + exact retry. The response listener intended for retry200 captured the first malformed201: UI enters UNKNOWN before the first POST settles, while recovery buttons are still disabled. Registering a POST listener before waiting for that busy state to finish can observe the original response during click auto-wait. C5 waits for the actual recovery controls to become enabled before installing the explicit retry listener; other injected-fault cases similarly wait for receipt recovery readiness before inspecting committed results. Original receipt, exact body/key, second-attempt200, one revision and unchanged protected-state assertions remain. No app change, extra retry, timeout increase or accepted201 replay is introduced. Remaining browser/runtime/visual gates still pending.
+| Candidate | Actual failure | Correction before next run |
+| --- | --- | --- |
+| C1 cd37acb | Required Google Java formatting failed before acceptance. | Applied canonical CI formatting patch; artifact12866257107 ZIPsha db1b8eeef03d2cb6e98f27b8819b6052dc6eb2dfdf19544d42997c66cca96b00 matched REST/download. |
+| C2 9091874 | New browser1pass/1failure: clicked compact Menu on desktop. | Assert desktop sidebar versus tablet/mobile native Menu; all chooser assertions retained. |
+| C3 e876ab1 | New browser2passes/1failure: unavailable message substring differed from actual human text. | Require the full actual semantic message; foreign/raw-pointer/clear/privacy checks retained. |
+| C4 d18275a | New browser13passes/1failure: listener captured original malformed201 during retry-button auto-wait. | Wait for settled UNKNOWN recovery controls before installing replay listener; still require identical body/key and200. |
+| C5 8a5af73 | New81passed; retained618passed/1failure at INV-B08 mobile;161unrun. Persistent dialog.accept listener outlived test teardown. | Explicitly await each Back/unload/accepted-exit dialog and verify navigation/no-write; add focused3, retain all780. |
 
-
-## C5 current evidence checkpoint
-
-C5 source `8a5af735a7b52a252ca914b7f705ae42053eee69`, tree `06d3018b282cfc9cbd7d8df5c2b692741b5010a2`, tested merge `63d853ff9d67f65a7150af2a4281960355c1d51b`, base `ef94202a4d98b16c0804f0f32a69c8fce7d89d85`. Quality40805177660/job123222292544 completed/success; full log confirms762 tests0/0/0, source binding and all frontend gates.
-
-Docker40805177734/job123222293193 is still running retained browser regression. Job metadata independently records new owner native, new owner browser and visual upload steps completed/success. Exact new-browser count and full native output await completed job logs; authored/collected count remains81. Retained780 and final restart/logout remain pending; no combined acceptance yet.
-
-Artifact12867957654 `task-owner-visuals`,1433402 bytes, ZIP SHA256 `6fd4e8992f7f15dfd9a4bba34a3418e49583f8a95874a816a13e0d0291a07da5` matched REST and downloaded bytes. Main and independent QC verified all30 original PNG hashes, unique ten-state × three-viewport JSONL records and1440/768/390 widths, then visually inspected the captures. No blocking captured visual finding. See [manifest](TASK_OWNER_VISUAL_MANIFEST.md) and [preliminary independent final review](TASK_OWNER_FINAL_REVIEW.md). These are real API-backed synthetic fixture captures; no Figma frame was edited or independently matched.
-
-
-## C5 completed failure and C6 retained-dialog correction
-
-Completed Docker40805177734/job123222293193 logs confirm **81 new browser passes**, the actual owner native PASS, and556 regular backend tests0/0/0. Retained regression reached618 passes, then INV-B08 mobile failed with `dialog.accept: Test ended` at the persistent final `p.on('dialog',d=>d.accept())` listener.161 retained cases and later restart/logout did not run. Overall Docker failed; C5 is not combined acceptance despite the new feature/visual steps passing.
-
-C6 repairs only that retained testcase's native dialog lifecycle: remove the default persistent handler for this case; assert and await each Back dismissal, unload dismissal and accepted exit through separate owned event promises; await accept completion before final URL/no-write assertions and teardown. Production invitation and owner code remain unchanged. A focused three-viewport INV-B08 step runs after its real fixture is provisioned for faster feedback. The complete retained780 step remains unchanged, so the focused3 are additional repeated verification, not a smaller baseline. One worker, zero retries and timeouts remain unchanged. New81 +retained780 still form the861 disjoint full regression instances; focused3 are reported separately.
+C2–C5 Quality runs passed their backend/frontend gates; those are historical results, not a substitute for latest complete C6 acceptance. Application source has not changed since C2; subsequent fixes concern test oracles/lifecycle and CI feedback order. Every retained step remains, with one worker, zero retries and unchanged timeouts. C6 overall Docker and Quality conclusions are both success. The independent final review records the same bounded acceptance. Documentation-only closure updates this report, README, API boundary, migration note and visual/review records; application, tests, fixtures, probes and workflows remain byte-identical to accepted C6. No fresh runtime pass is claimed for the later Markdown-only closure commit.
