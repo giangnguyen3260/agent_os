@@ -160,7 +160,7 @@ public class TaskOwnerHistoryTest {
         mvc.perform(
                 post(url().replace("/history", ""))
                     .with(auth())
-                    .with(csrf())
+                    .with(csrf().asHeader())
                     .contentType("application/json")
                     .header("Idempotency-Key", UUID.randomUUID().toString())
                     .content(json.writeValueAsString(command)))
@@ -539,8 +539,15 @@ public class TaskOwnerHistoryTest {
             "COMPLETED",
             "FAILED",
             "CANCELLED")) {
+      boolean pending = Set.of("WAITING", "BLOCKED").contains(state);
       jdbc.update(
-          "update tasks set status=?,task_owner_revision=2147483647 where id=?", state, task);
+          "update tasks set status=?,pending_reason=?,waiting_since=?,resolver=?,"
+              + "task_owner_revision=2147483647 where id=?",
+          state,
+          pending ? "Awaiting fixture input" : null,
+          pending ? clock() : null,
+          pending ? "History QC" : null,
+          task);
       jdbc.update("update missions set task_intake_paused=true where id=?", mission);
       var before = business();
       assertThat(history(0).total()).isZero();

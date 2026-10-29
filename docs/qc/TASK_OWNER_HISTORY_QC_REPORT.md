@@ -15,3 +15,6 @@ Before C1, independent QC found two native-oracle gaps. Main included account/me
 
 
 C1a5897c0/Quality40906071322/job123561051452 failed the required Google Java formatting gate before runtime acceptance. Applied canonical CI format patch from artifact12912465272, ZIPsha660ffdb71e1ccdcc32efc8357724fc81db47ce418719574b0f56fb6da518c0b6 matching REST/download. C2 also makes the native API client's Accept:application/json explicit, retaining strict rejection of HTML/private error bodies. C2 compile/native/browser and visual results remain pending.
+
+
+C2Quality40906550159/job123562771360 compiled and ran849 invocations, with57failures,2errors,0skips. The shared new history-test command helper used MockMvc csrf() as a request parameter; the accepted owner API correctly rejects unknown query/body parameters. C3 sends CSRF as a header. The lifecycle fixture also violated existing ck_tasks_pending for WAITING/BLOCKED; C3 supplies real pending reason/time/resolver for those states and nulls for other states. No application parser, authorization, database constraint or assertion is relaxed. Runtime acceptance remains pending the corrected tests.
