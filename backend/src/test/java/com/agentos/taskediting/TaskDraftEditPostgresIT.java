@@ -199,6 +199,7 @@ class TaskDraftEditPostgresIT extends TaskDraftEditIntegrationTest {
             .dataSource(source)
             .schemas(schema)
             .defaultSchema(schema)
+            .target("17")
             .load()
             .migrate();
         var after = isolated.queryForMap("select * from tasks where id=?", task);

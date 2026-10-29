@@ -1,0 +1,289 @@
+<div class="forest-shell">
+  <aside class="desktop-sidebar">
+    <div class="brand">agentos</div>
+    <nav aria-label="Workspace navigation">
+      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a
+      ><a [routerLink]="['/workspace', id, 'organization-map']"
+        >Organization map</a
+      ><a [routerLink]="['/workspace', id, 'teams']">Teams</a
+      ><a [routerLink]="['/workspace', id, 'agents']">Agents</a
+      ><a [routerLink]="['/workspace', id, 'missions']" class="selected"
+        >Missions</a
+      ><button disabled>Approvals</button
+      ><a [routerLink]="['/workspace', id, 'trace']">Trace</a>
+    </nav>
+  </aside>
+  <header class="compact-header">
+    <span class="brand">agentos</span
+    ><button
+      class="button secondary"
+      type="button"
+      aria-controls="mission-intake-menu"
+      [attr.aria-expanded]="menuOpen()"
+      (click)="toggleMenu()"
+    >
+      Menu
+    </button>
+  </header>
+  <dialog
+    id="mission-intake-menu"
+    aria-label="Workspace navigation"
+    (cancel)="closeMenu()"
+    (close)="closeMenu()"
+  >
+    <button class="button secondary" type="button" (click)="closeMenu()">
+      Close menu
+    </button>
+    <nav>
+      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a
+      ><a [routerLink]="['/workspace', id, 'teams']">Teams</a
+      ><a [routerLink]="['/workspace', id, 'agents']">Agents</a
+      ><a [routerLink]="['/workspace', id, 'missions']" class="selected"
+        >Missions</a
+      ><a [routerLink]="['/workspace', id, 'trace']">Trace</a
+      ><a routerLink="/workspace">Change workspace</a>
+    </nav>
+  </dialog>
+  <main data-testid="task-owner" [attr.aria-busy]="loading() || busy()">
+    <header class="heading">
+      <h1 tabindex="-1">Phân công Agent cho task draft</h1>
+      <p>
+        Chỉ cấu hình phân công; không thực thi task hoặc cấp quyền cho Agent.
+      </p>
+    </header>
+    @if (loading()) {
+      <p data-testid="owner-loading" role="status">Đang kiểm tra dữ liệu…</p>
+    }
+    @if (error()) {
+      <p data-testid="owner-error" class="auth-error" role="alert">
+        {{ error() }}
+      </p>
+    }
+    @if (denied()) {
+      <p data-testid="owner-denied" role="alert">
+        Cần quyền ADMIN hiện tại để phân công Agent cho task này.
+      </p>
+    }
+    @if (context(); as c) {
+      <div class="breadcrumb">{{ c.teamName }} / {{ c.missionTitle }}</div>
+      <h2>{{ c.taskTitle }}</h2>
+      <section class="panel" data-testid="owner-current">
+        <h2>Phân công hiện tại</h2>
+        <p>{{ describeOwner(c.owner) }}</p>
+      </section>
+      @if (!c.canEdit) {
+        <section class="panel" data-testid="owner-blocked" role="alert">
+          <h2>Chưa thể thay đổi phân công</h2>
+          @for (b of c.blockers; track b) {
+            <p>{{ blockerLabel(b) }}</p>
+          }
+        </section>
+      }
+      @if (phase() === 'edit') {
+        <fieldset [disabled]="!editable()">
+          <legend>Chọn phân công mới</legend>
+          <div class="actions">
+            <button
+              class="button secondary"
+              id="owner-chooser-trigger"
+              (click)="openChooser()"
+            >
+              Chọn Agent
+            </button>
+          </div>
+          @if (explicitSelection) {
+            <section data-testid="owner-selection">
+              <h3>Phân công đã chọn</h3>
+              <p>{{ describeOwner(desired()) }}</p>
+            </section>
+          }
+          <div class="actions">
+            <button
+              class="button primary"
+              (click)="review()"
+              [disabled]="!dirty()"
+            >
+              Xem lại phân công</button
+            ><a class="button secondary" [routerLink]="detailLink()">Hủy</a>
+          </div>
+        </fieldset>
+        <dialog
+          data-testid="owner-chooser"
+          aria-labelledby="owner-chooser-title"
+          (cancel)="closeChooser()"
+          (close)="chooserClosed()"
+        >
+          <h2 id="owner-chooser-title">Chọn Agent phụ trách</h2>
+          <div class="actions">
+            <button class="button secondary" (click)="closeChooser()">
+              Đóng</button
+            ><button
+              class="button secondary"
+              [disabled]="!editable() || chooserLoading()"
+              (click)="choose(null)"
+            >
+              Không gán Agent
+            </button>
+          </div>
+          <form (ngSubmit)="search()">
+            <label for="owner-query">Tìm Agent</label
+            ><input
+              id="owner-query"
+              name="query"
+              [(ngModel)]="query"
+              maxlength="200"
+              autofocus
+            />
+            <div class="actions">
+              <button
+                class="button primary"
+                type="submit"
+                [disabled]="!editable() || chooserLoading()"
+              >
+                Tìm kiếm
+              </button>
+            </div>
+          </form>
+          @if (chooserLoading()) {
+            <p role="status">Đang tìm Agent…</p>
+          }
+          @if (chooserError()) {
+            <p role="alert">{{ chooserError() }}</p>
+          }
+          @if (candidates(); as p) {
+            <section
+              aria-label="Agent đủ điều kiện"
+              [attr.aria-busy]="chooserLoading()"
+            >
+              @for (a of p.items; track a.id) {
+                <article class="candidate">
+                  <div>
+                    <strong>{{ a.name }}</strong>
+                    <p>{{ a.level }} · {{ statusLabel(a.status) }}</p>
+                  </div>
+                  <button
+                    class="button secondary"
+                    [disabled]="chooserLoading() || !editable()"
+                    [attr.aria-label]="'Chọn ' + a.name"
+                    (click)="choose(a)"
+                  >
+                    Chọn {{ a.name }}
+                  </button>
+                </article>
+              } @empty {
+                <p role="status">
+                  Không tìm thấy Agent đủ điều kiện với tên này.
+                </p>
+              }
+            </section>
+            <div class="actions" aria-label="Phân trang Agent">
+              <button
+                class="button secondary"
+                [disabled]="chooserLoading() || page === 0"
+                (click)="search(page - 1)"
+              >
+                Trang trước</button
+              ><span>Trang {{ page + 1 }} · {{ p.total }} Agent</span
+              ><button
+                class="button secondary"
+                [disabled]="
+                  chooserLoading() ||
+                  (page + 1) * 20 >= p.total ||
+                  page >= 100000
+                "
+                (click)="search(page + 1)"
+              >
+                Trang sau
+              </button>
+            </div>
+          }
+        </dialog>
+      }
+    }
+    @if (phase() === 'review' && verified() && context()) {
+      <section class="panel" data-testid="owner-review">
+        <h2>Xem lại phân công</h2>
+        <article class="diff">
+          <h3>Trước</h3>
+          <p>{{ describeOwner(context()?.owner) }}</p>
+          <h3>Sau</h3>
+          <p>{{ describeOwner(desired()) }}</p>
+        </article>
+        <label class="ack"
+          ><input
+            type="checkbox"
+            [(ngModel)]="acknowledged"
+            [disabled]="busy() || loading() || !verified()"
+          />Tôi đã xem lại thay đổi phân công.</label
+        >
+        <div class="actions">
+          <button
+            class="button primary"
+            [disabled]="!acknowledged || busy() || loading() || !verified()"
+            (click)="save()"
+          >
+            Lưu phân công</button
+          ><button
+            class="button secondary"
+            [disabled]="busy()"
+            (click)="back()"
+          >
+            Quay lại chỉnh sửa
+          </button>
+        </div>
+      </section>
+    }
+    @if (phase() === 'unknown') {
+      <section class="panel" data-testid="owner-unknown" role="status">
+        <h2>Chưa xác định kết quả</h2>
+        <p>
+          Yêu cầu có thể đã được lưu. Biên nhận trống không chứng minh lưu thất
+          bại.
+        </p>
+        <div class="actions">
+          <button
+            class="button secondary"
+            [disabled]="busy() || loading()"
+            (click)="recover()"
+          >
+            Kiểm tra biên nhận</button
+          ><button
+            class="button secondary"
+            [disabled]="busy() || loading() || !canReplay()"
+            (click)="recover(true)"
+          >
+            Gửi lại đúng yêu cầu này
+          </button>
+        </div>
+      </section>
+    }
+    @if (receipt(); as r) {
+      <section class="panel" data-testid="owner-saved" role="status">
+        <h2>Đã lưu phân công</h2>
+        <p>
+          Biên nhận lịch sử · {{ r.committedAt }} · phiên bản {{ r.revision }}
+        </p>
+        <p>
+          Biên nhận phản ánh thời điểm lưu. Mở chi tiết task để xem cấu hình
+          hiện tại.
+        </p>
+        <article class="diff">
+          <h3>Trước</h3>
+          <p>{{ describeOwner(r.before) }}</p>
+          <h3>Sau</h3>
+          <p>{{ describeOwner(r.after) }}</p>
+        </article>
+      </section>
+    }
+    <div class="actions">
+      <a class="button secondary" [routerLink]="detailLink()">Chi tiết task</a
+      ><button
+        class="button secondary"
+        [disabled]="busy() || loading() || phase() === 'unknown'"
+        (click)="load()"
+      >
+        Tải lại dữ liệu
+      </button>
+    </div>
+  </main>
+</div>

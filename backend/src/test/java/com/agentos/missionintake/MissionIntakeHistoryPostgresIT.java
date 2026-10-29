@@ -84,7 +84,7 @@ class MissionIntakeHistoryPostgresIT extends MissionIntakeHistoryTest {
                 + ".missions where organization_id=?",
             org);
         isolated.update(
-            "insert into tasks select * from " + originalSchema + ".tasks where organization_id=?",
+            "insert into tasks(id,organization_id,team_id,mission_id,title,status,pending_reason,waiting_since,resolver,created_at,updated_at,description,acceptance_criteria,priority,owner_agent_id,task_edit_revision) select id,organization_id,team_id,mission_id,title,status,pending_reason,waiting_since,resolver,created_at,updated_at,description,acceptance_criteria,priority,owner_agent_id,task_edit_revision from " + originalSchema + ".tasks where organization_id=?",
             org);
         isolated.update(
             "insert into mission_intake_receipts select * from "

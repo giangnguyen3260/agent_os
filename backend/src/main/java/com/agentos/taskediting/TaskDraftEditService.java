@@ -128,11 +128,12 @@ public class TaskDraftEditService {
           String fingerprint =
               hash(
                   Arrays.asList(
-                      "TASK_DRAFT_EDIT_SNAPSHOT_V1",
+                      "TASK_DRAFT_EDIT_SNAPSHOT_V2",
                       s,
                       values,
                       rs.getString("status"),
                       rs.getInt("task_edit_revision"),
+                      rs.getInt("task_owner_revision"),
                       rs.getObject("updated_at", OffsetDateTime.class).toInstant().toString(),
                       rs.getString("owner_agent_id"),
                       rs.getObject("created_at", OffsetDateTime.class).toInstant().toString(),

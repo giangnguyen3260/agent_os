@@ -524,6 +524,18 @@ public class TaskDraftEditIntegrationTest {
   }
 
   @Test
+  void ownerRevisionInvalidatesDraftEditAfterOwnerAbaWithUnchangedTimestamp() {
+    Context initial = context();
+    var timestamp = row("tasks", task).get("updated_at");
+    jdbc.update("update tasks set task_owner_revision=2 where id=?", task);
+    assertThat(row("tasks", task).get("updated_at")).isEqualTo(timestamp);
+    assertThat(context().fingerprint()).isNotEqualTo(initial.fingerprint());
+    assertThatThrownBy(() -> save(UUID.randomUUID(), command(initial, "Stale owner")))
+        .hasMessage("TASK_EDIT_CONFLICT");
+    assertThat(count("task_edit_events")).isZero();
+  }
+
+  @Test
   void fullFingerprintCoversOwnerDependenciesAndTimestampWithoutLeakingThem() throws Exception {
     Context initial = context();
     UUID owner = UUID.randomUUID(), dependency = UUID.randomUUID();
