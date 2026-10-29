@@ -586,39 +586,108 @@ test.describe('task owner history independent QC', () => {
     page: p,
   }, info) => {
     const {s, data} = await open(p, info);
+    await render(p, s, data);
+    const viewer = JSON.parse(
+      sql(
+        `SELECT row_to_json(a) FROM human_accounts a WHERE email='${email(info, 'admin')}';`,
+      ),
+    );
+    const workspace = JSON.parse(
+      sql(`SELECT row_to_json(o) FROM organizations o WHERE id='${s.org}';`),
+    );
+    const sessionPath = '/api/v1/auth/session',
+      workspacePath = `/api/v1/auth/workspaces/${s.org}`;
     const reads = [];
-    p.on('request', r => {
-      const path = new URL(r.url()).pathname;
-      if (
-        [
-          s.api,
-          '/api/v1/auth/session',
-          `/api/v1/auth/workspaces/${s.org}`,
-        ].includes(path)
-      )
-        reads.push(path);
-    });
-    for (const [page, action] of [
-      [0, () => focus(p)],
-      [
-        0,
-        () =>
-          p.evaluate(() =>
-            document.dispatchEvent(new Event('visibilitychange')),
-          ),
-      ],
-      [0, () => button(p, 'Tải lại lịch sử').click()],
-      [1, () => button(p, 'Trang sau').click()],
-    ]) {
-      reads.length = 0;
-      const r = await response(p, s, action, page);
-      expect(r.status()).toBe(200);
-      expect(reads).toEqual([
-        '/api/v1/auth/session',
-        `/api/v1/auth/workspaces/${s.org}`,
-        s.api,
-      ]);
-      await render(p, s, (await r.json()).data);
+    const observe = request => {
+      const path = new URL(request.url()).pathname;
+      if ([s.api, sessionPath, workspacePath].includes(path))
+        reads.push({path, request});
+    };
+    p.on('request', observe);
+    try {
+      for (const {name, page, action} of [
+        {name: 'focus', page: 0, action: () => focus(p)},
+        {
+          name: 'visible document',
+          page: 0,
+          action: () =>
+            p.evaluate(() =>
+              document.dispatchEvent(new Event('visibilitychange')),
+            ),
+        },
+        {
+          name: 'explicit reload',
+          page: 0,
+          action: () => button(p, 'Tải lại lịch sử').click(),
+        },
+        // runGuardsAndResolvers:'always' invokes authGuard.session() before the
+        // reused component's load() independently verifies session -> workspace.
+        {
+          name: 'guarded page navigation',
+          page: 1,
+          action: () => button(p, 'Trang sau').click(),
+        },
+      ]) {
+        const label = `${name} page=${page}`;
+        const sessions = page === 1 ? 2 : 1;
+        await test.step(label, async () => {
+          reads.length = 0;
+          const r = await response(p, s, action, page);
+          expect(r.status(), `${label}: history status`).toBe(200);
+          expect(
+            reads.map(x => x.path),
+            `${label}: exact fresh authority request order`,
+          ).toEqual([
+            ...Array(sessions).fill(sessionPath),
+            workspacePath,
+            s.api,
+          ]);
+          for (const read of reads.slice(0, sessions + 1)) {
+            expect(
+              read.request.method(),
+              `${label}: authority method ${read.path}`,
+            ).toBe('GET');
+            const actual = await read.request.response();
+            expect(
+              actual,
+              `${label}: authority delivered ${read.path}`,
+            ).not.toBeNull();
+            expect(
+              await actual.finished(),
+              `${label}: authority body completed ${read.path}`,
+            ).toBeNull();
+            expect(
+              actual.status(),
+              `${label}: authority status ${read.path}`,
+            ).toBe(200);
+            const raw = (await actual.json()).data;
+            if (read.path === sessionPath) {
+              exact(raw, 'id email displayName');
+              expect(
+                raw,
+                `${label}: exact current authority body ${read.path}`,
+              ).toEqual({
+                id: viewer.id,
+                email: viewer.email,
+                displayName: viewer.display_name,
+              });
+            } else {
+              exact(raw, 'id name role');
+              expect(
+                raw,
+                `${label}: exact current authority body ${read.path}`,
+              ).toEqual({
+                id: s.org,
+                name: workspace.name,
+                role: 'ADMIN',
+              });
+            }
+          }
+          await render(p, s, (await r.json()).data);
+        });
+      }
+    } finally {
+      p.off('request', observe);
     }
     const storage = await p.evaluate(() =>
       JSON.stringify({local: {...localStorage}, session: {...sessionStorage}}),
