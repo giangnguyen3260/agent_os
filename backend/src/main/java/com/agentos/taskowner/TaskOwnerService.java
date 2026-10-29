@@ -270,38 +270,58 @@ public class TaskOwnerService {
                   + " join missions m on m.organization_id=t.organization_id"
                   + " and m.team_id=t.team_id and m.id=t.mission_id"
                   + " where t.organization_id=? and t.team_id=? and t.mission_id=? and t.id=?",
-              (rs, n) -> List.of(
-                  TaskOwnerHistory.text(rs.getString(1), 255, false),
-                  TaskOwnerHistory.text(rs.getString(2), 255, false),
-                  TaskOwnerHistory.text(rs.getString(3), 255, true)),
-              org, team, mission, task);
-      String where = " where e.organization_id=? and e.team_id=? and e.mission_id=? and e.task_id=?";
-      long total = jdbc.queryForObject(
-          "select count(*) from task_owner_events e" + where,
-          Long.class, org, team, mission, task);
+              (rs, n) ->
+                  List.of(
+                      TaskOwnerHistory.text(rs.getString(1), 255, false),
+                      TaskOwnerHistory.text(rs.getString(2), 255, false),
+                      TaskOwnerHistory.text(rs.getString(3), 255, true)),
+              org,
+              team,
+              mission,
+              task);
+      String where =
+          " where e.organization_id=? and e.team_id=? and e.mission_id=? and e.task_id=?";
+      long total =
+          jdbc.queryForObject(
+              "select count(*) from task_owner_events e" + where,
+              Long.class,
+              org,
+              team,
+              mission,
+              task);
       if (total < 0 || total > 9007199254740991L) throw TaskOwnerHistory.unavailable();
-      var items = jdbc.query(
-          "select e.id,e.revision,e.created_at,a.display_name,e.before_owner_agent_id,"
-              + "e.after_owner_agent_id,e.before_json,e.after_json from task_owner_events e"
-              + " left join organization_memberships h on h.organization_id=e.organization_id"
-              + " and h.account_id=e.actor_id left join human_accounts a on a.id=h.account_id"
-              + where + " order by e.revision desc limit 20 offset ?",
-          (rs, n) -> {
-            UUID before = rs.getObject(5, UUID.class), after = rs.getObject(6, UUID.class);
-            if (java.util.Objects.equals(before, after)) throw TaskOwnerHistory.unavailable();
-            int revision = rs.getInt(2);
-            var time = rs.getObject(3, OffsetDateTime.class);
-            if (revision < 1 || time == null) throw TaskOwnerHistory.unavailable();
-            String committedAt = time.toInstant().toString();
-            if (!committedAt.matches("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,9})?Z"))
-              throw TaskOwnerHistory.unavailable();
-            String actorName = rs.getString(4);
-            return new TaskOwnerDtos.HistoryItem(
-                TaskOwnerHistory.id(rs.getObject(1, UUID.class)), revision, committedAt,
-                actorName == null ? null : TaskOwnerHistory.text(actorName, 255, false),
-                TaskOwnerHistory.owner(rs.getString(7), before, false),
-                TaskOwnerHistory.owner(rs.getString(8), after, true));
-          }, org, team, mission, task, page * 20);
+      var items =
+          jdbc.query(
+              "select e.id,e.revision,e.created_at,a.display_name,e.before_owner_agent_id,"
+                  + "e.after_owner_agent_id,e.before_json,e.after_json from task_owner_events e"
+                  + " left join organization_memberships h on h.organization_id=e.organization_id"
+                  + " and h.account_id=e.actor_id left join human_accounts a on a.id=h.account_id"
+                  + where
+                  + " order by e.revision desc limit 20 offset ?",
+              (rs, n) -> {
+                UUID before = rs.getObject(5, UUID.class), after = rs.getObject(6, UUID.class);
+                if (java.util.Objects.equals(before, after)) throw TaskOwnerHistory.unavailable();
+                int revision = rs.getInt(2);
+                var time = rs.getObject(3, OffsetDateTime.class);
+                if (revision < 1 || time == null) throw TaskOwnerHistory.unavailable();
+                String committedAt = time.toInstant().toString();
+                if (!committedAt.matches(
+                    "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,9})?Z"))
+                  throw TaskOwnerHistory.unavailable();
+                String actorName = rs.getString(4);
+                return new TaskOwnerDtos.HistoryItem(
+                    TaskOwnerHistory.id(rs.getObject(1, UUID.class)),
+                    revision,
+                    committedAt,
+                    actorName == null ? null : TaskOwnerHistory.text(actorName, 255, false),
+                    TaskOwnerHistory.owner(rs.getString(7), before, false),
+                    TaskOwnerHistory.owner(rs.getString(8), after, true));
+              },
+              org,
+              team,
+              mission,
+              task,
+              page * 20);
       if (items.size() != Math.min(20L, Math.max(total - page * 20L, 0L)))
         throw TaskOwnerHistory.unavailable();
       var ids = new java.util.HashSet<UUID>();
@@ -312,8 +332,17 @@ public class TaskOwnerService {
         previous = item.revision();
       }
       return new TaskOwnerDtos.History(
-          org, team, mission, task, names.get(0), names.get(1), names.get(2),
-          page, 20, total, List.copyOf(items));
+          org,
+          team,
+          mission,
+          task,
+          names.get(0),
+          names.get(1),
+          names.get(2),
+          page,
+          20,
+          total,
+          List.copyOf(items));
     } catch (RuntimeException ex) {
       throw TaskOwnerHistory.unavailable();
     }

@@ -135,8 +135,15 @@ public class TaskOwnerHistoryTest {
   }
 
   String url() {
-    return "/api/v1/organizations/" + org + "/teams/" + team + "/missions/" + mission
-        + "/tasks/" + task + "/draft-owner/history";
+    return "/api/v1/organizations/"
+        + org
+        + "/teams/"
+        + team
+        + "/missions/"
+        + mission
+        + "/tasks/"
+        + task
+        + "/draft-owner/history";
   }
 
   RequestPostProcessor auth() {
@@ -149,34 +156,58 @@ public class TaskOwnerHistoryTest {
 
   TaskOwnerDtos.Receipt commit(UUID target) throws Exception {
     var command = command(context(), target);
-    var reply = mvc.perform(post(url().replace("/history", ""))
-        .with(auth()).with(csrf()).contentType("application/json")
-        .header("Idempotency-Key", UUID.randomUUID().toString())
-        .content(json.writeValueAsString(command)))
-        .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+    var reply =
+        mvc.perform(
+                post(url().replace("/history", ""))
+                    .with(auth())
+                    .with(csrf())
+                    .contentType("application/json")
+                    .header("Idempotency-Key", UUID.randomUUID().toString())
+                    .content(json.writeValueAsString(command)))
+            .andExpect(status().isCreated())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
     return json.treeToValue(json.readTree(reply).get("data"), TaskOwnerDtos.Receipt.class);
   }
 
   List<List<Map<String, Object>>> business() {
     var rows = new ArrayList<List<Map<String, Object>>>();
-    for (String table : List.of("organizations", "human_accounts", "organization_memberships",
-        "teams", "missions", "tasks", "agents", "task_dependencies", "task_owner_events",
-        "task_owner_receipts", "audit_events", "task_edit_events", "task_edit_receipts",
-        "task_create_receipts")) {
+    for (String table :
+        List.of(
+            "organizations",
+            "human_accounts",
+            "organization_memberships",
+            "teams",
+            "missions",
+            "tasks",
+            "agents",
+            "task_dependencies",
+            "task_owner_events",
+            "task_owner_receipts",
+            "audit_events",
+            "task_edit_events",
+            "task_edit_receipts",
+            "task_create_receipts")) {
       rows.add(jdbc.queryForList("select * from " + table + " order by 1,2"));
     }
     return rows;
   }
 
   @Test
-  void realCommandsProducePagedImmutableHistoryWithActualTotalsAndExactPublicKeys() throws Exception {
+  void realCommandsProducePagedImmutableHistoryWithActualTotalsAndExactPublicKeys()
+      throws Exception {
     UUID target = agent("Recorded name");
     var receipts = new ArrayList<TaskOwnerDtos.Receipt>();
     for (int i = 0; i < 23; i++) receipts.add(commit(i % 2 == 0 ? target : null));
-    jdbc.update("update agents set name='Changed',status='SUSPENDED',team_id=null where id=?", target);
+    jdbc.update(
+        "update agents set name='Changed',status='SUSPENDED',team_id=null where id=?", target);
     jdbc.update("update teams set status='ARCHIVED' where id=?", team);
-    jdbc.update("update missions set status='COMPLETED',task_intake_paused=true where id=?", mission);
-    jdbc.update("update tasks set status='COMPLETED',task_owner_revision=2147483647,title='' where id=?", task);
+    jdbc.update(
+        "update missions set status='COMPLETED',task_intake_paused=true where id=?", mission);
+    jdbc.update(
+        "update tasks set status='COMPLETED',task_owner_revision=2147483647,title='' where id=?",
+        task);
     var before = business();
     var first = history(0);
     var second = history(1);
@@ -199,13 +230,32 @@ public class TaskOwnerHistoryTest {
     }
     assertThat(history(100000).total()).isEqualTo(23);
     assertThat(history(100000).items()).isEmpty();
-    var body = json.readTree(mvc.perform(get(url()).with(auth())).andExpect(status().isOk())
-        .andReturn().getResponse().getContentAsString()).get("data");
-    assertThat(keys(body)).containsExactlyInAnyOrder("organizationId", "teamId", "missionId", "taskId",
-        "teamName", "missionTitle", "taskTitle", "page", "pageSize", "total", "items");
-    assertThat(keys(body.get("items").get(0))).containsExactlyInAnyOrder(
-        "eventId", "revision", "committedAt", "actorName", "before", "after");
-    assertThat(keys(body.get("items").get(0).get("after"))).containsExactlyInAnyOrder("state", "agent");
+    var body =
+        json.readTree(
+                mvc.perform(get(url()).with(auth()))
+                    .andExpect(status().isOk())
+                    .andReturn()
+                    .getResponse()
+                    .getContentAsString())
+            .get("data");
+    assertThat(keys(body))
+        .containsExactlyInAnyOrder(
+            "organizationId",
+            "teamId",
+            "missionId",
+            "taskId",
+            "teamName",
+            "missionTitle",
+            "taskTitle",
+            "page",
+            "pageSize",
+            "total",
+            "items");
+    assertThat(keys(body.get("items").get(0)))
+        .containsExactlyInAnyOrder(
+            "eventId", "revision", "committedAt", "actorName", "before", "after");
+    assertThat(keys(body.get("items").get(0).get("after")))
+        .containsExactlyInAnyOrder("state", "agent");
     assertThat(keys(body.get("items").get(0).get("after").get("agent")))
         .containsExactlyInAnyOrder("id", "name", "level", "status");
     assertThat(business()).isEqualTo(before);
@@ -222,9 +272,17 @@ public class TaskOwnerHistoryTest {
     var before = business();
     assertThat(history(0).total()).isZero();
     assertThat(history(0).items()).isEmpty();
-    var annotation = TaskOwnerService.class.getMethod("history", UUID.class, UUID.class,
-        UUID.class, UUID.class, HumanIdentity.class, int.class)
-        .getAnnotation(org.springframework.transaction.annotation.Transactional.class);
+    var annotation =
+        TaskOwnerService.class
+            .getMethod(
+                "history",
+                UUID.class,
+                UUID.class,
+                UUID.class,
+                UUID.class,
+                HumanIdentity.class,
+                int.class)
+            .getAnnotation(org.springframework.transaction.annotation.Transactional.class);
     assertThat(annotation.readOnly()).isTrue();
     assertThat(annotation.isolation()).isEqualTo(Isolation.REPEATABLE_READ);
     assertThat(business()).isEqualTo(before);
@@ -234,22 +292,44 @@ public class TaskOwnerHistoryTest {
   void actorIsCurrentSameOrganizationMemberWithExplicitNullAfterRemoval() throws Exception {
     commit(agent("Historical"));
     UUID reader = UUID.randomUUID();
-    jdbc.update("insert into human_accounts(id,email,display_name,password_hash) values (?,?,'Reader','unused')",
-        reader, reader + "@example.test");
-    jdbc.update("insert into organization_memberships(account_id,organization_id,role) values (?,?,'ADMIN')", reader, org);
+    jdbc.update(
+        "insert into human_accounts(id,email,display_name,password_hash) values (?,?,'Reader','unused')",
+        reader,
+        reader + "@example.test");
+    jdbc.update(
+        "insert into organization_memberships(account_id,organization_id,role) values (?,?,'ADMIN')",
+        reader,
+        org);
     human = new HumanIdentity(reader, reader + "@example.test", "Reader");
     jdbc.update("update human_accounts set display_name='Renamed',enabled=false where id=?", actor);
-    jdbc.update("update organization_memberships set role='MEMBER' where organization_id=? and account_id=?", org, actor);
+    jdbc.update(
+        "update organization_memberships set role='MEMBER' where organization_id=? and account_id=?",
+        org,
+        actor);
     assertThat(history(0).items().get(0).actorName()).isEqualTo("Renamed");
     jdbc.update("update human_accounts set display_name=? where id=?", "Unsafe\nname", actor);
     assertThatThrownBy(() -> history(0)).hasMessage("TASK_OWNER_HISTORY_UNAVAILABLE");
-    jdbc.update("delete from organization_memberships where organization_id=? and account_id=?", org, actor);
+    jdbc.update(
+        "delete from organization_memberships where organization_id=? and account_id=?",
+        org,
+        actor);
     UUID elsewhere = UUID.randomUUID();
-    jdbc.update("insert into organizations(id,name,slug,status,created_at,updated_at) values (?,'Elsewhere',?,'ACTIVE',current_timestamp,current_timestamp)", elsewhere, elsewhere.toString());
-    jdbc.update("insert into organization_memberships(account_id,organization_id,role) values (?,?,'ADMIN')", actor, elsewhere);
+    jdbc.update(
+        "insert into organizations(id,name,slug,status,created_at,updated_at) values (?,'Elsewhere',?,'ACTIVE',current_timestamp,current_timestamp)",
+        elsewhere,
+        elsewhere.toString());
+    jdbc.update(
+        "insert into organization_memberships(account_id,organization_id,role) values (?,?,'ADMIN')",
+        actor,
+        elsewhere);
     assertThat(history(0).items().get(0).actorName()).isNull();
     var before = business();
-    var body = mvc.perform(get(url()).with(auth())).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+    var body =
+        mvc.perform(get(url()).with(auth()))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
     var item = json.readTree(body).path("data").path("items").get(0);
     assertThat(item.has("actorName")).isTrue();
     assertThat(item.get("actorName").isNull()).isTrue();
@@ -274,48 +354,73 @@ public class TaskOwnerHistoryTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"", "00", "01", "-1", "+1", " 1", "1 ", "1.0", "1e1", "100001", "999999999999"})
+  @ValueSource(
+      strings = {"", "00", "01", "-1", "+1", " 1", "1 ", "1.0", "1e1", "100001", "999999999999"})
   void strictPagesRejectWithoutWrites(String page) throws Exception {
     var before = business();
-    mvc.perform(get(url()).with(auth()).queryParam("page", page)).andExpect(status().isBadRequest());
+    mvc.perform(get(url()).with(auth()).queryParam("page", page))
+        .andExpect(status().isBadRequest());
     assertThat(business()).isEqualTo(before);
   }
 
   @Test
   void strictBodyQueryScopeAndAuthorityBeforeParsing() throws Exception {
     var before = business();
-    mvc.perform(get(url()).with(auth()).queryParam("page", "0", "1")).andExpect(status().isBadRequest());
-    mvc.perform(get(url()).with(auth()).queryParam("query", "x")).andExpect(status().isBadRequest());
+    mvc.perform(get(url()).with(auth()).queryParam("page", "0", "1"))
+        .andExpect(status().isBadRequest());
+    mvc.perform(get(url()).with(auth()).queryParam("query", "x"))
+        .andExpect(status().isBadRequest());
     mvc.perform(get(url()).with(auth()).content("{}")).andExpect(status().isBadRequest());
-    mvc.perform(get(url()).with(auth()).header("Transfer-Encoding", "chunked")).andExpect(status().isBadRequest());
+    mvc.perform(get(url()).with(auth()).header("Transfer-Encoding", "chunked"))
+        .andExpect(status().isBadRequest());
     for (UUID id : List.of(team, mission, task)) {
       mvc.perform(get(url().replace(id.toString(), UUID.randomUUID().toString())).with(auth()))
           .andExpect(status().isNotFound());
     }
     mvc.perform(get(url().replace(task.toString(), task.toString().toUpperCase())).with(auth()))
         .andExpect(status().isBadRequest());
-    mvc.perform(get(url().replace(org.toString(), UUID.randomUUID().toString())).with(auth())
-        .queryParam("page", "bad").content("{}")).andExpect(status().isForbidden());
+    mvc.perform(
+            get(url().replace(org.toString(), UUID.randomUUID().toString()))
+                .with(auth())
+                .queryParam("page", "bad")
+                .content("{}"))
+        .andExpect(status().isForbidden());
     assertThat(business()).isEqualTo(before);
-    jdbc.update("update organization_memberships set role='MEMBER' where organization_id=? and account_id=?", org, actor);
+    jdbc.update(
+        "update organization_memberships set role='MEMBER' where organization_id=? and account_id=?",
+        org,
+        actor);
     before = business();
-    mvc.perform(get(url().replace(task.toString(), "bad")).with(auth()).queryParam("page", "bad").content("{}"))
+    mvc.perform(
+            get(url().replace(task.toString(), "bad"))
+                .with(auth())
+                .queryParam("page", "bad")
+                .content("{}"))
         .andExpect(status().isForbidden());
     assertThatThrownBy(() -> history(0)).hasMessage("FORBIDDEN");
     assertThat(business()).isEqualTo(before);
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"{\"state\":\"UNASSIGNED\",\"agent\":null}",
-      "{\"state\":\"ASSIGNED\",\"agent\":null}",
-      "{\"state\":\"UNAVAILABLE\",\"agent\":null}",
-      "{\"state\":\"ASSIGNED\",\"agent\":null,\"extra\":1}",
-      "{\"state\":\"UNASSIGNED\",\"state\":\"ASSIGNED\",\"agent\":null}",
-      "{\"state\":1,\"agent\":null}", "{}", "[]", "null", "{} {}"})
-  void selectedCorruptionFailsSafelyButOffPageDoesNotHideValidRows(String corrupt) throws Exception {
+  @ValueSource(
+      strings = {
+        "{\"state\":\"UNASSIGNED\",\"agent\":null}",
+        "{\"state\":\"ASSIGNED\",\"agent\":null}",
+        "{\"state\":\"UNAVAILABLE\",\"agent\":null}",
+        "{\"state\":\"ASSIGNED\",\"agent\":null,\"extra\":1}",
+        "{\"state\":\"UNASSIGNED\",\"state\":\"ASSIGNED\",\"agent\":null}",
+        "{\"state\":1,\"agent\":null}",
+        "{}",
+        "[]",
+        "null",
+        "{} {}"
+      })
+  void selectedCorruptionFailsSafelyButOffPageDoesNotHideValidRows(String corrupt)
+      throws Exception {
     UUID target = agent("Recorded");
     for (int i = 0; i < 21; i++) commit(i % 2 == 0 ? target : null);
-    jdbc.update("update task_owner_events set after_json=? where task_id=? and revision=1", corrupt, task);
+    jdbc.update(
+        "update task_owner_events set after_json=? where task_id=? and revision=1", corrupt, task);
     var before = business();
     assertThat(history(0).items()).hasSize(20);
     assertThat(history(0).total()).isEqualTo(21);
@@ -331,9 +436,14 @@ public class TaskOwnerHistoryTest {
   void rawProvenanceAndCurrentNamesFailClosedWithoutReadingReceipts() throws Exception {
     UUID target = agent("Recorded");
     commit(target);
-    jdbc.update("update task_owner_receipts set original_response='broken',body_sha256=? where task_id=?", "b".repeat(64), task);
+    jdbc.update(
+        "update task_owner_receipts set original_response='broken',body_sha256=? where task_id=?",
+        "b".repeat(64),
+        task);
     assertThat(history(0).items()).hasSize(1);
-    jdbc.update("update task_owner_events set before_owner_agent_id=after_owner_agent_id where task_id=?", task);
+    jdbc.update(
+        "update task_owner_events set before_owner_agent_id=after_owner_agent_id where task_id=?",
+        task);
     var before = business();
     assertThatThrownBy(() -> history(0)).hasMessage("TASK_OWNER_HISTORY_UNAVAILABLE");
     assertThat(business()).isEqualTo(before);
@@ -345,32 +455,55 @@ public class TaskOwnerHistoryTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"ID", "RAW", "NAME", "LEVEL", "STATUS", "TYPE", "MISSING", "EXTRA", "DUPLICATE", "TRAILING", "SURROGATE", "C1", "SEPARATOR"})
+  @ValueSource(
+      strings = {
+        "ID",
+        "RAW",
+        "NAME",
+        "LEVEL",
+        "STATUS",
+        "TYPE",
+        "MISSING",
+        "EXTRA",
+        "DUPLICATE",
+        "TRAILING",
+        "SURROGATE",
+        "C1",
+        "SEPARATOR"
+      })
   void strictSelectedAgentJsonNeverCoercesOrExposesCorruption(String kind) throws Exception {
     UUID target = agent("Recorded");
     commit(target);
-    String source = jdbc.queryForObject("select after_json from task_owner_events where task_id=?", String.class, task);
-    String corrupt = switch (kind) {
-      case "ID" -> source.replace(target.toString(), "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA");
-      case "RAW" -> source.replace(target.toString(), UUID.randomUUID().toString());
-      case "NAME" -> source.replace("Recorded", " ");
-      case "LEVEL" -> source.replace("MID", "x".repeat(51));
-      case "STATUS" -> source.replace("DRAFT", "SUSPENDED");
-      case "TYPE" -> source.replace("\"Recorded\"", "12");
-      case "MISSING" -> source.replace("\"name\":\"Recorded\",", "");
-      case "EXTRA" -> source.replace("\"name\":", "\"private\":true,\"name\":");
-      case "DUPLICATE" -> source.replace("\"name\":", "\"name\":\"other\",\"name\":");
-      case "TRAILING" -> source + " {}";
-      case "SURROGATE" -> source.replace("Recorded", "\\uD800");
-      case "C1" -> source.replace("Recorded", "\\u0085");
-      default -> source.replace("Recorded", "\\u2028");
-    };
+    String source =
+        jdbc.queryForObject(
+            "select after_json from task_owner_events where task_id=?", String.class, task);
+    String corrupt =
+        switch (kind) {
+          case "ID" -> source.replace(target.toString(), "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA");
+          case "RAW" -> source.replace(target.toString(), UUID.randomUUID().toString());
+          case "NAME" -> source.replace("Recorded", " ");
+          case "LEVEL" -> source.replace("MID", "x".repeat(51));
+          case "STATUS" -> source.replace("DRAFT", "SUSPENDED");
+          case "TYPE" -> source.replace("\"Recorded\"", "12");
+          case "MISSING" -> source.replace("\"name\":\"Recorded\",", "");
+          case "EXTRA" -> source.replace("\"name\":", "\"private\":true,\"name\":");
+          case "DUPLICATE" -> source.replace("\"name\":", "\"name\":\"other\",\"name\":");
+          case "TRAILING" -> source + " {}";
+          case "SURROGATE" -> source.replace("Recorded", "\\uD800");
+          case "C1" -> source.replace("Recorded", "\\u0085");
+          default -> source.replace("Recorded", "\\u2028");
+        };
     jdbc.update("update task_owner_events set after_json=? where task_id=?", corrupt, task);
     var before = business();
-    String reply = mvc.perform(get(url()).with(auth())).andExpect(status().isInternalServerError())
-        .andExpect(jsonPath("$.error.code").value("TASK_OWNER_HISTORY_UNAVAILABLE"))
-        .andReturn().getResponse().getContentAsString();
-    assertThat(reply).doesNotContain("Recorded", target.toString(), "after_json", "SELECT", "private");
+    String reply =
+        mvc.perform(get(url()).with(auth()))
+            .andExpect(status().isInternalServerError())
+            .andExpect(jsonPath("$.error.code").value("TASK_OWNER_HISTORY_UNAVAILABLE"))
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    assertThat(reply)
+        .doesNotContain("Recorded", target.toString(), "after_json", "SELECT", "private");
     assertThat(business()).isEqualTo(before);
   }
 
@@ -380,7 +513,8 @@ public class TaskOwnerHistoryTest {
     mvc.perform(get(url()).queryParam("page", "bad").content("{}"))
         .andExpect(status().isUnauthorized());
     assertThat(business()).isEqualTo(before);
-    jdbc.update("update human_accounts set credential_version=credential_version+1 where id=?", actor);
+    jdbc.update(
+        "update human_accounts set credential_version=credential_version+1 where id=?", actor);
     before = business();
     mvc.perform(get(url()).with(auth()).queryParam("page", "bad"))
         .andExpect(status().isUnauthorized());
@@ -394,9 +528,19 @@ public class TaskOwnerHistoryTest {
 
   @Test
   void lifecycleAndIntakeNeverGateHistory() {
-    for (String state : List.of("DRAFT", "READY", "RUNNING", "WAITING", "BLOCKED",
-        "IN_REVIEW", "COMPLETED", "FAILED", "CANCELLED")) {
-      jdbc.update("update tasks set status=?,task_owner_revision=2147483647 where id=?", state, task);
+    for (String state :
+        List.of(
+            "DRAFT",
+            "READY",
+            "RUNNING",
+            "WAITING",
+            "BLOCKED",
+            "IN_REVIEW",
+            "COMPLETED",
+            "FAILED",
+            "CANCELLED")) {
+      jdbc.update(
+          "update tasks set status=?,task_owner_revision=2147483647 where id=?", state, task);
       jdbc.update("update missions set task_intake_paused=true where id=?", mission);
       var before = business();
       assertThat(history(0).total()).isZero();
@@ -410,17 +554,22 @@ public class TaskOwnerHistoryTest {
     var own = commit(target);
     UUID original = task;
     task = UUID.randomUUID();
-    jdbc.update("insert into tasks(id,organization_id,team_id,mission_id,title,status) values (?,?,?,?,'Other task','DRAFT')",
-        task, org, team, mission);
+    jdbc.update(
+        "insert into tasks(id,organization_id,team_id,mission_id,title,status) values (?,?,?,?,'Other task','DRAFT')",
+        task,
+        org,
+        team,
+        mission);
     var other = commit(target);
-    assertThat(history(0).items()).extracting(TaskOwnerDtos.HistoryItem::eventId)
+    assertThat(history(0).items())
+        .extracting(TaskOwnerDtos.HistoryItem::eventId)
         .containsExactly(other.eventId());
     task = original;
     var before = business();
     assertThat(history(0).total()).isEqualTo(1);
-    assertThat(history(0).items()).extracting(TaskOwnerDtos.HistoryItem::eventId)
+    assertThat(history(0).items())
+        .extracting(TaskOwnerDtos.HistoryItem::eventId)
         .containsExactly(own.eventId());
     assertThat(business()).isEqualTo(before);
   }
-
 }

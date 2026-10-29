@@ -12,3 +12,6 @@ Independent [cases](TASK_OWNER_HISTORY_TEST_CASES.md) and [review](TASK_OWNER_HI
 
 
 Before C1, independent QC found two native-oracle gaps. Main included account/membership rows and xmin/ctid in business snapshots, retained raw error bytes privately, required strict safe JSON envelopes/codes/messages/details, and checked known private markers. Offline negative error counterexamples now reject HTML/private JSON and invalid-calendar fallback timestamps; no HTTP/SQL or successful business DTO was mocked in that check. Snapshot evidence concerns committed row values/tuple identities, not forensic observation of rolled-back SQL attempts; native PG read-only/isolation tests and source SELECT-only review supply the transaction boundary. See independent review dispositions.
+
+
+C1a5897c0/Quality40906071322/job123561051452 failed the required Google Java formatting gate before runtime acceptance. Applied canonical CI format patch from artifact12912465272, ZIPsha660ffdb71e1ccdcc32efc8357724fc81db47ce418719574b0f56fb6da518c0b6 matching REST/download. C2 also makes the native API client's Accept:application/json explicit, retaining strict rejection of HTML/private error bodies. C2 compile/native/browser and visual results remain pending.

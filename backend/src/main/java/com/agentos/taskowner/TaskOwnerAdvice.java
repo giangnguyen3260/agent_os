@@ -24,7 +24,9 @@ public class TaskOwnerAdvice {
       Exception failure, jakarta.servlet.http.HttpServletRequest request) {
     if (request.getRequestURI().endsWith("/draft-owner/history"))
       return ResponseEntity.internalServerError()
-          .body(ApiErrorResponse.of("TASK_OWNER_HISTORY_UNAVAILABLE", "Saved history is unavailable"));
+          .body(
+              ApiErrorResponse.of(
+                  "TASK_OWNER_HISTORY_UNAVAILABLE", "Saved history is unavailable"));
     return ResponseEntity.internalServerError()
         .body(ApiErrorResponse.of("TASK_OWNER_UNAVAILABLE", "Saved configuration is unavailable"));
   }

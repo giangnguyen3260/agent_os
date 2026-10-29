@@ -57,7 +57,7 @@ class Client:
 
     def request(self, path, body=None, headers=None):
         try:
-            response = self.opener.open(urllib.request.Request(BASE + path, data=body, headers=headers or {}), timeout=25)
+            response = self.opener.open(urllib.request.Request(BASE + path, data=body, headers={'Accept':'application/json',**(headers or {})}), timeout=25)
         except urllib.error.HTTPError as error:
             response = error
         with response:
@@ -237,7 +237,7 @@ def main():
     for query in ('page=-1','page=01','page=+0','page=1.0','page=1e0','page=100001','page=0&page=1','page=0&extra=1','query='):
         reject(lambda query=query:a.request(HISTORY+'?'+query),400)
     before=snapshot()
-    try: response=a.opener.open(urllib.request.Request(BASE+HISTORY,data=b'{}',method='GET'),timeout=25)
+    try: response=a.opener.open(urllib.request.Request(BASE+HISTORY,data=b'{}',headers={'Accept':'application/json'},method='GET'),timeout=25)
     except urllib.error.HTTPError as error: response=error
     with response:
         assert response.status==400
