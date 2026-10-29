@@ -29,10 +29,14 @@ import org.springframework.test.context.DynamicPropertySource;
  */
 class TaskOwnerPostgresIT extends TaskOwnerIntegrationTest {
   private static String requiredEnvironment(String name) {
-    String value=System.getenv(name);
-    if(value==null || value.isBlank()) value=System.getenv(name.replace("TASK_OWNER_TEST_","TASK_EDIT_TEST_"));
-    if(value==null || value.isBlank() || (name.endsWith("JDBC_URL") && !value.startsWith("jdbc:postgresql:")))
-      throw new IllegalStateException("Explicit native PostgreSQL test configuration required: "+name);
+    String value = System.getenv(name);
+    if (value == null || value.isBlank())
+      value = System.getenv(name.replace("TASK_OWNER_TEST_", "TASK_EDIT_TEST_"));
+    if (value == null
+        || value.isBlank()
+        || (name.endsWith("JDBC_URL") && !value.startsWith("jdbc:postgresql:")))
+      throw new IllegalStateException(
+          "Explicit native PostgreSQL test configuration required: " + name);
     return value;
   }
 
@@ -63,15 +67,15 @@ class TaskOwnerPostgresIT extends TaskOwnerIntegrationTest {
   @Test
   void differentCommandsOnSameSnapshotHaveExactlyOneWinner() throws Exception {
     var source = context();
-    var one=command(source,agent("One"));
-    var two=command(source,agent("Two"));
-    var results = race(() -> attempt(team,one), () -> attempt(team,two));
+    var one = command(source, agent("One"));
+    var two = command(source, agent("Two"));
+    var results = race(() -> attempt(team, one), () -> attempt(team, two));
     assertThat(results).containsExactlyInAnyOrder("SUCCESS", "TASK_OWNER_CONFLICT");
     assertThat(count("task_owner_events")).isEqualTo(1);
   }
 
   @org.junit.jupiter.params.ParameterizedTest
-  @org.junit.jupiter.params.provider.ValueSource(strings={"ROLE","DISABLED","CREDENTIAL"})
+  @org.junit.jupiter.params.provider.ValueSource(strings = {"ROLE", "DISABLED", "CREDENTIAL"})
   void authorityIsRecheckedAfterOrganizationWait(String revocation) throws Exception {
     Command command = command(context(), agent("Must not persist"));
     var executor = Executors.newSingleThreadExecutor();
@@ -82,14 +86,17 @@ class TaskOwnerPostgresIT extends TaskOwnerIntegrationTest {
           executor.submit(
               () -> service.update(org, team, mission, task, human, UUID.randomUUID(), command));
       awaitDatabaseWait();
-      String sql=switch(revocation) {
-        case "ROLE" -> "update organization_memberships set role='MEMBER' where organization_id=? and account_id=?";
-        case "DISABLED" -> "update human_accounts set enabled=false where id=?";
-        default -> "update human_accounts set credential_version=credential_version+1 where id=?";
-      };
-      try(var statement=holder.prepareStatement(sql)) {
-        statement.setObject(1,revocation.equals("ROLE")?org:actor);
-        if(revocation.equals("ROLE")) statement.setObject(2,actor);
+      String sql =
+          switch (revocation) {
+            case "ROLE" ->
+                "update organization_memberships set role='MEMBER' where organization_id=? and account_id=?";
+            case "DISABLED" -> "update human_accounts set enabled=false where id=?";
+            default ->
+                "update human_accounts set credential_version=credential_version+1 where id=?";
+          };
+      try (var statement = holder.prepareStatement(sql)) {
+        statement.setObject(1, revocation.equals("ROLE") ? org : actor);
+        if (revocation.equals("ROLE")) statement.setObject(2, actor);
         statement.executeUpdate();
       }
       holder.commit();
@@ -194,17 +201,54 @@ class TaskOwnerPostgresIT extends TaskOwnerIntegrationTest {
             org,
             team,
             mission);
-        UUID owner=UUID.randomUUID(), oldEvent=UUID.randomUUID(), oldKey=UUID.randomUUID();
-        isolated.update("insert into human_accounts(id,email,display_name,password_hash) values (?,?,'Migration actor','unused')",actor,actor+"@example.test");
-        isolated.update("insert into agents(id,organization_id,team_id,name,role,level,status,autonomy_level,created_at,updated_at) values (?,?,?,'Retained owner','Role','MID','DRAFT','SUPERVISED',current_timestamp,current_timestamp)",owner,org,team);
-        isolated.update("update tasks set owner_agent_id=?,task_edit_revision=7,description='Old description',acceptance_criteria='Old criteria',priority='HIGH' where id=?",owner,task);
-        isolated.update("insert into task_edit_events(id,organization_id,team_id,mission_id,task_id,revision,actor_id,created_at,before_json,after_json) values (?,?,?,?,?,7,?,current_timestamp,'{}','{}')",oldEvent,org,team,mission,task,actor);
-        isolated.update("insert into task_edit_receipts(organization_id,team_id,mission_id,task_id,actor_id,idempotency_key,event_id,body_sha256,original_response) values (?,?,?,?,?,?,?,?,?)",org,team,mission,task,actor,oldKey,oldEvent,"a".repeat(64),"retained edit receipt");
-        isolated.update("insert into task_create_receipts values (?,?,?,?,?)",org,actor,oldKey,"b".repeat(64),"retained creation receipt");
-        var oldReceipts=isolated.queryForList("select * from task_edit_receipts where organization_id=?",org);
-        var oldCreates=isolated.queryForList("select * from task_create_receipts where organization_id=?",org);
-        var oldEvents=isolated.queryForList("select * from task_edit_events where organization_id=?",org);
-        var oldOwner=isolated.queryForMap("select * from agents where id=?",owner);
+        UUID owner = UUID.randomUUID(), oldEvent = UUID.randomUUID(), oldKey = UUID.randomUUID();
+        isolated.update(
+            "insert into human_accounts(id,email,display_name,password_hash) values (?,?,'Migration actor','unused')",
+            actor,
+            actor + "@example.test");
+        isolated.update(
+            "insert into agents(id,organization_id,team_id,name,role,level,status,autonomy_level,created_at,updated_at) values (?,?,?,'Retained owner','Role','MID','DRAFT','SUPERVISED',current_timestamp,current_timestamp)",
+            owner,
+            org,
+            team);
+        isolated.update(
+            "update tasks set owner_agent_id=?,task_edit_revision=7,description='Old description',acceptance_criteria='Old criteria',priority='HIGH' where id=?",
+            owner,
+            task);
+        isolated.update(
+            "insert into task_edit_events(id,organization_id,team_id,mission_id,task_id,revision,actor_id,created_at,before_json,after_json) values (?,?,?,?,?,7,?,current_timestamp,'{}','{}')",
+            oldEvent,
+            org,
+            team,
+            mission,
+            task,
+            actor);
+        isolated.update(
+            "insert into task_edit_receipts(organization_id,team_id,mission_id,task_id,actor_id,idempotency_key,event_id,body_sha256,original_response) values (?,?,?,?,?,?,?,?,?)",
+            org,
+            team,
+            mission,
+            task,
+            actor,
+            oldKey,
+            oldEvent,
+            "a".repeat(64),
+            "retained edit receipt");
+        isolated.update(
+            "insert into task_create_receipts values (?,?,?,?,?)",
+            org,
+            actor,
+            oldKey,
+            "b".repeat(64),
+            "retained creation receipt");
+        var oldReceipts =
+            isolated.queryForList("select * from task_edit_receipts where organization_id=?", org);
+        var oldCreates =
+            isolated.queryForList(
+                "select * from task_create_receipts where organization_id=?", org);
+        var oldEvents =
+            isolated.queryForList("select * from task_edit_events where organization_id=?", org);
+        var oldOwner = isolated.queryForMap("select * from agents where id=?", owner);
         var before = isolated.queryForMap("select * from tasks where id=?", task);
         Flyway.configure()
             .dataSource(source)
@@ -219,10 +263,20 @@ class TaskOwnerPostgresIT extends TaskOwnerIntegrationTest {
         assertThatThrownBy(
                 () -> isolated.update("update tasks set task_owner_revision=-1 where id=?", task))
             .isInstanceOf(DataAccessException.class);
-        assertThat(isolated.queryForList("select * from task_edit_receipts where organization_id=?",org)).isEqualTo(oldReceipts);
-        assertThat(isolated.queryForList("select * from task_create_receipts where organization_id=?",org)).isEqualTo(oldCreates);
-        assertThat(isolated.queryForList("select * from task_edit_events where organization_id=?",org)).isEqualTo(oldEvents);
-        assertThat(isolated.queryForMap("select * from agents where id=?",owner)).isEqualTo(oldOwner);
+        assertThat(
+                isolated.queryForList(
+                    "select * from task_edit_receipts where organization_id=?", org))
+            .isEqualTo(oldReceipts);
+        assertThat(
+                isolated.queryForList(
+                    "select * from task_create_receipts where organization_id=?", org))
+            .isEqualTo(oldCreates);
+        assertThat(
+                isolated.queryForList(
+                    "select * from task_edit_events where organization_id=?", org))
+            .isEqualTo(oldEvents);
+        assertThat(isolated.queryForMap("select * from agents where id=?", owner))
+            .isEqualTo(oldOwner);
         assertThatThrownBy(
                 () ->
                     isolated.update(
@@ -236,24 +290,95 @@ class TaskOwnerPostgresIT extends TaskOwnerIntegrationTest {
                         UUID.randomUUID(),
                         actor))
             .isInstanceOf(DataAccessException.class);
-        assertThat(isolated.queryForObject("select count(*) from task_owner_events where organization_id=?", Long.class,org))
+        assertThat(
+                isolated.queryForObject(
+                    "select count(*) from task_owner_events where organization_id=?",
+                    Long.class,
+                    org))
             .isZero();
-        assertThat(isolated.queryForObject("select count(*) from task_owner_receipts where organization_id=?", Long.class,org))
+        assertThat(
+                isolated.queryForObject(
+                    "select count(*) from task_owner_receipts where organization_id=?",
+                    Long.class,
+                    org))
             .isZero();
-        UUID event=UUID.randomUUID();
-        String eventSql="insert into task_owner_events(id,organization_id,team_id,mission_id,task_id,revision,actor_id,created_at,before_json,after_json) values (?,?,?,?,?,?,?,current_timestamp,'{}','{}')";
-        assertThatThrownBy(()->isolated.update(eventSql,UUID.randomUUID(),org,team,mission,task,0,actor)).isInstanceOf(DataAccessException.class);
-        isolated.update(eventSql,event,org,team,mission,task,1,actor);
-        assertThatThrownBy(()->isolated.update(eventSql,UUID.randomUUID(),org,team,mission,task,1,actor)).isInstanceOf(DataAccessException.class);
-        assertThatThrownBy(()->isolated.update(eventSql,UUID.randomUUID(),org,UUID.randomUUID(),mission,task,2,actor)).isInstanceOf(DataAccessException.class);
-        String receiptSql="insert into task_owner_receipts(organization_id,team_id,mission_id,task_id,actor_id,idempotency_key,event_id,body_sha256,original_response,created_at) values (?,?,?,?,?,?,?,?,?,current_timestamp)";
-        assertThatThrownBy(()->isolated.update(receiptSql,org,team,mission,task,actor,UUID.randomUUID(),UUID.randomUUID(),"c".repeat(64),"{}")).isInstanceOf(DataAccessException.class);
-        isolated.update(receiptSql,org,team,mission,task,actor,oldKey,event,"c".repeat(64),"{}");
-        assertThatThrownBy(()->isolated.update(receiptSql,org,team,mission,task,actor,oldKey,event,"c".repeat(64),"{}")).isInstanceOf(DataAccessException.class);
-        UUID otherActor=UUID.randomUUID();
-        isolated.update("insert into human_accounts(id,email,display_name,password_hash) values (?,?,'Other','unused')",otherActor,otherActor+"@example.test");
-        assertThatThrownBy(()->isolated.update(receiptSql,org,team,mission,task,otherActor,UUID.randomUUID(),event,"c".repeat(64),"{}")).isInstanceOf(DataAccessException.class);
-
+        UUID event = UUID.randomUUID();
+        String eventSql =
+            "insert into task_owner_events(id,organization_id,team_id,mission_id,task_id,revision,actor_id,created_at,before_json,after_json) values (?,?,?,?,?,?,?,current_timestamp,'{}','{}')";
+        assertThatThrownBy(
+                () ->
+                    isolated.update(
+                        eventSql, UUID.randomUUID(), org, team, mission, task, 0, actor))
+            .isInstanceOf(DataAccessException.class);
+        isolated.update(eventSql, event, org, team, mission, task, 1, actor);
+        assertThatThrownBy(
+                () ->
+                    isolated.update(
+                        eventSql, UUID.randomUUID(), org, team, mission, task, 1, actor))
+            .isInstanceOf(DataAccessException.class);
+        assertThatThrownBy(
+                () ->
+                    isolated.update(
+                        eventSql,
+                        UUID.randomUUID(),
+                        org,
+                        UUID.randomUUID(),
+                        mission,
+                        task,
+                        2,
+                        actor))
+            .isInstanceOf(DataAccessException.class);
+        String receiptSql =
+            "insert into task_owner_receipts(organization_id,team_id,mission_id,task_id,actor_id,idempotency_key,event_id,body_sha256,original_response,created_at) values (?,?,?,?,?,?,?,?,?,current_timestamp)";
+        assertThatThrownBy(
+                () ->
+                    isolated.update(
+                        receiptSql,
+                        org,
+                        team,
+                        mission,
+                        task,
+                        actor,
+                        UUID.randomUUID(),
+                        UUID.randomUUID(),
+                        "c".repeat(64),
+                        "{}"))
+            .isInstanceOf(DataAccessException.class);
+        isolated.update(
+            receiptSql, org, team, mission, task, actor, oldKey, event, "c".repeat(64), "{}");
+        assertThatThrownBy(
+                () ->
+                    isolated.update(
+                        receiptSql,
+                        org,
+                        team,
+                        mission,
+                        task,
+                        actor,
+                        oldKey,
+                        event,
+                        "c".repeat(64),
+                        "{}"))
+            .isInstanceOf(DataAccessException.class);
+        UUID otherActor = UUID.randomUUID();
+        isolated.update(
+            "insert into human_accounts(id,email,display_name,password_hash) values (?,?,'Other','unused')",
+            otherActor,
+            otherActor + "@example.test");
+        assertThatThrownBy(
+                () ->
+                    isolated.update(
+                        receiptSql,
+                        org,
+                        team,
+                        mission,
+                        task,
+                        otherActor,
+                        UUID.randomUUID(),
+                        event,
+                        "c".repeat(64),
+                        "{}"))
+            .isInstanceOf(DataAccessException.class);
       }
     } finally {
       jdbc.execute("drop schema if exists " + schema + " cascade");
@@ -263,7 +388,11 @@ class TaskOwnerPostgresIT extends TaskOwnerIntegrationTest {
   private int holderPid;
 
   private void lockOrganization(Connection holder) throws Exception {
-    try(var st=holder.createStatement();var rs=st.executeQuery("select pg_backend_pid()")){rs.next();holderPid=rs.getInt(1);}
+    try (var st = holder.createStatement();
+        var rs = st.executeQuery("select pg_backend_pid()")) {
+      rs.next();
+      holderPid = rs.getInt(1);
+    }
     try (var statement =
         holder.prepareStatement("select id from organizations where id=? for update")) {
       statement.setObject(1, org);
@@ -277,7 +406,8 @@ class TaskOwnerPostgresIT extends TaskOwnerIntegrationTest {
       if (jdbc.queryForObject(
               "select count(*) from pg_stat_activity where datname=current_database() and"
                   + " pid<>pg_backend_pid() and wait_event_type='Lock' and ? = any(pg_blocking_pids(pid))",
-              Long.class,holderPid)
+              Long.class,
+              holderPid)
           > 0) return;
       Thread.sleep(20);
     }

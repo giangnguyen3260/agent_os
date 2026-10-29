@@ -1,14 +1,14 @@
 package com.agentos.taskowner;
 
 import com.agentos.auth.HumanIdentity;
-import com.agentos.taskowner.TaskOwnerDtos.Command;
-import com.agentos.taskowner.TaskOwnerDtos.Context;
-import com.agentos.taskowner.TaskOwnerDtos.Receipt;
-import com.agentos.taskowner.TaskOwnerDtos.Result;
 import com.agentos.taskowner.TaskOwnerDtos.Agent;
-import com.agentos.taskowner.TaskOwnerDtos.Owner;
 import com.agentos.taskowner.TaskOwnerDtos.Candidate;
 import com.agentos.taskowner.TaskOwnerDtos.Candidates;
+import com.agentos.taskowner.TaskOwnerDtos.Command;
+import com.agentos.taskowner.TaskOwnerDtos.Context;
+import com.agentos.taskowner.TaskOwnerDtos.Owner;
+import com.agentos.taskowner.TaskOwnerDtos.Receipt;
+import com.agentos.taskowner.TaskOwnerDtos.Result;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
@@ -53,9 +53,17 @@ public class TaskOwnerService {
       boolean paused,
       String fingerprint) {}
 
-  private record Stored(UUID eventId, String digest, String response, int revision,
-      OffsetDateTime eventTime, OffsetDateTime receiptTime, UUID rawBefore, UUID rawAfter,
-      String beforeJson, String afterJson) {}
+  private record Stored(
+      UUID eventId,
+      String digest,
+      String response,
+      int revision,
+      OffsetDateTime eventTime,
+      OffsetDateTime receiptTime,
+      UUID rawBefore,
+      UUID rawAfter,
+      String beforeJson,
+      String afterJson) {}
 
   private static TaskOwnerFailure failure(int status, String code) {
     return new TaskOwnerFailure(status, code);
@@ -117,7 +125,10 @@ public class TaskOwnerService {
         (rs, n) -> {
           UUID rawOwner = rs.getObject("owner_agent_id", UUID.class);
           Agent agent = agent(s, rawOwner);
-          Owner owner = new Owner(rawOwner == null ? "UNASSIGNED" : agent == null ? "UNAVAILABLE" : "ASSIGNED", agent);
+          Owner owner =
+              new Owner(
+                  rawOwner == null ? "UNASSIGNED" : agent == null ? "UNAVAILABLE" : "ASSIGNED",
+                  agent);
           var dependencies =
               jdbc.query(
                   "select dependency_task_id from task_dependencies where organization_id=? and"
@@ -134,8 +145,10 @@ public class TaskOwnerService {
                   Arrays.asList(
                       "TASK_OWNER_SNAPSHOT_V1",
                       s,
-                      rs.getString("title"), rs.getString("description"),
-                      rs.getString("acceptance_criteria"), rs.getString("priority"),
+                      rs.getString("title"),
+                      rs.getString("description"),
+                      rs.getString("acceptance_criteria"),
+                      rs.getString("priority"),
                       agentToken(s, rawOwner),
                       rs.getString("status"),
                       rs.getInt("task_edit_revision"),
@@ -154,11 +167,17 @@ public class TaskOwnerService {
                       rs.getBoolean("task_intake_paused"),
                       rs.getLong("task_intake_version"),
                       rs.getObject("team_updated_at", OffsetDateTime.class).toInstant().toString(),
-                      rs.getObject("mission_updated_at", OffsetDateTime.class).toInstant().toString(),
+                      rs.getObject("mission_updated_at", OffsetDateTime.class)
+                          .toInstant()
+                          .toString(),
                       rs.getObject("team_created_at", OffsetDateTime.class).toInstant().toString(),
-                      rs.getObject("mission_created_at", OffsetDateTime.class).toInstant().toString()));
+                      rs.getObject("mission_created_at", OffsetDateTime.class)
+                          .toInstant()
+                          .toString()));
           return new Snapshot(
-              safeStored(rs.getString("title"), 255, true), rawOwner, owner,
+              safeStored(rs.getString("title"), 255, true),
+              rawOwner,
+              owner,
               rs.getString("status"),
               rs.getInt("task_owner_revision"),
               safeStored(rs.getString("team_name"), 255, false),
@@ -237,66 +256,99 @@ public class TaskOwnerService {
   }
 
   private String safeStored(String value, int max, boolean blank) {
-    try { return TaskOwnerWire.text(value,max,blank); }
-    catch (TaskOwnerFailure ex) { throw failure(500,"TASK_OWNER_UNAVAILABLE"); }
+    try {
+      return TaskOwnerWire.text(value, max, blank);
+    } catch (TaskOwnerFailure ex) {
+      throw failure(500, "TASK_OWNER_UNAVAILABLE");
+    }
   }
 
   private Candidate candidateRow(Scope scope, java.sql.ResultSet rs) throws java.sql.SQLException {
-    UUID id = rs.getObject("id",UUID.class);
-    String name = safeStored(rs.getString("name"),255,false);
-    String level = safeStored(rs.getString("level"),50,false);
-    String status = safeStored(rs.getString("status"),50,false);
-    String fp = hash(List.of("TASK_OWNER_CANDIDATE_V1",scope.organizationId(),scope.teamId(),id,name,level,status,
-        rs.getObject("updated_at",OffsetDateTime.class).toInstant().toString()));
-    return new Candidate(id,name,level,status,fp);
+    UUID id = rs.getObject("id", UUID.class);
+    String name = safeStored(rs.getString("name"), 255, false);
+    String level = safeStored(rs.getString("level"), 50, false);
+    String status = safeStored(rs.getString("status"), 50, false);
+    String fp =
+        hash(
+            List.of(
+                "TASK_OWNER_CANDIDATE_V1",
+                scope.organizationId(),
+                scope.teamId(),
+                id,
+                name,
+                level,
+                status,
+                rs.getObject("updated_at", OffsetDateTime.class).toInstant().toString()));
+    return new Candidate(id, name, level, status, fp);
   }
 
   private Candidate scopedCandidate(Scope scope, UUID id) {
-    if (id==null) return null;
-    var rows = jdbc.query("select id,name,level,status,updated_at from agents where organization_id=? and team_id=? and id=?",
-        (rs,n)->candidateRow(scope,rs),scope.organizationId(),scope.teamId(),id);
-    return rows.isEmpty()?null:rows.get(0);
+    if (id == null) return null;
+    var rows =
+        jdbc.query(
+            "select id,name,level,status,updated_at from agents where organization_id=? and team_id=? and id=?",
+            (rs, n) -> candidateRow(scope, rs),
+            scope.organizationId(),
+            scope.teamId(),
+            id);
+    return rows.isEmpty() ? null : rows.get(0);
   }
 
   private Agent agent(Scope scope, UUID id) {
-    Candidate c = scopedCandidate(scope,id);
-    return c==null?null:new Agent(c.id(),c.name(),c.level(),c.status());
+    Candidate c = scopedCandidate(scope, id);
+    return c == null ? null : new Agent(c.id(), c.name(), c.level(), c.status());
   }
 
   private String agentToken(Scope scope, UUID id) {
-    Candidate c = scopedCandidate(scope,id);
-    return c==null?null:c.fingerprint();
+    Candidate c = scopedCandidate(scope, id);
+    return c == null ? null : c.fingerprint();
   }
 
   private Candidate eligible(Scope scope, UUID id) {
-    Candidate c = scopedCandidate(scope,id);
-    if (c==null) throw failure(404,"NOT_FOUND");
-    if (!Set.of("DRAFT","ACTIVE").contains(c.status())) throw failure(409,"TASK_OWNER_NOT_ELIGIBLE");
+    Candidate c = scopedCandidate(scope, id);
+    if (c == null) throw failure(404, "NOT_FOUND");
+    if (!Set.of("DRAFT", "ACTIVE").contains(c.status()))
+      throw failure(409, "TASK_OWNER_NOT_ELIGIBLE");
     return c;
   }
 
-  @Transactional(readOnly=true,isolation=Isolation.REPEATABLE_READ)
-  public Candidate candidate(UUID org, UUID team, UUID mission, UUID task, HumanIdentity human, UUID agentId) {
-    authorize(org,human,false);
-    Scope scope = new Scope(org,team,mission,task); resolve(scope,false);
-    if (!blockers(snapshot(scope)).isEmpty()) throw failure(409,"TASK_OWNER_BLOCKED");
-    return eligible(scope,agentId);
+  @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+  public Candidate candidate(
+      UUID org, UUID team, UUID mission, UUID task, HumanIdentity human, UUID agentId) {
+    authorize(org, human, false);
+    Scope scope = new Scope(org, team, mission, task);
+    resolve(scope, false);
+    if (!blockers(snapshot(scope)).isEmpty()) throw failure(409, "TASK_OWNER_BLOCKED");
+    return eligible(scope, agentId);
   }
 
-  @Transactional(readOnly=true,isolation=Isolation.REPEATABLE_READ)
-  public Candidates owners(UUID org, UUID team, UUID mission, UUID task, HumanIdentity human, int page, String query) {
-    authorize(org,human,false);
-    Scope scope = new Scope(org,team,mission,task); resolve(scope,false);
-    if (page<0 || page>100000) throw TaskOwnerFailure.bad();
+  @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+  public Candidates owners(
+      UUID org, UUID team, UUID mission, UUID task, HumanIdentity human, int page, String query) {
+    authorize(org, human, false);
+    Scope scope = new Scope(org, team, mission, task);
+    resolve(scope, false);
+    if (page < 0 || page > 100000) throw TaskOwnerFailure.bad();
     String normalized = TaskOwnerWire.query(query);
-    if (!blockers(snapshot(scope)).isEmpty()) throw failure(409,"TASK_OWNER_BLOCKED");
-    String pattern = "%"+normalized.replace("!","!!").replace("%","!%").replace("_","!_")+"%";
-    String where = " from agents where organization_id=? and team_id=? and status in ('DRAFT','ACTIVE') and lower(name) like lower(?) escape '!'";
-    long total = jdbc.queryForObject("select count(*)"+where,Long.class,org,team,pattern);
-    if (total<0 || total>9007199254740991L) throw failure(500,"TASK_OWNER_UNAVAILABLE");
-    var items = jdbc.query("select id,name,level,status,updated_at"+where+" order by name,id limit 20 offset ?",
-        (rs,n)->candidateRow(scope,rs),org,team,pattern,page*20);
-    return new Candidates(org,team,mission,task,page,20,total,normalized,List.copyOf(items));
+    if (!blockers(snapshot(scope)).isEmpty()) throw failure(409, "TASK_OWNER_BLOCKED");
+    String pattern =
+        "%" + normalized.replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%";
+    String where =
+        " from agents where organization_id=? and team_id=? and status in ('DRAFT','ACTIVE') and lower(name) like lower(?) escape '!'";
+    long total = jdbc.queryForObject("select count(*)" + where, Long.class, org, team, pattern);
+    if (total < 0 || total > 9007199254740991L) throw failure(500, "TASK_OWNER_UNAVAILABLE");
+    var items =
+        jdbc.query(
+            "select id,name,level,status,updated_at"
+                + where
+                + " order by name,id limit 20 offset ?",
+            (rs, n) -> candidateRow(scope, rs),
+            org,
+            team,
+            pattern,
+            page * 20);
+    return new Candidates(
+        org, team, mission, task, page, 20, total, normalized, List.copyOf(items));
   }
 
   private Stored stored(Scope s, HumanIdentity human, UUID key) {
@@ -309,10 +361,18 @@ public class TaskOwnerService {
                 + " and e.mission_id=r.mission_id and e.task_id=r.task_id and e.actor_id=r.actor_id"
                 + " where r.organization_id=? and r.team_id=? and r.mission_id=? and r.task_id=?"
                 + " and r.actor_id=? and r.idempotency_key=?",
-            (rs, n) -> new Stored(rs.getObject(1, UUID.class), rs.getString(2), rs.getString(3),
-                rs.getInt(4), rs.getObject(5, OffsetDateTime.class),
-                rs.getObject(6, OffsetDateTime.class), rs.getObject(7, UUID.class),
-                rs.getObject(8, UUID.class), rs.getString(9), rs.getString(10)),
+            (rs, n) ->
+                new Stored(
+                    rs.getObject(1, UUID.class),
+                    rs.getString(2),
+                    rs.getString(3),
+                    rs.getInt(4),
+                    rs.getObject(5, OffsetDateTime.class),
+                    rs.getObject(6, OffsetDateTime.class),
+                    rs.getObject(7, UUID.class),
+                    rs.getObject(8, UUID.class),
+                    rs.getString(9),
+                    rs.getString(10)),
             s.organizationId(),
             s.teamId(),
             s.missionId(),
@@ -324,10 +384,15 @@ public class TaskOwnerService {
 
   private Receipt decode(Scope scope, Stored saved) {
     try {
-      ObjectMapper strict = json.copy().enable(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
-          .enable(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
+      ObjectMapper strict =
+          json.copy()
+              .enable(
+                  com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+              .enable(
+                  com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
       strict.enable(com.fasterxml.jackson.core.JsonParser.Feature.STRICT_DUPLICATE_DETECTION);
-      strict.enable(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_MISSING_CREATOR_PROPERTIES);
+      strict.enable(
+          com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_MISSING_CREATOR_PROPERTIES);
       strict.disable(com.fasterxml.jackson.databind.MapperFeature.ALLOW_COERCION_OF_SCALARS);
       strict.disable(com.fasterxml.jackson.databind.DeserializationFeature.ACCEPT_FLOAT_AS_INT);
       var tree = strict.readTree(saved.response());
@@ -335,18 +400,29 @@ public class TaskOwnerService {
       if (!tree.path("revision").isIntegralNumber() || !tree.path("revision").canConvertToInt())
         throw new IllegalArgumentException();
       Receipt r = strict.treeToValue(tree, Receipt.class);
-      if (r.organizationId()==null || r.teamId()==null || r.missionId()==null || r.taskId()==null
-          || r.eventId()==null || r.revision()<1 || r.committedAt()==null) throw new IllegalArgumentException();
-      if (!scope.organizationId().equals(r.organizationId()) || !scope.teamId().equals(r.teamId())
-          || !scope.missionId().equals(r.missionId()) || !scope.taskId().equals(r.taskId())
-          || !saved.eventId().equals(r.eventId()) || saved.digest()==null
+      if (r.organizationId() == null
+          || r.teamId() == null
+          || r.missionId() == null
+          || r.taskId() == null
+          || r.eventId() == null
+          || r.revision() < 1
+          || r.committedAt() == null) throw new IllegalArgumentException();
+      if (!scope.organizationId().equals(r.organizationId())
+          || !scope.teamId().equals(r.teamId())
+          || !scope.missionId().equals(r.missionId())
+          || !scope.taskId().equals(r.taskId())
+          || !saved.eventId().equals(r.eventId())
+          || saved.digest() == null
           || !saved.digest().matches("[0-9a-f]{64}")) throw new IllegalArgumentException();
       if (!r.committedAt().matches("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,9})?Z"))
         throw new IllegalArgumentException();
       var time = java.time.Instant.parse(r.committedAt());
-      validateOwner(r.before(), false); validateOwner(r.after(), true);
-      if (r.revision() != saved.revision() || saved.eventTime() == null
-          || saved.receiptTime() == null || !time.equals(saved.eventTime().toInstant())
+      validateOwner(r.before(), false);
+      validateOwner(r.after(), true);
+      if (r.revision() != saved.revision()
+          || saved.eventTime() == null
+          || saved.receiptTime() == null
+          || !time.equals(saved.eventTime().toInstant())
           || !time.equals(saved.receiptTime().toInstant())
           || !r.before().equals(strict.readValue(saved.beforeJson(), Owner.class))
           || !r.after().equals(strict.readValue(saved.afterJson(), Owner.class))
@@ -355,7 +431,9 @@ public class TaskOwnerService {
       validateProvenance(r.before(), saved.rawBefore());
       validateProvenance(r.after(), saved.rawAfter());
       return r;
-    } catch (Exception ex) { throw failure(500, "TASK_OWNER_UNAVAILABLE"); }
+    } catch (Exception ex) {
+      throw failure(500, "TASK_OWNER_UNAVAILABLE");
+    }
   }
 
   private void validateReceiptIds(com.fasterxml.jackson.databind.JsonNode tree) {
@@ -373,7 +451,8 @@ public class TaskOwnerService {
   }
 
   private void validateProvenance(Owner owner, UUID raw) {
-    if ("UNASSIGNED".equals(owner.state()) ? raw != null
+    if ("UNASSIGNED".equals(owner.state())
+        ? raw != null
         : raw == null || (owner.agent() != null && !raw.equals(owner.agent().id())))
       throw new IllegalArgumentException();
   }
@@ -382,10 +461,15 @@ public class TaskOwnerService {
     if (owner == null) throw new IllegalArgumentException();
     if ("ASSIGNED".equals(owner.state())) {
       Agent a = owner.agent();
-      if (a == null || a.id()==null) throw new IllegalArgumentException();
-      safeStored(a.name(),255,false); safeStored(a.level(),50,false); safeStored(a.status(),50,false);
-      if (after && !Set.of("DRAFT","ACTIVE").contains(a.status())) throw new IllegalArgumentException();
-    } else if (owner.agent()!=null || !("UNASSIGNED".equals(owner.state()) || (!after && "UNAVAILABLE".equals(owner.state())))) throw new IllegalArgumentException();
+      if (a == null || a.id() == null) throw new IllegalArgumentException();
+      safeStored(a.name(), 255, false);
+      safeStored(a.level(), 50, false);
+      safeStored(a.status(), 50, false);
+      if (after && !Set.of("DRAFT", "ACTIVE").contains(a.status()))
+        throw new IllegalArgumentException();
+    } else if (owner.agent() != null
+        || !("UNASSIGNED".equals(owner.state()) || (!after && "UNAVAILABLE".equals(owner.state()))))
+      throw new IllegalArgumentException();
   }
 
   @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
@@ -420,29 +504,47 @@ public class TaskOwnerService {
       return new Result(original, true);
     }
     Snapshot initial = snapshot(scope);
-    java.util.TreeSet<UUID> locks = new java.util.TreeSet<>(java.util.Comparator.comparing(UUID::toString));
-    if (initial.rawOwner()!=null) locks.add(initial.rawOwner());
-    if (command.ownerAgentId()!=null) locks.add(command.ownerAgentId());
-    for (UUID id : locks) jdbc.queryForList("select id from agents where organization_id=? and id=? for update",org,id);
-    authorize(org,human,false);
+    java.util.TreeSet<UUID> locks =
+        new java.util.TreeSet<>(java.util.Comparator.comparing(UUID::toString));
+    if (initial.rawOwner() != null) locks.add(initial.rawOwner());
+    if (command.ownerAgentId() != null) locks.add(command.ownerAgentId());
+    for (UUID id : locks)
+      jdbc.queryForList(
+          "select id from agents where organization_id=? and id=? for update", org, id);
+    authorize(org, human, false);
     Snapshot source = snapshot(scope);
-    if (!blockers(source).isEmpty()) throw failure(409,"TASK_OWNER_BLOCKED");
-    if (source.revision()!=command.expectedRevision() || !source.fingerprint().equals(command.expectedFingerprint())) throw failure(409,"TASK_OWNER_CONFLICT");
-    if (java.util.Objects.equals(source.rawOwner(),command.ownerAgentId())) throw failure(409,"TASK_OWNER_NO_CHANGE");
-    Owner after = new Owner("UNASSIGNED",null);
-    if (command.ownerAgentId()!=null) {
-      Candidate target = scopedCandidate(scope,command.ownerAgentId());
+    if (!blockers(source).isEmpty()) throw failure(409, "TASK_OWNER_BLOCKED");
+    if (source.revision() != command.expectedRevision()
+        || !source.fingerprint().equals(command.expectedFingerprint()))
+      throw failure(409, "TASK_OWNER_CONFLICT");
+    if (java.util.Objects.equals(source.rawOwner(), command.ownerAgentId()))
+      throw failure(409, "TASK_OWNER_NO_CHANGE");
+    Owner after = new Owner("UNASSIGNED", null);
+    if (command.ownerAgentId() != null) {
+      Candidate target = scopedCandidate(scope, command.ownerAgentId());
       if (target == null || !Set.of("DRAFT", "ACTIVE").contains(target.status()))
         throw failure(409, "TASK_OWNER_NOT_ELIGIBLE");
-      if (!target.fingerprint().equals(command.ownerFingerprint())) throw failure(409,"TASK_OWNER_CANDIDATE_CONFLICT");
-      after = new Owner("ASSIGNED",new Agent(target.id(),target.name(),target.level(),target.status()));
+      if (!target.fingerprint().equals(command.ownerFingerprint()))
+        throw failure(409, "TASK_OWNER_CANDIDATE_CONFLICT");
+      after =
+          new Owner(
+              "ASSIGNED", new Agent(target.id(), target.name(), target.level(), target.status()));
     }
     int revision = source.revision() + 1;
     String time = now();
     OffsetDateTime timestamp = OffsetDateTime.parse(time);
     UUID event = UUID.randomUUID();
-    if (jdbc.update("update tasks set owner_agent_id=?,task_owner_revision=?,updated_at=? where organization_id=? and team_id=? and mission_id=? and id=? and task_owner_revision=?",
-        command.ownerAgentId(),revision,timestamp,org,team,mission,task,source.revision())!=1) throw failure(409,"TASK_OWNER_CONFLICT");
+    if (jdbc.update(
+            "update tasks set owner_agent_id=?,task_owner_revision=?,updated_at=? where organization_id=? and team_id=? and mission_id=? and id=? and task_owner_revision=?",
+            command.ownerAgentId(),
+            revision,
+            timestamp,
+            org,
+            team,
+            mission,
+            task,
+            source.revision())
+        != 1) throw failure(409, "TASK_OWNER_CONFLICT");
     Receipt receipt =
         new Receipt(org, team, mission, task, event, revision, time, source.owner(), after);
     jdbc.update(
@@ -490,7 +592,9 @@ public class TaskOwnerService {
   }
 
   private void validateCommand(Command command, UUID key) {
-    if (command == null || key == null || command.expectedRevision() < 0
+    if (command == null
+        || key == null
+        || command.expectedRevision() < 0
         || command.expectedFingerprint() == null
         || !command.expectedFingerprint().matches("[0-9a-f]{64}")) throw TaskOwnerFailure.bad();
     TaskOwnerWire.uuid(key.toString());

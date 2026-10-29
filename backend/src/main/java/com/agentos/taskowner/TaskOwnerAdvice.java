@@ -16,7 +16,10 @@ public class TaskOwnerAdvice {
         .body(ApiErrorResponse.of(failure.code(), "Request could not be completed"));
   }
 
-  @ExceptionHandler({org.springframework.dao.DataAccessException.class, IllegalStateException.class})
+  @ExceptionHandler({
+    org.springframework.dao.DataAccessException.class,
+    IllegalStateException.class
+  })
   public ResponseEntity<ApiErrorResponse> unavailable(Exception failure) {
     return ResponseEntity.internalServerError()
         .body(ApiErrorResponse.of("TASK_OWNER_UNAVAILABLE", "Saved configuration is unavailable"));

@@ -19,7 +19,8 @@ final class TaskOwnerWire {
   private static final ObjectMapper JSON =
       new ObjectMapper(
           JsonFactory.builder().enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION).build());
-  private static final Set<String> FIELDS = Set.of("expectedRevision", "expectedFingerprint", "ownerAgentId", "ownerFingerprint");
+  private static final Set<String> FIELDS =
+      Set.of("expectedRevision", "expectedFingerprint", "ownerAgentId", "ownerFingerprint");
 
   private TaskOwnerWire() {}
 
@@ -40,13 +41,15 @@ final class TaskOwnerWire {
   }
 
   static String text(String value, int max, boolean blank) {
-    if (value == null || value.codePointCount(0, value.length()) > max
+    if (value == null
+        || value.codePointCount(0, value.length()) > max
         || (!blank && value.isBlank())) throw TaskOwnerFailure.bad();
     for (int i = 0; i < value.length(); i++) {
       char c = value.charAt(i);
       if (Character.isISOControl(c) || c == '\u2028' || c == '\u2029') throw TaskOwnerFailure.bad();
       if (Character.isHighSurrogate(c)) {
-        if (++i >= value.length() || !Character.isLowSurrogate(value.charAt(i))) throw TaskOwnerFailure.bad();
+        if (++i >= value.length() || !Character.isLowSurrogate(value.charAt(i)))
+          throw TaskOwnerFailure.bad();
       } else if (Character.isLowSurrogate(c)) throw TaskOwnerFailure.bad();
     }
     return value;

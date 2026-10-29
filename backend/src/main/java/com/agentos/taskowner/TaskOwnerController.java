@@ -33,7 +33,8 @@ public class TaskOwnerController {
       @PathVariable String missionId,
       @PathVariable String taskId,
       @AuthenticationPrincipal HumanIdentity human,
-      HttpServletRequest request) throws IOException {
+      HttpServletRequest request)
+      throws IOException {
     query(request, Set.of());
     return ApiResponse.ok(
         service.context(
@@ -46,23 +47,44 @@ public class TaskOwnerController {
 
   @GetMapping("/eligible-owners")
   public ApiResponse<TaskOwnerDtos.Candidates> owners(
-      @PathVariable String organizationId, @PathVariable String teamId,
-      @PathVariable String missionId, @PathVariable String taskId,
-      @AuthenticationPrincipal HumanIdentity human, HttpServletRequest request) throws IOException {
-    query(request,Set.of("page","query"));
-    return ApiResponse.ok(service.owners(TaskOwnerWire.uuid(organizationId),TaskOwnerWire.uuid(teamId),
-        TaskOwnerWire.uuid(missionId),TaskOwnerWire.uuid(taskId),human,
-        TaskOwnerWire.page(request.getParameter("page")),TaskOwnerWire.query(request.getParameter("query"))));
+      @PathVariable String organizationId,
+      @PathVariable String teamId,
+      @PathVariable String missionId,
+      @PathVariable String taskId,
+      @AuthenticationPrincipal HumanIdentity human,
+      HttpServletRequest request)
+      throws IOException {
+    query(request, Set.of("page", "query"));
+    return ApiResponse.ok(
+        service.owners(
+            TaskOwnerWire.uuid(organizationId),
+            TaskOwnerWire.uuid(teamId),
+            TaskOwnerWire.uuid(missionId),
+            TaskOwnerWire.uuid(taskId),
+            human,
+            TaskOwnerWire.page(request.getParameter("page")),
+            TaskOwnerWire.query(request.getParameter("query"))));
   }
 
   @GetMapping("/eligible-owners/{agentId}")
   public ApiResponse<TaskOwnerDtos.Candidate> candidate(
-      @PathVariable String organizationId, @PathVariable String teamId,
-      @PathVariable String missionId, @PathVariable String taskId, @PathVariable String agentId,
-      @AuthenticationPrincipal HumanIdentity human, HttpServletRequest request) throws IOException {
-    query(request,Set.of());
-    return ApiResponse.ok(service.candidate(TaskOwnerWire.uuid(organizationId),TaskOwnerWire.uuid(teamId),
-        TaskOwnerWire.uuid(missionId),TaskOwnerWire.uuid(taskId),human,TaskOwnerWire.uuid(agentId)));
+      @PathVariable String organizationId,
+      @PathVariable String teamId,
+      @PathVariable String missionId,
+      @PathVariable String taskId,
+      @PathVariable String agentId,
+      @AuthenticationPrincipal HumanIdentity human,
+      HttpServletRequest request)
+      throws IOException {
+    query(request, Set.of());
+    return ApiResponse.ok(
+        service.candidate(
+            TaskOwnerWire.uuid(organizationId),
+            TaskOwnerWire.uuid(teamId),
+            TaskOwnerWire.uuid(missionId),
+            TaskOwnerWire.uuid(taskId),
+            human,
+            TaskOwnerWire.uuid(agentId)));
   }
 
   @GetMapping("/receipts/{key}")
@@ -73,7 +95,8 @@ public class TaskOwnerController {
       @PathVariable String taskId,
       @PathVariable String key,
       @AuthenticationPrincipal HumanIdentity human,
-      HttpServletRequest request) throws IOException {
+      HttpServletRequest request)
+      throws IOException {
     query(request, Set.of());
     return ApiResponse.ok(
         new TaskOwnerDtos.ReceiptLookup(
@@ -106,7 +129,8 @@ public class TaskOwnerController {
       if (type == null
           || !"application".equals(type.getType())
           || !"json".equals(type.getSubtype())
-          || type.getParameters().keySet().stream().anyMatch(name -> !"charset".equalsIgnoreCase(name))
+          || type.getParameters().keySet().stream()
+              .anyMatch(name -> !"charset".equalsIgnoreCase(name))
           || (type.getCharset() != null
               && !java.nio.charset.StandardCharsets.UTF_8.equals(type.getCharset())))
         throw TaskOwnerFailure.bad();
@@ -138,7 +162,8 @@ public class TaskOwnerController {
               if (!allowed.contains(key) || values.length != 1) throw TaskOwnerFailure.bad();
             });
     if (!"POST".equals(request.getMethod())
-        && (request.getContentLengthLong() > 0 || request.getHeader("Transfer-Encoding") != null || request.getInputStream().read() != -1))
-      throw TaskOwnerFailure.bad();
+        && (request.getContentLengthLong() > 0
+            || request.getHeader("Transfer-Encoding") != null
+            || request.getInputStream().read() != -1)) throw TaskOwnerFailure.bad();
   }
 }
