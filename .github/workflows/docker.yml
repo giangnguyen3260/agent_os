@@ -337,6 +337,20 @@ jobs:
         env:
           E2E_BASE_URL: http://127.0.0.1:18080
         run: python3 scripts/mission-intake-history-probe.py
+      - name: Workspace navigation browser acceptance across three viewports
+        working-directory: frontend
+        env:
+          E2E_BASE_URL: http://127.0.0.1:18080
+        run: npm run test:e2e -- --max-failures=1 --grep 'workspace navigation independent QC'
+      - name: Upload synthetic workspace navigation visual evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: workspace-navigation-visuals
+          path: |
+            frontend/qa-visuals/workspace-navigation-*.png
+            frontend/qa-visuals/workspace-navigation-manifest.jsonl
+          if-no-files-found: ignore
       - name: Retained real backend browser regression
         working-directory: frontend
         env:
@@ -347,7 +361,7 @@ jobs:
           node scripts/test-mission-intake-history-validation.cjs
           node scripts/test-mission-intake-validation.cjs
           node scripts/test-task-history-validation.cjs
-          npm run test:e2e -- --max-failures=1 --grep-invert 'task owner independent QC|task owner history independent QC'
+          npm run test:e2e -- --max-failures=1 --grep-invert 'task owner independent QC|task owner history independent QC|workspace navigation independent QC'
       - name: Upload synthetic Mission intake history visual evidence
         if: always()
         uses: actions/upload-artifact@v4

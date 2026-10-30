@@ -160,7 +160,10 @@ test('TD03 native Mission Control links, back navigation, disabled actions and r
   await expect(
     p.getByRole('heading', {name: 'Control task 31', exact: true}),
   ).toBeVisible();
-  for (const name of ['View approval', 'View run', 'Retry task'])
+  await expect(
+    p.getByRole('link', {name: 'Organization approvals', exact: true}),
+  ).toHaveAttribute('href', `/workspace/${org}/approvals`);
+  for (const name of ['View run', 'Retry task'])
     await expect(button(p, name)).toBeDisabled();
   await expect(
     p.getByRole('link', {name: 'Back to mission', exact: true}),

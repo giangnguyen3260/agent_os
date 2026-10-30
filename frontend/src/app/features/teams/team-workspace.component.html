@@ -2,14 +2,15 @@
   <aside class="desktop-sidebar">
     <div class="brand">agentos</div>
     <nav aria-label="Workspace navigation">
-      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a
-      ><a [routerLink]="['/workspace', id, 'organization-map']"
+      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a>
+      <a [routerLink]="['/workspace', id, 'organization-map']"
         >Organization map</a
-      ><a class="selected" [routerLink]="['/workspace', id, 'teams']">Teams</a
-      ><a [routerLink]="['/workspace', id, 'agents']">Agents</a
-      ><a [routerLink]="['/workspace', id, 'missions']">Missions</a
-      ><button disabled>Approvals</button
-      ><a [routerLink]="['/workspace', id, 'trace']">Trace</a>
+      >
+      <a class="selected" [routerLink]="['/workspace', id, 'teams']">Teams</a>
+      <a [routerLink]="['/workspace', id, 'agents']">Agents</a>
+      <a [routerLink]="['/workspace', id, 'missions']">Missions</a>
+      <a [routerLink]="['/workspace', id, 'approvals']">Approvals</a>
+      <a [routerLink]="['/workspace', id, 'trace']">Trace</a>
     </nav>
   </aside>
   <header class="compact-header">
@@ -34,12 +35,16 @@
       Close menu
     </button>
     <nav>
-      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a
-      ><a [routerLink]="['/workspace', id, 'teams']">Teams</a
-      ><a [routerLink]="['/workspace', id, 'agents']">Agents</a
-      ><a [routerLink]="['/workspace', id, 'missions']">Missions</a
-      ><a [routerLink]="['/workspace', id, 'trace']">Trace</a
-      ><a routerLink="/workspace">Change workspace</a>
+      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a>
+      <a [routerLink]="['/workspace', id, 'organization-map']"
+        >Organization map</a
+      >
+      <a class="selected" [routerLink]="['/workspace', id, 'teams']">Teams</a>
+      <a [routerLink]="['/workspace', id, 'agents']">Agents</a>
+      <a [routerLink]="['/workspace', id, 'missions']">Missions</a>
+      <a [routerLink]="['/workspace', id, 'approvals']">Approvals</a>
+      <a [routerLink]="['/workspace', id, 'trace']">Trace</a>
+      <a routerLink="/workspace">Change workspace</a>
     </nav>
   </dialog>
   <main data-testid="team-workspace" [attr.aria-busy]="loading()">

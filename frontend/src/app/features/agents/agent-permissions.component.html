@@ -2,21 +2,23 @@
   <aside class="desktop-sidebar">
     <div class="brand">agentos</div>
     <nav aria-label="Điều hướng workspace">
-      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a
-      ><a
+      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a>
+      <a
         [routerLink]="['/workspace', id, 'organization-map']"
         (click)="closeMenu()"
         >Organization map</a
-      ><a [routerLink]="['/workspace', id, 'teams']">Teams</a
-      ><a
+      >
+      <a [routerLink]="['/workspace', id, 'teams']">Teams</a>
+      <a
         class="selected"
         aria-current="page"
         [routerLink]="['/workspace', id, 'agents']"
         >Agents</a
-      ><a [routerLink]="['/workspace', id, 'missions']">Missions</a
-      ><a [routerLink]="['/workspace', id, 'approvals']">Approvals</a
-      ><a [routerLink]="['/workspace', id, 'trace']">Trace</a
-      ><a routerLink="/workspace">Đổi workspace</a>
+      >
+      <a [routerLink]="['/workspace', id, 'missions']">Missions</a>
+      <a [routerLink]="['/workspace', id, 'approvals']">Approvals</a>
+      <a [routerLink]="['/workspace', id, 'trace']">Trace</a>
+      <a routerLink="/workspace">Đổi workspace</a>
     </nav>
   </aside>
   <header class="compact-header">
@@ -43,22 +45,28 @@
     <nav aria-label="Điều hướng thu gọn">
       <a [routerLink]="['/workspace', id, 'dashboard']" (click)="closeMenu()"
         >Overview</a
-      ><a
+      >
+      <a
         [routerLink]="['/workspace', id, 'organization-map']"
         (click)="closeMenu()"
         >Organization map</a
-      ><a [routerLink]="['/workspace', id, 'teams']" (click)="closeMenu()"
+      >
+      <a [routerLink]="['/workspace', id, 'teams']" (click)="closeMenu()"
         >Teams</a
-      ><a
+      >
+      <a
         class="selected"
         aria-current="page"
         [routerLink]="['/workspace', id, 'agents']"
         (click)="closeMenu()"
         >Agents</a
-      ><a [routerLink]="['/workspace', id, 'missions']" (click)="closeMenu()"
+      >
+      <a [routerLink]="['/workspace', id, 'missions']" (click)="closeMenu()"
         >Missions</a
-      ><a [routerLink]="['/workspace', id, 'trace']">Trace</a
-      ><a routerLink="/workspace" (click)="closeMenu()">Đổi workspace</a>
+      >
+      <a [routerLink]="['/workspace', id, 'approvals']">Approvals</a>
+      <a [routerLink]="['/workspace', id, 'trace']">Trace</a>
+      <a routerLink="/workspace" (click)="closeMenu()">Đổi workspace</a>
     </nav>
   </dialog>
   <main [attr.aria-busy]="loading()">

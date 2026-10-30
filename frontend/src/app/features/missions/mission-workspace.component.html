@@ -2,15 +2,17 @@
   <aside class="desktop-sidebar">
     <div class="brand">agentos</div>
     <nav aria-label="Workspace navigation">
-      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a
-      ><a [routerLink]="['/workspace', id, 'organization-map']"
+      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a>
+      <a [routerLink]="['/workspace', id, 'organization-map']"
         >Organization map</a
-      ><a [routerLink]="['/workspace', id, 'teams']">Teams</a
-      ><a [routerLink]="['/workspace', id, 'agents']">Agents</a
-      ><a [routerLink]="['/workspace', id, 'missions']" class="selected"
+      >
+      <a [routerLink]="['/workspace', id, 'teams']">Teams</a>
+      <a [routerLink]="['/workspace', id, 'agents']">Agents</a>
+      <a [routerLink]="['/workspace', id, 'missions']" class="selected"
         >Missions</a
-      ><button disabled>Approvals</button
-      ><a [routerLink]="['/workspace', id, 'trace']">Trace</a>
+      >
+      <a [routerLink]="['/workspace', id, 'approvals']">Approvals</a>
+      <a [routerLink]="['/workspace', id, 'trace']">Trace</a>
     </nav>
   </aside>
   <header class="compact-header">
@@ -35,13 +37,18 @@
       Close menu
     </button>
     <nav>
-      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a
-      ><a [routerLink]="['/workspace', id, 'teams']">Teams</a
-      ><a [routerLink]="['/workspace', id, 'agents']">Agents</a
-      ><a [routerLink]="['/workspace', id, 'missions']" class="selected"
+      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a>
+      <a [routerLink]="['/workspace', id, 'organization-map']"
+        >Organization map</a
+      >
+      <a [routerLink]="['/workspace', id, 'teams']">Teams</a>
+      <a [routerLink]="['/workspace', id, 'agents']">Agents</a>
+      <a [routerLink]="['/workspace', id, 'missions']" class="selected"
         >Missions</a
-      ><a [routerLink]="['/workspace', id, 'trace']">Trace</a
-      ><a routerLink="/workspace">Change workspace</a>
+      >
+      <a [routerLink]="['/workspace', id, 'approvals']">Approvals</a>
+      <a [routerLink]="['/workspace', id, 'trace']">Trace</a>
+      <a routerLink="/workspace">Change workspace</a>
     </nav>
   </dialog>
   <main data-testid="mission-workspace" [attr.aria-busy]="loading()">
@@ -150,8 +157,9 @@
         </button>
       </div>
       <p id="execution-unavailable" class="caption">
-        Task editing, planning, outputs and execution are unavailable. Mission
-        status is saved state. Updated {{ data.generatedAt | date: 'medium' }}.
+        Planning, outputs and execution are unavailable. Open a DRAFT task to
+        configure its input or Agent owner. Mission status is saved state.
+        Updated {{ data.generatedAt | date: 'medium' }}.
       </p>
       <p class="caption">Mission overview · Scroll down for waiting details</p>
       <div class="actions">
