@@ -128,7 +128,7 @@ public class TaskDraftEditService {
           String fingerprint =
               hash(
                   Arrays.asList(
-                      "TASK_DRAFT_EDIT_SNAPSHOT_V2",
+                      "TASK_DRAFT_EDIT_SNAPSHOT_V3",
                       s,
                       values,
                       rs.getString("status"),
@@ -146,7 +146,8 @@ public class TaskDraftEditService {
                       rs.getString("mission_title"),
                       rs.getString("mission_status"),
                       rs.getBoolean("task_intake_paused"),
-                      rs.getLong("task_intake_version")));
+                      rs.getLong("task_intake_version"),
+                      rs.getInt("dependency_revision")));
           return new Snapshot(
               values,
               rs.getString("status"),
@@ -234,7 +235,8 @@ public class TaskDraftEditService {
     resolve(scope, false);
     long total =
         jdbc.queryForObject(
-            "select count(*) from task_edit_events where organization_id=? and team_id=? and mission_id=? and task_id=?",
+            "select count(*) from task_edit_events where organization_id=? and team_id=? and"
+                + " mission_id=? and task_id=?",
             Long.class,
             org,
             team,

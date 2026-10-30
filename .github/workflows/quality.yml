@@ -49,7 +49,7 @@ jobs:
           TASK_EDIT_TEST_DB_USER: agentos
           TASK_EDIT_TEST_DB_PASSWORD: agentos_ci_only
         # Default tests plus the explicit real-PostgreSQL suite, no silent skips.
-        run: mvn --batch-mode --no-transfer-progress -f backend/pom.xml '-Dtest=*Test,TeamSettingsPostgresIT,TaskDraftEditPostgresIT,MissionIntakePostgresIT,MissionIntakeHistoryPostgresIT,TaskOwnerPostgresIT,TaskOwnerHistoryPostgresIT' verify
+        run: mvn --batch-mode --no-transfer-progress -f backend/pom.xml '-Dtest=*Test,TeamSettingsPostgresIT,TaskDraftEditPostgresIT,MissionIntakePostgresIT,MissionIntakeHistoryPostgresIT,TaskOwnerPostgresIT,TaskOwnerHistoryPostgresIT,TaskDependenciesPostgresIT' verify
       - name: Frontend dependencies
         working-directory: frontend
         run: npm ci
@@ -58,7 +58,7 @@ jobs:
         run: npm run audit:check
       - name: Frontend Google style and type/build checks
         working-directory: frontend
-        run: npm run lint && npm run format:check && npm run test:tooling && node scripts/test-auth-generation.cjs && node scripts/test-member-access-validation.cjs && node scripts/test-approval-grant-management-validation.cjs && node scripts/test-member-role-management-validation.cjs && node scripts/test-member-invitations-validation.cjs && node scripts/test-team-settings-validation.cjs && node scripts/test-organization-map-validation.cjs && node scripts/test-agent-permissions-validation.cjs && node scripts/test-trace-validation.cjs && node scripts/test-task-edit-validation.cjs && node scripts/test-task-owner-validation.cjs && node scripts/test-task-owner-history-validation.cjs && npm run build
+        run: npm run lint && npm run format:check && npm run test:tooling && node scripts/test-auth-generation.cjs && node scripts/test-member-access-validation.cjs && node scripts/test-approval-grant-management-validation.cjs && node scripts/test-member-role-management-validation.cjs && node scripts/test-member-invitations-validation.cjs && node scripts/test-team-settings-validation.cjs && node scripts/test-organization-map-validation.cjs && node scripts/test-agent-permissions-validation.cjs && node scripts/test-trace-validation.cjs && node scripts/test-task-edit-validation.cjs && node scripts/test-task-owner-validation.cjs && node scripts/test-task-owner-history-validation.cjs && node scripts/test-task-dependencies-validation.cjs && npm run build
       - uses: actions/upload-artifact@v4
         if: always()
         with:
