@@ -1,5 +1,7 @@
 # Task owner history independent QC review
 
+Historical source/oracle review below preserves findings and corrections as recorded. Completed C4 runtime and responsive acceptance supersedes its earlier pending status; see the [final QC report](TASK_OWNER_HISTORY_QC_REPORT.md) and [independent final review](TASK_OWNER_HISTORY_FINAL_REVIEW.md).
+
 Status: authored and statically checked; **actual-backend execution and visual review pending**. Shared branch is `feature/task-owner-history`. QC ownership is limited to the new browser spec, this review and `TASK_OWNER_HISTORY_TEST_CASES.md`. Production, fixture, probe, workflow and git changes remain with main/other workers.
 
 ## Frozen contract disposition
