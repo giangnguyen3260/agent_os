@@ -1,0 +1,158 @@
+<div class="forest-shell">
+  <aside class="desktop-sidebar">
+    <div class="brand">agentos</div>
+    <nav aria-label="Workspace navigation">
+      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a
+      ><a [routerLink]="['/workspace', id, 'organization-map']"
+        >Organization map</a
+      ><a [routerLink]="['/workspace', id, 'teams']">Teams</a
+      ><a [routerLink]="['/workspace', id, 'agents']">Agents</a
+      ><a [routerLink]="['/workspace', id, 'missions']" class="selected"
+        >Missions</a
+      ><button disabled>Approvals</button
+      ><a [routerLink]="['/workspace', id, 'trace']">Trace</a>
+    </nav>
+  </aside>
+  <header class="compact-header">
+    <span class="brand">agentos</span
+    ><button
+      class="button secondary"
+      type="button"
+      aria-controls="task-owner-history-menu"
+      [attr.aria-expanded]="menuOpen()"
+      (click)="toggleMenu()"
+    >
+      Menu
+    </button>
+  </header>
+  <dialog
+    id="task-owner-history-menu"
+    aria-label="Workspace navigation"
+    (cancel)="closeMenu()"
+    (close)="closeMenu()"
+  >
+    <button class="button secondary" type="button" (click)="closeMenu()">
+      Close menu
+    </button>
+    <nav>
+      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a
+      ><a [routerLink]="['/workspace', id, 'teams']">Teams</a
+      ><a [routerLink]="['/workspace', id, 'agents']">Agents</a
+      ><a [routerLink]="['/workspace', id, 'missions']" class="selected"
+        >Missions</a
+      ><a [routerLink]="['/workspace', id, 'trace']">Trace</a
+      ><a routerLink="/workspace">Change workspace</a>
+    </nav>
+  </dialog>
+  <main data-testid="task-owner-history" [attr.aria-busy]="loading()">
+    <a class="button secondary" [routerLink]="detailLink()">Về chi tiết task</a>
+    <h1>Lịch sử phân công Agent</h1>
+    <p>
+      Giá trị Agent là ảnh chụp được ghi nhận tại thời điểm lưu. Tên người phân
+      công theo thông tin thành viên hiện tại trong tổ chức.
+    </p>
+    <p>
+      Mỗi trang được tải độc lập; các lần lưu đồng thời có thể làm thay đổi vị
+      trí bản ghi giữa các trang. Thứ tự theo phiên bản giảm dần.
+    </p>
+    <div class="actions">
+      <button
+        class="button secondary"
+        type="button"
+        (click)="load()"
+        [disabled]="loading()"
+      >
+        Tải lại lịch sử
+      </button>
+      <button
+        class="button secondary"
+        type="button"
+        (click)="resetPage()"
+        [disabled]="loading()"
+      >
+        Đặt lại trang đầu
+      </button>
+    </div>
+    @if (loading()) {
+      <p data-testid="owner-history-loading" role="status">
+        Đang kiểm tra quyền và tải lịch sử…
+      </p>
+    }
+    @if (denied()) {
+      <p data-testid="owner-history-denied" role="alert">
+        Cần quyền ADMIN hiện tại để xem lịch sử phân công.
+      </p>
+    }
+    @if (error()) {
+      <p data-testid="owner-history-error" role="alert">{{ error() }}</p>
+    }
+    @if (history(); as h) {
+      <section class="history-card" aria-label="Phạm vi task">
+        <h2>{{ h.taskTitle.trim() ? h.taskTitle : 'Thiếu tiêu đề task' }}</h2>
+        <p>{{ workspaceName() }} / {{ h.teamName }} / {{ h.missionTitle }}</p>
+      </section>
+      <p role="status">{{ h.total }} lần phân công · Trang {{ h.page + 1 }}</p>
+      @if (!h.items.length) {
+        <p data-testid="owner-history-empty" role="status">
+          {{
+            h.total === 0
+              ? 'Chưa có lịch sử phân công.'
+              : 'Không có bản ghi trên trang này.'
+          }}
+        </p>
+      } @else {
+        <section
+          data-testid="owner-history-list"
+          aria-label="Lịch sử phân công"
+        >
+          @for (item of h.items; track item.eventId) {
+            <article class="history-card" data-testid="owner-history-row">
+              <h2>Phiên bản {{ item.revision }}</h2>
+              <p>
+                <time [attr.datetime]="item.committedAt">{{
+                  item.committedAt
+                }}</time>
+              </p>
+              <p>
+                {{
+                  item.actorName ??
+                    'Không còn thông tin thành viên trong tổ chức này'
+                }}
+              </p>
+              <div class="comparison">
+                <section>
+                  <h3>Trước</h3>
+                  <p>{{ describe(item.before) }}</p>
+                </section>
+                <section>
+                  <h3>Sau</h3>
+                  <p>{{ describe(item.after) }}</p>
+                </section>
+              </div>
+            </article>
+          }
+        </section>
+      }
+      <nav class="actions" aria-label="Phân trang lịch sử">
+        <button
+          class="button secondary"
+          type="button"
+          (click)="changePage(-1)"
+          [disabled]="loading() || h.page === 0"
+        >
+          Trang trước
+        </button>
+        <button
+          class="button secondary"
+          type="button"
+          (click)="changePage(1)"
+          [disabled]="
+            loading() || h.page >= 100000 || (h.page + 1) * 20 >= h.total
+          "
+        >
+          Trang sau
+        </button>
+      </nav>
+    }
+  </main>
+</div>
