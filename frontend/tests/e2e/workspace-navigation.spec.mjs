@@ -463,7 +463,12 @@ test.describe('workspace navigation independent QC', () => {
     const r = await get(p, `/api/v1/auth/workspaces/${s.org}`, () =>
       p.goto(`${s.root}/teams`),
     );
-    expect(r.status()).toBe(403);
+    // Auth workspace discovery deliberately hides non-member organizations.
+    // The separate organization Approvals API below retains its403 boundary.
+    expect(r.status()).toBe(404);
+    expect(JSON.stringify(await r.json())).not.toMatch(
+      /Owner history (Team|Mission|Task|Agent)|PRIVATE_OWNER_HISTORY_FOREIGN/,
+    );
     await expect(p.locator('main').getByRole('alert')).toBeVisible();
     const n = await links(p, s);
     await n.getByRole('link', {name: 'Approvals', exact: true}).click();

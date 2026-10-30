@@ -87,3 +87,5 @@ Only `frontend/tests/e2e/task-detail.spec.mjs` is adjusted in retained regressio
 Coding worker: JavaScript syntax and Playwright enumeration checked (90 cases). No Docker executable is available here, so fixture-backed real-browser execution remains with main CI. Enumeration is not a runtime pass. No commits or publication performed by this worker.
 
 Main integration bounds each table observation to a deterministic digest of sorted row values plus xmin/ctid. This preserves committed-state comparisons without returning raw identity/receipt data or exceeding the child-process output buffer. It does not claim forensic detection of rolled-back SQL attempts.
+
+C2 correction: `/api/v1/auth/workspaces/{org}` returns404 for a non-member because discovery hides the organization. The browser case requires exactly404 and no known private markers; the separate organization Approvals endpoint still requires exactly403. No production authorization/status change.
