@@ -1,5 +1,7 @@
 # BA-03 provider connection API contract
 
+Latest storage requirement: the user now requires one-way token material in the application DB. [Storage amendment](PROVIDER_CREDENTIAL_STORAGE_AMENDMENT.md) supersedes every reversible DB-envelope rule below. Usable provider keys belong in an external secret manager; DB stores scoped HMAC verifier/opaque reference only. Earlier review applies to the historical proposal; the amendment and coding slice need their own review.
+
 Status: proposed comprehensive implementation design, 31 October 2026; not implemented, frozen, independently accepted or live-tested. Only this document and the companion [test cases](../qc/PROVIDER_CONNECTION_TEST_CASES.md) are delivered. No migrations, APIs, adapters, UI, runtime grants or Figma changes are claimed.
 
 ## 1. Scope and compatibility

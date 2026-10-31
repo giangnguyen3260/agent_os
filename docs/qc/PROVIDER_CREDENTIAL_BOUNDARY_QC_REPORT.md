@@ -1,0 +1,13 @@
+# Provider credential boundary QC chronology
+
+Scope: first coding foundation for the latest user requirement of one-way provider-token material before application DB storage. Branch feature/provider-credential-boundary; based on PR40 c5bb7d3572e322ea77d4b0e0b364f99265741bbe. No DB writer, migration, HTTP API, deployed vault, provider call or Angular change in this slice. [Storage amendment](../engineering/PROVIDER_CREDENTIAL_STORAGE_AMENDMENT.md) supersedes the earlier DB-envelope design.
+
+Initial source compiled locally with the Java17 compiler module and pure JUnit Platform1.10.5. Coordinator and independent reviewer both executed26 tests:26 successful,0 failed/skipped. Google Java Format1.22 and explicit-import check passed. An independent Python hmac/hashlib implementation confirmed the original canonical vector. Those passes did not establish reference-identity integrity.
+
+Independent review identified medium F1: verifier omitted the opaque external locator and immutable secret version, so substitution under the same scope with identical credential bytes could pass. Correction and separate reference/version substitution regression tests are in progress; initial26 passes are not final evidence for the revised code. See [independent findings/retests](PROVIDER_CREDENTIAL_BOUNDARY_REVIEW.md).
+
+Java21/project-Maven execution, final revised-source test counts and CI provenance must be recorded after they actually complete. A dedicated Java21 CI job selects CredentialBoundaryTest; existing Quality also includes it. Overlapping invocations must not be summed. No runtime/DB/full-product security acceptance is claimed from this unit-only boundary. Sonar remains paused; no merge/deploy.
+
+Revised local source: verifier domain v2 includes immutable external locator and external secret version. Managed HMAC handle is initialized before store; finalization uses the same handle after validating the returned reference. Revised31 focused tests compiled and executed by coordinator on Java17:31 successful/0 failures/0 skips, including same-content locator/version substitution rejection, key-preparation failures and reconciliation notification. Formatter/import checks passed. Independent Python reconstructed the v2 canonical message and confirmed the new vector. Independent revised-source retest and Java21 CI are still pending at this checkpoint; no DB/runtime claim.
+
+Independent final retest: F1 resolved in the exact frozen v2 files; reviewer independently compiled/executed31/31 tests with0 failures/skips, passed formatting and reconstructed the v2 Python vector. Exact file hashes and remaining integration limits are in the review. Java21/project CI is pending until published.
