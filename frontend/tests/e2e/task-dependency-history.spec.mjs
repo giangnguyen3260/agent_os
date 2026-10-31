@@ -131,13 +131,29 @@ async function capture(p, info, s, state) {
   );
 }
 async function held(p, url) {
-  let seen, release;
+  let seen, unblock, settled, requestEnded, request;
   const arrived = new Promise(r => {
     seen = r;
   });
   const gate = new Promise(r => {
-    release = r;
+    unblock = r;
   });
+  const drained = new Promise(r => {
+    settled = r;
+  });
+  const ended = new Promise(r => {
+    requestEnded = r;
+  });
+  const completed = new WeakSet();
+  const onEnd = r => {
+    completed.add(r);
+    if (r !== request) return;
+    p.off('requestfinished', onEnd);
+    p.off('requestfailed', onEnd);
+    requestEnded();
+  };
+  p.on('requestfinished', onEnd);
+  p.on('requestfailed', onEnd);
   let first = true;
   await p.route(url + '?page=0', async route => {
     if (!first) {
@@ -145,17 +161,37 @@ async function held(p, url) {
       return;
     }
     first = false;
-    const response = await route.fetch();
-    expect(response.status()).toBe(200);
-    seen();
-    await gate;
+    request = route.request();
+    if (completed.has(request)) onEnd(request);
     try {
-      await route.fulfill({response});
-    } catch (e) {
-      if (!/closed|cancel|handled|disposed/i.test(String(e))) throw e;
+      const response = await route.fetch();
+      expect(response.status()).toBe(200);
+      seen();
+      await gate;
+      try {
+        await route.fulfill({response});
+      } catch (e) {
+        if (!/closed|cancel|handled|disposed/i.test(String(e))) throw e;
+      }
+    } finally {
+      settled();
     }
   });
-  return {arrived, release};
+  return {
+    arrived,
+    release: async () => {
+      unblock();
+      if (!request) return;
+      await Promise.all([drained, ended]);
+      if (!p.isClosed())
+        await p.evaluate(
+          () =>
+            new Promise(resolve => {
+              requestAnimationFrame(() => requestAnimationFrame(resolve));
+            }),
+        );
+    },
+  };
 }
 function membership(s, info, role) {
   sql(
@@ -248,6 +284,9 @@ test.describe('task dependency history independent QC', () => {
     const s = scope(info);
     const before = business(s);
     await p.goto(s.detail);
+    await expect(p.getByRole('heading', {level: 1})).toHaveText(
+      'Task dependency history Task 19',
+    );
     await expect(
       p.getByRole('link', {name: 'Lịch sử phụ thuộc', exact: true}),
     ).toHaveCount(0);
@@ -298,11 +337,11 @@ test.describe('task dependency history independent QC', () => {
       const before = business(s);
       await p.evaluate(() => window.dispatchEvent(new Event('focus')));
       await expect(hook(p, 'denied')).toBeVisible();
-      h.release();
+      await h.release();
       await expect(hook(p, 'row')).toHaveCount(0);
       expect(business(s)).toBe(before);
     } finally {
-      h.release();
+      await h.release();
       membership(s, info, 'ADMIN');
     }
   });
@@ -318,7 +357,7 @@ test.describe('task dependency history independent QC', () => {
     await h.arrived;
     await pushSpaHistory(p, next.url);
     await expect(hook(p, 'empty')).toBeVisible();
-    h.release();
+    await h.release();
     await expect(hook(p, 'row')).toHaveCount(0);
     await expect(p).toHaveURL(next.url);
     expect(business(s)).toBe(before);
@@ -430,11 +469,11 @@ test.describe('task dependency history independent QC', () => {
       const before = business(s);
       await p.evaluate(() => window.dispatchEvent(new Event('focus')));
       await expect(hook(p, 'denied')).toBeVisible();
-      h.release();
+      await h.release();
       await expect(hook(p, 'row')).toHaveCount(0);
       expect(business(s)).toBe(before);
     } finally {
-      h.release();
+      await h.release();
       if (sibling) await sibling.close();
     }
   });
