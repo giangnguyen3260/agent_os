@@ -115,6 +115,26 @@ public class TaskDependenciesController {
                 TaskDependenciesWire.uuid(key))));
   }
 
+  @GetMapping("/history")
+  public ApiResponse<TaskDependenciesDtos.History> history(
+      @PathVariable String organizationId,
+      @PathVariable String teamId,
+      @PathVariable String missionId,
+      @PathVariable String taskId,
+      @AuthenticationPrincipal HumanIdentity human,
+      HttpServletRequest request)
+      throws IOException {
+    query(request, Set.of("page"));
+    return ApiResponse.ok(
+        service.history(
+            TaskDependenciesWire.uuid(organizationId),
+            TaskDependenciesWire.uuid(teamId),
+            TaskDependenciesWire.uuid(missionId),
+            TaskDependenciesWire.uuid(taskId),
+            human,
+            TaskDependenciesWire.page(request.getParameter("page"))));
+  }
+
   @PostMapping
   public ResponseEntity<ApiResponse<TaskDependenciesDtos.Receipt>> update(
       @PathVariable String organizationId,

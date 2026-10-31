@@ -360,6 +360,120 @@ public class TaskDependenciesService {
     return rows.isEmpty() ? null : rows.get(0);
   }
 
+  private static TaskDependenciesFailure historyUnavailable() {
+    return failure(500, "TASK_DEPENDENCY_HISTORY_UNAVAILABLE");
+  }
+
+  private static String historyText(String value, boolean blank) {
+    String result = TaskDependenciesGraph.text(value, 255, blank);
+    if (result.indexOf('\u2028') >= 0
+        || result.indexOf('\u2029') >= 0
+        || (!blank && result.matches("[\\p{Zs}\\uFEFF]*"))) throw historyUnavailable();
+    return result;
+  }
+
+  private static List<TaskDependenciesDtos.Task> historySnapshot(String value) {
+    try {
+      return historical(tree(value));
+    } catch (Exception ex) {
+      throw historyUnavailable();
+    }
+  }
+
+  @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+  public TaskDependenciesDtos.History history(
+      UUID org, UUID team, UUID mission, UUID task, HumanIdentity human, int page) {
+    authorize(org, human, false);
+    Scope scope = new Scope(org, team, mission, task);
+    resolve(scope, false);
+    if (page < 0 || page > 100000) throw TaskDependenciesFailure.bad();
+    try {
+      var names =
+          jdbc.queryForObject(
+              "select g.name,m.title,t.title from tasks t join teams g"
+                  + " on g.organization_id=t.organization_id and g.id=t.team_id"
+                  + " join missions m on m.organization_id=t.organization_id"
+                  + " and m.team_id=t.team_id and m.id=t.mission_id"
+                  + " where t.organization_id=? and t.team_id=? and t.mission_id=? and t.id=?",
+              (rs, n) ->
+                  List.of(
+                      historyText(rs.getString(1), false),
+                      historyText(rs.getString(2), false),
+                      historyText(rs.getString(3), true)),
+              org,
+              team,
+              mission,
+              task);
+      String where =
+          " where e.organization_id=? and e.team_id=? and e.mission_id=? and e.task_id=?";
+      long total =
+          jdbc.queryForObject(
+              "select count(*) from task_dependency_events e" + where,
+              Long.class,
+              org,
+              team,
+              mission,
+              task);
+      if (total < 0 || total > 9007199254740991L) throw historyUnavailable();
+      var items =
+          jdbc.query(
+              "select"
+                  + " e.id,e.revision,e.created_at,a.display_name,e.before_json,e.after_json,e.actor_id"
+                  + " from task_dependency_events e left join organization_memberships h on"
+                  + " h.organization_id=e.organization_id and h.account_id=e.actor_id left join"
+                  + " human_accounts a on a.id=h.account_id"
+                  + where
+                  + " order by e.revision desc limit 20 offset ?",
+              (rs, n) -> {
+                UUID event = TaskDependenciesWire.uuid(rs.getObject(1, UUID.class).toString());
+                TaskDependenciesWire.uuid(rs.getObject(7, UUID.class).toString());
+                int revision = rs.getInt(2);
+                if (rs.wasNull() || revision < 1) throw historyUnavailable();
+                String time = TaskDependenciesGraph.time(rs.getObject(3, OffsetDateTime.class));
+                String actor = rs.getString(4);
+                if (actor != null) actor = historyText(actor, false);
+                var before = historySnapshot(rs.getString(5));
+                var after = historySnapshot(rs.getString(6));
+                if (before.stream()
+                        .map(TaskDependenciesDtos.Task::id)
+                        .toList()
+                        .equals(after.stream().map(TaskDependenciesDtos.Task::id).toList())
+                    || before.stream().anyMatch(t -> t.id().equals(task))
+                    || after.stream().anyMatch(t -> t.id().equals(task)))
+                  throw historyUnavailable();
+                return new TaskDependenciesDtos.HistoryItem(
+                    event, revision, time, actor, before, after);
+              },
+              org,
+              team,
+              mission,
+              task,
+              page * 20);
+      if (items.size() != Math.min(20L, Math.max(total - page * 20L, 0L)))
+        throw historyUnavailable();
+      var ids = new HashSet<UUID>();
+      long previous = (long) Integer.MAX_VALUE + 1;
+      for (var item : items) {
+        if (!ids.add(item.eventId()) || item.revision() >= previous) throw historyUnavailable();
+        previous = item.revision();
+      }
+      return new TaskDependenciesDtos.History(
+          org,
+          team,
+          mission,
+          task,
+          names.get(0),
+          names.get(1),
+          names.get(2),
+          page,
+          20,
+          total,
+          List.copyOf(items));
+    } catch (RuntimeException ex) {
+      throw historyUnavailable();
+    }
+  }
+
   private static JsonNode tree(String value) throws IOException {
     if (value == null) throw TaskDependenciesGraph.unavailable();
     try (var parser = STRICT.getFactory().createParser(value)) {

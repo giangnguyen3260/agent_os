@@ -57,5 +57,27 @@ public final class TaskDependenciesDtos {
   @JsonInclude(JsonInclude.Include.ALWAYS)
   public record ReceiptLookup(Receipt receipt) {}
 
+  public record History(
+      UUID organizationId,
+      UUID teamId,
+      UUID missionId,
+      UUID taskId,
+      String teamName,
+      String missionTitle,
+      String taskTitle,
+      int page,
+      int pageSize,
+      long total,
+      List<HistoryItem> items) {}
+
+  @JsonInclude(JsonInclude.Include.ALWAYS)
+  public record HistoryItem(
+      UUID eventId,
+      int revision,
+      String committedAt,
+      String actorName,
+      List<Task> before,
+      List<Task> after) {}
+
   public record Result(Receipt receipt, boolean replay) {}
 }

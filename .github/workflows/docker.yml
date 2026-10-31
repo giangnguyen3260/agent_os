@@ -9,9 +9,9 @@ permissions:
 jobs:
   compose-smoke:
     runs-on: ubuntu-latest
-    # C6 took43+ minutes; allow the additional history probe/browser slice.
+    # Verified PR37 took56 minutes; allow the new history probe/browser slice.
     # Runtime budget only: all test timeouts, retries and retained selections remain.
-    timeout-minutes: 60
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -81,6 +81,12 @@ jobs:
           FROM human_accounts WHERE email = 'workspace-qc@example.test';
           SQL
       # Fail early on the new slice; every retained probe and browser case still runs below.
+      - name: Provision isolated Task dependency history fixtures
+        run: docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < scripts/task-dependency-history-ci-fixture.sql
+      - name: PostgreSQL Task dependency history projection and no-write boundary
+        env:
+          E2E_BASE_URL: http://127.0.0.1:18080
+        run: python3 scripts/task-dependency-history-probe.py
       - name: Provision isolated Task dependencies fixtures
         run: |
           docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < scripts/task-dependencies-ci-fixture.sql
@@ -123,6 +129,22 @@ jobs:
           assert all('azure.archive.ubuntu.com' not in p.read_text() for p in files)
           PYAPT
           npx playwright install --with-deps chromium
+      - name: Task dependency history browser acceptance across three viewports
+        working-directory: frontend
+        env:
+          E2E_BASE_URL: http://127.0.0.1:18080
+        run: |
+          node scripts/test-task-dependency-history-validation.cjs
+          npm run test:e2e -- --max-failures=1 --grep 'task dependency history independent QC'
+      - name: Upload synthetic Task dependency history visual evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: task-dependency-history-visuals
+          path: |
+            frontend/qa-visuals/task-dependency-history-*.png
+            frontend/qa-visuals/task-dependency-history-manifest.jsonl
+          if-no-files-found: warn
       - name: Task dependencies browser acceptance across three viewports
         working-directory: frontend
         env:
@@ -385,7 +407,7 @@ jobs:
           node scripts/test-mission-intake-history-validation.cjs
           node scripts/test-mission-intake-validation.cjs
           node scripts/test-task-history-validation.cjs
-          npm run test:e2e -- --max-failures=1 --grep-invert 'task owner independent QC|task owner history independent QC|workspace navigation independent QC|task dependencies independent QC'
+          npm run test:e2e -- --max-failures=1 --grep-invert 'task owner independent QC|task owner history independent QC|workspace navigation independent QC|task dependencies independent QC|task dependency history independent QC'
       - name: Upload synthetic Mission intake history visual evidence
         if: always()
         uses: actions/upload-artifact@v4

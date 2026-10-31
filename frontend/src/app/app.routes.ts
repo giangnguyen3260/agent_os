@@ -30,6 +30,15 @@ import {approvalDetailNavigationGuard} from './features/approvals/approval-navig
 
 export const routes: Routes = [
   {
+    path: 'workspace/:id/teams/:teamId/missions/:missionId/tasks/:taskId/dependency-history',
+    canActivate: [authGuard],
+    runGuardsAndResolvers: 'always',
+    loadComponent: () =>
+      import(
+        './features/task-dependency-history/task-dependency-history.component'
+      ).then(m => m.TaskDependencyHistoryComponent),
+  },
+  {
     path: 'workspace/:id/teams/:teamId/missions/:missionId/tasks/:taskId/dependencies',
     canActivate: [authGuard, taskDependenciesNavigationGuard],
     canDeactivate: [taskDependenciesLeaveGuard],
