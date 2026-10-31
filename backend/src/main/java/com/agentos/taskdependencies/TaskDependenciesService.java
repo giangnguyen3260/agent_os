@@ -364,6 +364,14 @@ public class TaskDependenciesService {
     return failure(500, "TASK_DEPENDENCY_HISTORY_UNAVAILABLE");
   }
 
+  private static String historyText(String value, boolean blank) {
+    String result = TaskDependenciesGraph.text(value, 255, blank);
+    if (result.indexOf('\u2028') >= 0
+        || result.indexOf('\u2029') >= 0
+        || (!blank && result.matches("[\\p{Zs}\\uFEFF]*"))) throw historyUnavailable();
+    return result;
+  }
+
   private static List<TaskDependenciesDtos.Task> historySnapshot(String value) {
     try {
       return historical(tree(value));
@@ -389,9 +397,9 @@ public class TaskDependenciesService {
                   + " where t.organization_id=? and t.team_id=? and t.mission_id=? and t.id=?",
               (rs, n) ->
                   List.of(
-                      TaskDependenciesGraph.text(rs.getString(1), 255, false),
-                      TaskDependenciesGraph.text(rs.getString(2), 255, false),
-                      TaskDependenciesGraph.text(rs.getString(3), 255, true)),
+                      historyText(rs.getString(1), false),
+                      historyText(rs.getString(2), false),
+                      historyText(rs.getString(3), true)),
               org,
               team,
               mission,
@@ -423,7 +431,7 @@ public class TaskDependenciesService {
                 if (rs.wasNull() || revision < 1) throw historyUnavailable();
                 String time = TaskDependenciesGraph.time(rs.getObject(3, OffsetDateTime.class));
                 String actor = rs.getString(4);
-                if (actor != null) actor = TaskDependenciesGraph.text(actor, 255, false);
+                if (actor != null) actor = historyText(actor, false);
                 var before = historySnapshot(rs.getString(5));
                 var after = historySnapshot(rs.getString(6));
                 if (before.stream()

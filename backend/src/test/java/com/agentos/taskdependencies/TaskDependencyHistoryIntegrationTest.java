@@ -207,6 +207,31 @@ public class TaskDependencyHistoryIntegrationTest extends DependencyHttpFixture 
   }
 
   @Test
+  void eventCountAndRevisionOrderingDoNotInferContinuityOrCurrentRevision() throws Exception {
+    save(node("Recorded", "DRAFT"));
+    jdbc.update("update task_dependency_events set revision=17 where organization_id=?", org);
+    jdbc.update("update tasks set dependency_revision=2147483647 where id=?", task);
+    var baseline = state();
+    var result = read(history());
+    assertThat(result.path("total").asInt()).isEqualTo(1);
+    assertThat(result.path("items").get(0).path("revision").asInt()).isEqualTo(17);
+    assertThat(state()).isEqualTo(baseline);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"", " ", "\u00a0", "\ufeff", "unsafe\nname", "a\u2028b", "a\u2029b"})
+  void unsafeSelectedCurrentActorNameFailsClosed(String name) throws Exception {
+    save(node("Recorded", "DRAFT"));
+    jdbc.update("update human_accounts set display_name=? where id=?", name, actor);
+    var baseline = state();
+    error(
+        mvc.perform(get(history()).session(session).with(auth())).andReturn(),
+        500,
+        "TASK_DEPENDENCY_HISTORY_UNAVAILABLE");
+    assertThat(state()).isEqualTo(baseline);
+  }
+
+  @Test
   void freshAuthorityPrecedesMalformedQueryAndScopeIsExact() throws Exception {
     error(mvc.perform(get(history() + "?extra=x")).andReturn(), 401, "UNAUTHORIZED");
     jdbc.update(

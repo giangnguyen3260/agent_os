@@ -405,4 +405,37 @@ test.describe('task dependency history independent QC', () => {
     }
     expect(business(s)).toBe(before);
   });
+  test('11 held response cannot restore another account private history', async ({
+    page: p,
+  }, info) => {
+    await login(p, info);
+    const s = scope(info);
+    const h = await held(p, s.api + '/history');
+    let sibling;
+    try {
+      await p.goto(s.url);
+      await h.arrived;
+      sibling = await p.context().newPage();
+      const csrf = (
+        await (await sibling.request.get('/api/v1/auth/csrf')).json()
+      ).data;
+      expect([200, 204]).toContain(
+        (
+          await sibling.request.post('/api/v1/auth/logout', {
+            headers: {[csrf.headerName]: csrf.token},
+          })
+        ).status(),
+      );
+      await login(sibling, info, 'admin2');
+      const before = business(s);
+      await p.evaluate(() => window.dispatchEvent(new Event('focus')));
+      await expect(hook(p, 'denied')).toBeVisible();
+      h.release();
+      await expect(hook(p, 'row')).toHaveCount(0);
+      expect(business(s)).toBe(before);
+    } finally {
+      h.release();
+      if (sibling) await sibling.close();
+    }
+  });
 });

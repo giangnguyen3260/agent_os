@@ -14,6 +14,6 @@ Authored cases, not execution results. See [QC status](TASK_DEPENDENCY_HISTORY_Q
 | Transport/decoder errors | No empty-success fallback; rows cleared; explicit GET retry only | Browser05, state harness |
 | Late replies | Role/account/scope/page/epoch/destruction fences prevent stale success/error publication | State harness, browser06/07 |
 | Read-only | Successful GET and denials preserve committed values/tuple identity; no browser business POST | Native snapshot oracle, browser snapshots |
-| Responsive | Full before/after lists, dark text, wrapping, no horizontal overflow, native menu/Back | All30 cases,15 planned captures |
+| Responsive | Full before/after lists, dark text, wrapping, no horizontal overflow, native menu/Back | All33 cases,15 planned captures |
 
 Negative/setup SQL is restricted to disposable prefix580 fixtures and is named/restored where shared later. Production migrations do not seed history. Corrupt response delivery is a negative transport test; successful business state is always obtained from real APIs.

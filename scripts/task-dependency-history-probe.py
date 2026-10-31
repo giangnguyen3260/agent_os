@@ -104,6 +104,15 @@ def main():
         status, result = admin.request(ROOT + '/history' + query)
         assert status == 400 and result['error']['code'] == 'BAD_REQUEST'
         assert snapshot() == before
+    moved = '58030000-0000-4000-8000-000000001006'
+    original = json.loads(sql(f"select row_to_json(x) from tasks x where id='{moved}';"))
+    try:
+        sql(f"update tasks set organization_id='58000000-0000-4000-8000-000000000005',team_id='58010000-0000-4000-8000-000000000501',mission_id='58020000-0000-4000-8000-000000000501',title='PRIVATE_CURRENT_TARGET' where id='{moved}';")
+        assert 'PRIVATE_CURRENT_TARGET' not in json.dumps(history(admin))
+        assert 'PRIVATE_CURRENT_TARGET' not in json.dumps(history(admin, 1))
+    finally:
+        title = original['title'].replace("'", "''")
+        sql(f"update tasks set organization_id='{ORG}',team_id='{TEAM}',mission_id='{MISSION}',title='{title}' where id='{moved}';")
     sql(f"update teams set status='ARCHIVED' where id='{TEAM}'; update missions set task_intake_paused=true where id='{MISSION}'; update tasks set status='COMPLETED' where id='{TASK}';")
     assert history(admin)['total'] == 21
     sql(f"delete from organization_memberships where organization_id='{ORG}' and account_id=(select id from human_accounts where email='task-dependency-history-native-admin@example.test');")
