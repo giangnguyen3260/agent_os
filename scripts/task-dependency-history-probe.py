@@ -70,8 +70,9 @@ def history(client, page=0):
     assert [value[k] for k in ('organizationId', 'teamId', 'missionId', 'taskId')] == [ORG, TEAM, MISSION, TASK]
     assert type(value['total']) is int and value['total'] >= 0 and value['page'] == page and value['pageSize'] == 20
     assert len(value['items']) == min(20, max(value['total'] - page * 20, 0))
-    events = json.loads(sql(f"select coalesce(json_agg(json_build_object('eventId',e.id,'revision',e.revision,'actorName',a.display_name,'before',e.before_json::json,'after',e.after_json::json) order by e.revision desc),'[]') from task_dependency_events e left join organization_memberships m on m.organization_id=e.organization_id and m.account_id=e.actor_id left join human_accounts a on a.id=m.account_id where e.task_id='{TASK}';"))
-    for actual, expected in zip(value['items'], events[page*20:page*20+20]):
+    events = json.loads(sql(f"select coalesce(json_agg(json_build_object('eventId',e.id,'revision',e.revision,'actorName',a.display_name,'before',e.before_json::json,'after',e.after_json::json) order by e.revision desc),'[]') from (select * from task_dependency_events where task_id='{TASK}' order by revision desc limit 20 offset {page*20}) e left join organization_memberships m on m.organization_id=e.organization_id and m.account_id=e.actor_id left join human_accounts a on a.id=m.account_id where e.task_id='{TASK}';"))
+    assert len(value['items']) == len(events)
+    for actual, expected in zip(value['items'], events):
         assert set(actual) == set('eventId revision committedAt actorName before after'.split())
         assert type(actual['revision']) is int and actual['revision'] > 0
         assert {k: actual[k] for k in expected} == expected
