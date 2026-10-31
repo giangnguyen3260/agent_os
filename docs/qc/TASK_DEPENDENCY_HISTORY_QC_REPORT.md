@@ -1,0 +1,15 @@
+# Task dependency history QC
+
+Status: IMPLEMENTED / RUNTIME ACCEPTANCE PENDING on `feature/task-dependency-history`, based on PR37 documentation closure `60a7f834b523ab2319a20a5e51ab2af6e16195a3`. PR37’s accepted test counts are historical, not evidence for this implementation. No merge/deploy; Sonar paused.
+
+Scope: current ADMIN reads actual V021 dependency event snapshots with current scoped actor-name semantics, fixed20 revision-descending pages and immutable recorded Task3 arrays. No current graph/eligibility gate, baseline, receipt/key/raw actor exposure, writer or migration. See [frozen contract](../engineering/TASK_DEPENDENCY_HISTORY_CONTRACT.md).
+
+Local checks passed: Angular lint/full source formatting/build; production history DTO/pagination/authority/late-success/late-error harness in normal and CI mode; pinned Google Java Format1.22/import rule; Python AST/workflow YAML/browser syntax;30 browser cases collected. Local runtime has Java17 and no Maven/Java21/Docker, so local backend compilation, native PostgreSQL and browser business acceptance have not run. Do not interpret authored tests or collection as passes.
+
+Backend authored tests exercise empty legacy edges, real21-command history, timestamp ties/revision ordering/out-of-range count, lifecycle/current graph independence, immutable snapshots, current actor rename/removal, selected/off-page malformed JSON, strict queries, fresh role authorization and GET-body denial. The same30 authored invocations run against H2 and explicit PostgreSQL in CI. No synthetic event/receipt/audit history is inserted by fixtures; successful commands create provenance.
+
+New native HTTP/CSRF/PostgreSQL probe checks actual21 saved commands, exact arrays against event JSON, page boundaries, current member redaction, lifecycle independence, query rejection, selected/off-page corruption and full committed business-state/tuple no-write snapshots. The browser suite has10 scenarios ×3 viewports =30 collected cases, with actual success bodies, delivery faults/held actual replies, database comparison and no-write assertions. Expected15 PNGs+JSONL: empty/populated/second-page/error/denied ×1440/768/390. Dedicated suite is excluded from retained selection so baseline1068 remains disjoint;3 focused repeats remain additional.
+
+The Docker job budget increases60→75 minutes because verified PR37 took56 minutes and this slice adds probe/browser work. Individual test timeouts, zero retries and existing selections/probes are unchanged. Including-dev dependency audit remains required.
+
+Independent BA/QC subagent work is currently blocked by account usage limits; no independent review or approval is claimed. Coordinator implementation/checks continue, but final acceptance must explicitly record outstanding independent review rather than self-approve under another role name.

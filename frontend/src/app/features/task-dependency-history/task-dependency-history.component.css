@@ -1,0 +1,145 @@
+:host {
+  display: block;
+  color: var(--text, #20342a);
+  font:
+    14px/22px Inter,
+    sans-serif;
+}
+main {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+h1 {
+  font-size: 28px;
+  line-height: 36px;
+}
+.history-card {
+  margin: 20px 0;
+  padding: 20px 24px;
+  border: 1px solid var(--line, #dde4dc);
+  border-radius: 8px;
+  background: var(--surface, #fff);
+  min-width: 0;
+}
+.scope {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 16px;
+}
+dd {
+  margin: 0;
+  min-width: 0;
+}
+.diff {
+  border-top: 1px solid var(--line, #dde4dc);
+  padding: 12px 0;
+}
+.comparison {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 24px;
+}
+.comparison p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+h4 {
+  margin: 0;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 20px 0;
+}
+button,
+a.button {
+  min-height: 44px;
+}
+a:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--primary, #216344);
+  outline-offset: 3px;
+}
+dialog {
+  width: min(560px, calc(100vw - 48px));
+  max-height: 85vh;
+  overflow: auto;
+}
+@media (max-width: 767px) {
+  .history-card {
+    padding: 20px 16px;
+  }
+  .comparison,
+  .scope {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .comparison {
+    gap: 12px;
+  }
+}
+
+.forest-shell {
+  grid-template-columns: 224px minmax(0, 1fr);
+  background: #f6f8f5;
+  color: #20342a;
+  --text: #20342a;
+  --muted: #4d6255;
+  --surface: #fff;
+  --surface-soft: #eaf1e8;
+  --line: #dde4dc;
+}
+.compact-header {
+  display: none;
+}
+.desktop-sidebar {
+  box-sizing: border-box;
+  width: 224px;
+}
+nav a,
+nav button,
+a.button,
+button {
+  box-sizing: border-box;
+  min-height: 44px;
+}
+dialog {
+  box-sizing: border-box;
+  padding: 24px;
+  border: 1px solid #dde4dc;
+  border-radius: 12px;
+  background: #fff;
+  color: #20342a;
+}
+dialog::backdrop {
+  background: rgb(20 35 26 / 45%);
+}
+@media (max-width: 1023px) {
+  .forest-shell {
+    display: block;
+  }
+  .desktop-sidebar {
+    display: none;
+  }
+  .compact-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 24px;
+    background: #fff;
+    border-bottom: 1px solid #dde4dc;
+  }
+  main {
+    padding: 24px;
+  }
+}
+@media (max-width: 479px) {
+  main,
+  .compact-header {
+    padding: 16px;
+  }
+  h1 {
+    font-size: 24px;
+    line-height: 32px;
+  }
+}
