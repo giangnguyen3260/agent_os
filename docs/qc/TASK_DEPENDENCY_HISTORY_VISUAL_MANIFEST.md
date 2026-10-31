@@ -10,7 +10,7 @@ Capture state second-page follows a browser assertion of `?page=1`, and the imag
 
 Main viewed all15 captures. Dark text, before/after columns, page controls, long-page flow and mobile stacking have no captured blocker. Tall populated images were reviewed for overall flow; second-page images show the same row typography at normal size. This is bounded coordinator visual inspection, not independent acceptance, a complete accessibility audit or Figma pixel parity.
 
-The33-case feature browser gate passed. Remaining retained regression and restart/logout are still running; this artifact alone does not establish full Docker acceptance.
+The33-case feature browser gate and full retained Docker regression/restart/logout subsequently passed in the same C4 run. The artifact documents coordinator visual inspection only; independent BA/QC acceptance remains pending.
 
 | Project | State | PNG dimensions | SHA256 |
 | --- | --- | --- | --- |
