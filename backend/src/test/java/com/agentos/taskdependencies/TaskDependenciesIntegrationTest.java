@@ -657,6 +657,8 @@ public class TaskDependenciesIntegrationTest extends DependencyHttpFixture {
   void reverseHttpAbaWithIdenticalTaskValuesInvalidatesDependencyTokens(String editor)
       throws Exception {
     boolean owner = editor.equals("OWNER");
+    if (!owner)
+      jdbc.update("update tasks set description='',acceptance_criteria='' where id=?", task);
     jdbc.update("update tasks set priority='NORMAL' where id=?", task);
     UUID target = node("Target", "DRAFT"), agent = null;
     if (owner) {
