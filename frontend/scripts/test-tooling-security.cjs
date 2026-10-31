@@ -26,30 +26,64 @@ async function checkPatternConsumers() {
   assert.equal(esm.ESLint, ESLint);
   const googleRequire = createRequire(require.resolve('gts/package.json'));
   assert.equal(googleRequire('eslint').ESLint, ESLint);
-  const google = new ESLint({cwd: workspace});
-  const [googleResult] = await google.lintText(
-    'export function toolingFixture(value: number) {\n' +
-      '  var result = value == 1;\n' +
-      '  Promise.resolve(result);\n' +
-      '  return result;\n' +
-      '}\n',
-    {filePath: path.join(workspace, 'src/main.ts')},
-  );
-  for (const rule of [
-    'no-var',
-    'eqeqeq',
-    '@typescript-eslint/no-floating-promises',
-  ]) {
-    assert.ok(
-      googleResult.messages.some(message => message.ruleId === rule),
-      `Google config must still enforce ${rule} through ESLint 10`,
-    );
-  }
   const fixture = await fs.mkdtemp(
     path.join(os.tmpdir(), 'agentos-pattern-qc-'),
   );
   try {
     await fs.mkdir(path.join(fixture, 'src'));
+    // CI single-run programs read the project file from disk. A lintText
+    // overlay on src/main.ts can otherwise silently lint the real main.ts.
+    const googleFile = path.join(fixture, 'src/google.ts');
+    await fs.writeFile(
+      googleFile,
+      'export function toolingFixture(value: number) {\n' +
+        '  var result = value == 1;\n' +
+        '  Promise.resolve(result);\n' +
+        '  return result;\n' +
+        '}\n',
+    );
+    await fs.writeFile(
+      path.join(fixture, 'tsconfig.json'),
+      JSON.stringify({
+        extends: path.join(workspace, 'tsconfig.json'),
+        compilerOptions: {types: []},
+        files: ['src/google.ts'],
+        include: [],
+      }),
+    );
+    const google = new ESLint({
+      cwd: fixture,
+      overrideConfigFile: true,
+      overrideConfig: [
+        ...require(path.join(workspace, 'eslint.config.js')),
+        {
+          files: ['src/**/*.ts'],
+          languageOptions: {
+            parserOptions: {
+              tsconfigRootDir: fixture,
+              project: './tsconfig.json',
+            },
+          },
+        },
+      ],
+    });
+    const [googleResult] = await google.lintFiles([googleFile]);
+    assert.equal(
+      googleResult.fatalErrorCount,
+      0,
+      JSON.stringify(googleResult.messages),
+    );
+    for (const rule of [
+      'no-var',
+      'eqeqeq',
+      '@typescript-eslint/no-floating-promises',
+    ]) {
+      assert.ok(
+        googleResult.messages.some(message => message.ruleId === rule),
+        `Google config must still enforce ${rule} through ESLint 10: ` +
+          JSON.stringify(googleResult.messages),
+      );
+    }
     await fs.writeFile(path.join(fixture, 'src/keep.js'), 'debugger;\n');
     await fs.writeFile(path.join(fixture, 'src/skip.js'), 'debugger;\n');
     const eslint = new ESLint({
