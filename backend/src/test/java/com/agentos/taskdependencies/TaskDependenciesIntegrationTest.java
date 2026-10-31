@@ -512,7 +512,13 @@ public class TaskDependenciesIntegrationTest extends DependencyHttpFixture {
     error(
         mvc.perform(
                 postRequest(task, UUID.randomUUID(), text)
-                    .header("Content-Type", "application/json"))
+                    .with(
+                        request -> {
+                          request.addHeader("Content-Type", "application/json");
+                          assertThat(java.util.Collections.list(request.getHeaders("Content-Type")))
+                              .hasSize(2);
+                          return request;
+                        }))
             .andReturn(),
         400,
         "BAD_REQUEST");
@@ -683,8 +689,8 @@ public class TaskDependenciesIntegrationTest extends DependencyHttpFixture {
         }
       } else {
         body.put("title", i == 0 ? "Changed" : "Source");
-        body.putNull("description");
-        body.putNull("acceptanceCriteria");
+        body.put("description", "");
+        body.put("acceptanceCriteria", "");
         body.put("priority", "NORMAL");
       }
       data(
@@ -739,8 +745,8 @@ public class TaskDependenciesIntegrationTest extends DependencyHttpFixture {
       a.put("status", "DRAFT");
     } else {
       body.put("title", "Historical title");
-      body.putNull("description");
-      body.putNull("acceptanceCriteria");
+      body.put("description", "");
+      body.put("acceptanceCriteria", "");
       body.put("priority", "NORMAL");
       before = json.createObjectNode();
       before.put("title", "Source");
@@ -749,6 +755,8 @@ public class TaskDependenciesIntegrationTest extends DependencyHttpFixture {
       before.putNull("priority");
       after = before.deepCopy();
       after.put("title", "Historical title");
+      after.put("description", "");
+      after.put("acceptanceCriteria", "");
       after.put("priority", "NORMAL");
     }
     var receipt = json.createObjectNode();

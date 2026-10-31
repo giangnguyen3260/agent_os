@@ -20,7 +20,12 @@ final class DependencyProtocolOracle {
 
   static String hash(DependencyHttpFixture f, Object tuple) throws Exception {
     return HexFormat.of()
-        .formatHex(MessageDigest.getInstance("SHA-256").digest(f.json.writeValueAsBytes(tuple)));
+        .formatHex(
+            MessageDigest.getInstance("SHA-256")
+                .digest(
+                    f.json
+                        .writeValueAsString(tuple)
+                        .getBytes(java.nio.charset.StandardCharsets.UTF_8)));
   }
 
   static String time(ResultSet rs, String column) throws SQLException {

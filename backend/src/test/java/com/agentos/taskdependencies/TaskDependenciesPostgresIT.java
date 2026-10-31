@@ -293,8 +293,8 @@ public class TaskDependenciesPostgresIT extends DependencyHttpFixture {
     body.set("expectedRevision", context.get("revision"));
     body.set("expectedFingerprint", context.get("fingerprint"));
     body.put("title", title);
-    body.putNull("description");
-    body.putNull("acceptanceCriteria");
+    body.put("description", "");
+    body.put("acceptanceCriteria", "");
     body.put("priority", "NORMAL");
     return body;
   }
