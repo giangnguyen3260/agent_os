@@ -16,9 +16,11 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 
 @SpringBootTest(
-    properties =
-        "spring.datasource.url=jdbc:h2:mem:dependency_http_qc;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1;INIT=CREATE"
-            + " DOMAIN IF NOT EXISTS TIMESTAMPTZ AS TIMESTAMP WITH TIME ZONE")
+    properties = {
+      "server.servlet.encoding.force-request=false",
+      "spring.datasource.url=jdbc:h2:mem:dependency_http_qc;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1;INIT=CREATE"
+          + " DOMAIN IF NOT EXISTS TIMESTAMPTZ AS TIMESTAMP WITH TIME ZONE"
+    })
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 public class TaskDependenciesIntegrationTest extends DependencyHttpFixture {
@@ -518,6 +520,10 @@ public class TaskDependenciesIntegrationTest extends DependencyHttpFixture {
                 postRequest(task, UUID.randomUUID(), text)
                     .with(
                         request -> {
+                          // Mock encoding changes overwrite Content-Type. Set encoding before
+                          // adding
+                          // the duplicate; this class disables forced overwrites, not the filter.
+                          request.setCharacterEncoding("UTF-8");
                           request.addHeader("Content-Type", "application/json");
                           assertThat(java.util.Collections.list(request.getHeaders("Content-Type")))
                               .hasSize(2);
