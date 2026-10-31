@@ -331,6 +331,7 @@ public class TaskDependenciesPostgresIT extends DependencyHttpFixture {
                   mvc.perform(
                           post(writerUrl)
                               .session(session)
+                              .with(auth())
                               .with(csrf().asHeader())
                               .contentType("application/json")
                               .header("Idempotency-Key", UUID.randomUUID())

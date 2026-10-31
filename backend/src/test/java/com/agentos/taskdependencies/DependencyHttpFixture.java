@@ -1,6 +1,7 @@
 package com.agentos.taskdependencies;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -26,6 +27,7 @@ import org.springframework.security.web.context.HttpSessionSecurityContextReposi
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 /** HTTP-only command adapter; no dependency service or production canonicalizer is used. */
 abstract class DependencyHttpFixture {
@@ -101,17 +103,28 @@ abstract class DependencyHttpFixture {
     return result;
   }
 
+  RequestPostProcessor auth() {
+    var context =
+        (org.springframework.security.core.context.SecurityContext)
+            session.getAttribute(HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY);
+    return authentication(context.getAuthentication());
+  }
+
   UUID node(String title, String state) {
     UUID id = UUID.randomUUID();
     jdbc.update(
-        "insert into tasks(id,organization_id,team_id,mission_id,title,status) values"
-            + " (?,?,?,?,?,?)",
+        "insert into"
+            + " tasks(id,organization_id,team_id,mission_id,title,status,pending_reason,waiting_since,resolver)"
+            + " values (?,?,?,?,?,?,?,?,?)",
         id,
         org,
         team,
         mission,
         title,
-        state);
+        state,
+        List.of("WAITING", "BLOCKED").contains(state) ? "Awaiting QC input" : null,
+        List.of("WAITING", "BLOCKED").contains(state) ? clock() : null,
+        List.of("WAITING", "BLOCKED").contains(state) ? "QC" : null);
     return id;
   }
 
@@ -140,7 +153,7 @@ abstract class DependencyHttpFixture {
   }
 
   JsonNode read(String path) throws Exception {
-    return data(mvc.perform(get(path).session(session)).andReturn(), 200);
+    return data(mvc.perform(get(path).session(session).with(auth())).andReturn(), 200);
   }
 
   JsonNode context() throws Exception {
@@ -172,6 +185,7 @@ abstract class DependencyHttpFixture {
   MockHttpServletRequestBuilder postAt(String path, UUID key, String body) {
     return post(path)
         .session(session)
+        .with(auth())
         .with(csrf().asHeader())
         .contentType("application/json")
         .header("Idempotency-Key", key)

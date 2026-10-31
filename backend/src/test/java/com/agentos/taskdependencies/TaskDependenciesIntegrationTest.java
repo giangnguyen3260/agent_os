@@ -98,7 +98,7 @@ public class TaskDependenciesIntegrationTest extends DependencyHttpFixture {
     UUID a = node("One", "READY"), b = node("Two", "FAILED");
     jdbc.update(
         "update tasks set description='Keep description',acceptance_criteria='Keep"
-            + " criteria',priority='HIGH',pending_reason='Keep pending' where id=?",
+            + " criteria',priority='HIGH' where id=?",
         task);
     var before = sourceRow();
     var parent = jdbc.queryForMap("select * from missions where id=?", mission);
@@ -178,7 +178,7 @@ public class TaskDependenciesIntegrationTest extends DependencyHttpFixture {
     assertThat(read(root(task) + "/receipts/" + key).get("receipt").isNull()).isTrue();
     session = original;
     error(
-        mvc.perform(get(root(task)).session(session)).andReturn(),
+        mvc.perform(get(root(task)).session(session).with(auth())).andReturn(),
         500,
         "TASK_DEPENDENCIES_UNAVAILABLE");
     assertThat(count("task_dependency_events")).isEqualTo(1);
@@ -223,6 +223,7 @@ public class TaskDependenciesIntegrationTest extends DependencyHttpFixture {
             mvc.perform(
                     get(root(task) + "/eligible-dependencies")
                         .session(session)
+                        .with(auth())
                         .queryParam("query", "  %_!  "))
                 .andReturn(),
             200);
@@ -259,7 +260,8 @@ public class TaskDependenciesIntegrationTest extends DependencyHttpFixture {
     }
     edge(previous, task);
     error(
-        mvc.perform(get(root(task) + "/eligible-dependencies/" + first).session(session))
+        mvc.perform(
+                get(root(task) + "/eligible-dependencies/" + first).session(session).with(auth()))
             .andReturn(),
         409,
         "TASK_DEPENDENCIES_NOT_ELIGIBLE");
@@ -269,7 +271,8 @@ public class TaskDependenciesIntegrationTest extends DependencyHttpFixture {
     edge(b, a);
     var before = state();
     for (String suffix : List.of("", "/eligible-dependencies", "/eligible-dependencies/" + first)) {
-      var response = mvc.perform(get(root(task) + suffix).session(session)).andReturn();
+      var response =
+          mvc.perform(get(root(task) + suffix).session(session).with(auth())).andReturn();
       error(response, 500, "TASK_DEPENDENCIES_UNAVAILABLE");
       assertThat(response.getResponse().getContentAsString())
           .doesNotContain(a.toString(), b.toString(), "Private cycle", "Depth");
@@ -295,7 +298,9 @@ public class TaskDependenciesIntegrationTest extends DependencyHttpFixture {
     error(send(task, UUID.randomUUID(), body), 409, "TASK_DEPENDENCIES_NOT_ELIGIBLE");
     error(
         mvc.perform(
-                get(root(task) + "/eligible-dependencies/" + UUID.randomUUID()).session(session))
+                get(root(task) + "/eligible-dependencies/" + UUID.randomUUID())
+                    .session(session)
+                    .with(auth()))
             .andReturn(),
         404,
         "NOT_FOUND");
@@ -312,7 +317,7 @@ public class TaskDependenciesIntegrationTest extends DependencyHttpFixture {
     jdbc.update("update tasks set title='Safe' where id=?", off);
     for (int i = 0; i < 21; i++) edge(off, node("Legacy" + i, "DRAFT"));
     error(
-        mvc.perform(get(root(task)).session(session)).andReturn(),
+        mvc.perform(get(root(task)).session(session).with(auth())).andReturn(),
         500,
         "TASK_DEPENDENCIES_UNAVAILABLE");
   }
@@ -390,6 +395,7 @@ public class TaskDependenciesIntegrationTest extends DependencyHttpFixture {
         mvc.perform(
                 get(root(task) + "/eligible-dependencies")
                     .session(session)
+                    .with(auth())
                     .queryParam("page", page))
             .andReturn(),
         400,
@@ -403,17 +409,20 @@ public class TaskDependenciesIntegrationTest extends DependencyHttpFixture {
         List.of(
             "", "/eligible-dependencies/" + UUID.randomUUID(), "/receipts/" + UUID.randomUUID())) {
       error(
-          mvc.perform(get(root(task) + suffix).session(session).queryParam("x", "1")).andReturn(),
+          mvc.perform(get(root(task) + suffix).session(session).with(auth()).queryParam("x", "1"))
+              .andReturn(),
           400,
           "BAD_REQUEST");
       error(
-          mvc.perform(get(root(task) + suffix).session(session).content("{}")).andReturn(),
+          mvc.perform(get(root(task) + suffix).session(session).with(auth()).content("{}"))
+              .andReturn(),
           400,
           "BAD_REQUEST");
       error(
           mvc.perform(
                   get(root(task) + suffix)
                       .session(session)
+                      .with(auth())
                       .header("Transfer-Encoding", "chunked")
                       .content("{}"))
               .andReturn(),
@@ -425,6 +434,7 @@ public class TaskDependenciesIntegrationTest extends DependencyHttpFixture {
           mvc.perform(
                   get(root(task) + "/eligible-dependencies")
                       .session(session)
+                      .with(auth())
                       .queryParam(key, "0", "1"))
               .andReturn(),
           400,
@@ -433,6 +443,7 @@ public class TaskDependenciesIntegrationTest extends DependencyHttpFixture {
         mvc.perform(
                 get(root(task) + "/eligible-dependencies")
                     .session(session)
+                    .with(auth())
                     .queryParam("query", "unsafe\ntext"))
             .andReturn(),
         400,
@@ -441,6 +452,7 @@ public class TaskDependenciesIntegrationTest extends DependencyHttpFixture {
         mvc.perform(
                 get(root(task) + "/eligible-dependencies")
                     .session(session)
+                    .with(auth())
                     .queryParam("query", "a".repeat(101)))
             .andReturn(),
         400,
@@ -515,6 +527,7 @@ public class TaskDependenciesIntegrationTest extends DependencyHttpFixture {
         mvc.perform(
                 post(root(task))
                     .session(session)
+                    .with(auth())
                     .contentType("application/json")
                     .header("Idempotency-Key", UUID.randomUUID())
                     .content(text))
@@ -538,7 +551,8 @@ public class TaskDependenciesIntegrationTest extends DependencyHttpFixture {
         403,
         "FORBIDDEN");
     error(
-        mvc.perform(get(root(task).replace(task.toString(), "bad-child")).session(session))
+        mvc.perform(
+                get(root(task).replace(task.toString(), "bad-child")).session(session).with(auth()))
             .andReturn(),
         403,
         "FORBIDDEN");
@@ -547,14 +561,16 @@ public class TaskDependenciesIntegrationTest extends DependencyHttpFixture {
         actor,
         org);
     error(
-        mvc.perform(get(root(task).replace(task.toString(), "bad-child")).session(session))
+        mvc.perform(
+                get(root(task).replace(task.toString(), "bad-child")).session(session).with(auth()))
             .andReturn(),
         400,
         "BAD_REQUEST");
     error(
         mvc.perform(
                 get(root(task).replace(team.toString(), UUID.randomUUID().toString()))
-                    .session(session))
+                    .session(session)
+                    .with(auth()))
             .andReturn(),
         404,
         "NOT_FOUND");
@@ -562,6 +578,7 @@ public class TaskDependenciesIntegrationTest extends DependencyHttpFixture {
         mvc.perform(
                 get(root(task).replace(org.toString(), UUID.randomUUID().toString()))
                     .session(session)
+                    .with(auth())
                     .queryParam("bad", "1"))
             .andReturn(),
         403,
@@ -584,7 +601,7 @@ public class TaskDependenciesIntegrationTest extends DependencyHttpFixture {
         "{private invalid",
         org);
     error(
-        mvc.perform(get(root(task) + "/receipts/" + key).session(session)).andReturn(),
+        mvc.perform(get(root(task) + "/receipts/" + key).session(session).with(auth())).andReturn(),
         500,
         "TASK_DEPENDENCIES_UNAVAILABLE");
     error(send(task, key, body), 500, "TASK_DEPENDENCIES_UNAVAILABLE");
@@ -594,7 +611,7 @@ public class TaskDependenciesIntegrationTest extends DependencyHttpFixture {
         org);
     jdbc.update("update task_dependency_events set after_json='[]' where organization_id=?", org);
     error(
-        mvc.perform(get(root(task) + "/receipts/" + key).session(session)).andReturn(),
+        mvc.perform(get(root(task) + "/receipts/" + key).session(session).with(auth())).andReturn(),
         500,
         "TASK_DEPENDENCIES_UNAVAILABLE");
   }
@@ -866,15 +883,18 @@ public class TaskDependenciesIntegrationTest extends DependencyHttpFixture {
 
   @Test
   void unknownSafeStatusBlocksWithoutPretendingToBeKnownOrRepairing() throws Exception {
-    UUID target = node("Unknown target", "FUTURE_STATE");
+    UUID target = node("Known target", "DRAFT");
     edge(task, target);
+    // Team status is stored as text; unlike Task status, future values are legal.
+    jdbc.update("update teams set status='FUTURE_STATE' where id=?", team);
     var before = state();
     var c = context();
     assertThat(c.path("canEdit").asBoolean()).isFalse();
     assertThat(c.path("blockers").toString()).isEqualTo("[\"UNKNOWN_STATE\"]");
-    assertThat(c.path("dependencies").get(0).path("status").asText()).isEqualTo("FUTURE_STATE");
+    assertThat(c.path("dependencies").get(0).path("status").asText()).isEqualTo("DRAFT");
     error(
-        mvc.perform(get(root(task) + "/eligible-dependencies").session(session)).andReturn(),
+        mvc.perform(get(root(task) + "/eligible-dependencies").session(session).with(auth()))
+            .andReturn(),
         409,
         "TASK_DEPENDENCIES_BLOCKED");
     assertThat(state()).isEqualTo(before);
@@ -921,7 +941,10 @@ public class TaskDependenciesIntegrationTest extends DependencyHttpFixture {
           m.equals(otherMission) ? otherTeam : team,
           m);
       var response =
-          mvc.perform(get(root(task) + "/eligible-dependencies/" + target).session(session))
+          mvc.perform(
+                  get(root(task) + "/eligible-dependencies/" + target)
+                      .session(session)
+                      .with(auth()))
               .andReturn();
       error(response, 404, "NOT_FOUND");
       assertThat(response.getResponse().getContentAsString())
@@ -1002,6 +1025,7 @@ public class TaskDependenciesIntegrationTest extends DependencyHttpFixture {
         mvc.perform(
                 get(path)
                     .session(session)
+                    .with(auth())
                     .with(
                         r -> {
                           r.setQueryString("page=0&%70age=1");
@@ -1018,6 +1042,7 @@ public class TaskDependenciesIntegrationTest extends DependencyHttpFixture {
           mvc.perform(
                   get(path)
                       .session(session)
+                      .with(auth())
                       .with(
                           r -> {
                             r.setQueryString(raw);
@@ -1068,7 +1093,10 @@ public class TaskDependenciesIntegrationTest extends DependencyHttpFixture {
       assertThat(source.path("canEdit").asBoolean()).isTrue();
       assertThat(read(root(task) + "/eligible-dependencies").path("total").asInt()).isZero();
       var response =
-          mvc.perform(get(root(task) + "/eligible-dependencies/" + target).session(session))
+          mvc.perform(
+                  get(root(task) + "/eligible-dependencies/" + target)
+                      .session(session)
+                      .with(auth()))
               .andReturn();
       error(response, 404, "NOT_FOUND");
       assertThat(response.getResponse().getContentAsString())
@@ -1091,7 +1119,7 @@ public class TaskDependenciesIntegrationTest extends DependencyHttpFixture {
   @Test
   void legitimatePrivateMultilineInputsOnSourceTargetAndDisconnectedNodeDoNotPoisonGraphOrCreate()
       throws Exception {
-    UUID target = node("Target", "READY"), disconnected = node("Disconnected", "DRAFT");
+    UUID target = node("Target", "WAITING"), disconnected = node("Disconnected", "BLOCKED");
     List<UUID> existing = List.of(task, target, disconnected);
     List<java.util.Map<String, Object>> original = new ArrayList<>();
     List<String> secrets = new ArrayList<>();
@@ -1104,7 +1132,7 @@ public class TaskDependenciesIntegrationTest extends DependencyHttpFixture {
           "update tasks set description=?,acceptance_criteria=?,pending_reason=? where id=?",
           description,
           criteria,
-          pending,
+          id.equals(task) ? null : pending,
           id);
       original.add(jdbc.queryForMap("select * from tasks where id=?", id));
     }
