@@ -132,6 +132,8 @@ export class TaskDependenciesComponent {
         this[k] = p.get(k) ?? '';
       this.actor = this.auth.user()?.id;
       this.owner = this.actor;
+      // A reused route owns a fresh scope; an old pending save must not block its load.
+      this.phase.set('loading');
       void this.load();
     });
   }

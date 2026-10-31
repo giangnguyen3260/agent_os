@@ -597,7 +597,7 @@ function state() {
   const injections = [
     realAuth,
     realApi,
-    {paramMap: routeParams},
+    {paramMap: routeParams, snapshot: {queryParamMap: {keys: []}}},
     {getCurrentNavigation: () => null},
     lifetime,
     {nativeElement: {querySelector: () => null}},
@@ -679,6 +679,133 @@ function state() {
   assert.equal(live.frozen, null);
   assert.equal(live.locator, null);
   assert(requests.every(r => r.options.responseType === 'arraybuffer'));
+  // Reuse the real constructor subscription while an old POST or receipt read
+  // is in flight. Resolve/reject it after the new route has finished loading.
+  realAuth.currentUser.set(session());
+  for (const oldPhase of ['saving', 'unknown']) {
+    for (const lateFailure of [false, true]) {
+      Object.assign(live, {
+        id: scope.organizationId,
+        teamId: scope.teamId,
+        missionId: scope.missionId,
+        taskId: scope.taskId,
+        source: structuredClone(context),
+        frozen: pendingBody,
+        locator: pendingLocator,
+      });
+      live.phase.set(oldPhase);
+      live.context.set(structuredClone(context));
+      live.selection.set([target(6)]);
+      live.receipt.set(structuredClone(receipt));
+      live.candidates.set(structuredClone(page));
+      live.query = 'old private search';
+      live.acknowledged = true;
+      live.verified.set(true);
+      live.busy.set(oldPhase === 'saving');
+      let finishOld, failOld, releaseContext;
+      let routePosts = 0;
+      const heldOld = new Promise((resolve, reject) => {
+        finishOld = resolve;
+        failOld = reject;
+      });
+      realApi.save = async (s, b, key) => {
+        routePosts++;
+        assert(v.sameScope(s, scope));
+        assert.equal(b, pendingBody.body);
+        assert.equal(key, pendingLocator.key);
+        return heldOld;
+      };
+      let receiptReads = 0;
+      realApi.receipt = async (s, key) => {
+        receiptReads++;
+        assert(v.sameScope(s, scope));
+        assert.equal(key, pendingLocator.key);
+        return heldOld;
+      };
+      const oldOperation =
+        oldPhase === 'saving'
+          ? live.postFrozen(live.epoch, {})
+          : live.recover();
+      await new Promise(r => setImmediate(r));
+      assert.equal(routePosts, oldPhase === 'saving' ? 1 : 0);
+      assert.equal(receiptReads, oldPhase === 'unknown' ? 1 : 0);
+      const nextScope = {
+        ...scope,
+        taskId: id(35 + (oldPhase === 'unknown' ? 2 : 0) + Number(lateFailure)),
+      };
+      const nextContext = {
+        ...structuredClone(context),
+        ...nextScope,
+        taskTitle: 'New route task',
+        dependencies: [],
+      };
+      const contextScopes = [];
+      realApi.context = async s => {
+        contextScopes.push({...s});
+        assert(v.sameScope(s, nextScope));
+        if (contextScopes.length === 1)
+          return new Promise(resolve => {
+            releaseContext = resolve;
+          });
+        return nextContext;
+      };
+      const oldEpoch = live.epoch;
+      routeParams.next({
+        get: k => (k === 'id' ? nextScope.organizationId : nextScope[k]),
+      });
+      assert.equal(
+        live.phase(),
+        'loading',
+        `${oldPhase} route must start loading`,
+      );
+      assert(live.epoch > oldEpoch);
+      assert(v.sameScope(live.scope(), nextScope));
+      assert.equal(live.context(), null);
+      assert.equal(live.source, null);
+      assert.equal(live.receipt(), null);
+      assert.equal(live.candidates(), null);
+      assert.equal(live.selection().length, 0);
+      assert.equal(live.query, '');
+      assert.equal(live.frozen, null);
+      assert.equal(live.locator, null);
+      assert.equal(live.verified(), false);
+      assert.equal(live.acknowledged, false);
+      await new Promise(r => setImmediate(r));
+      assert.equal(
+        typeof releaseContext,
+        'function',
+        'new scope must request context',
+      );
+      releaseContext(nextContext);
+      await new Promise(r => setImmediate(r));
+      assert.equal(live.phase(), 'edit');
+      assert.equal(live.context(), nextContext);
+      assert.equal(live.source, nextContext);
+      assert.equal(live.editable(), true);
+      assert.equal(contextScopes.length, 2);
+      if (lateFailure) failOld(new HttpErrorResponse(503));
+      else finishOld(oldPhase === 'saving' ? receipt : {receipt});
+      await oldOperation;
+      assert.equal(
+        live.phase(),
+        'edit',
+        'late old response must not change new phase',
+      );
+      assert.equal(live.context(), nextContext);
+      assert.equal(live.source, nextContext);
+      assert.equal(live.receipt(), null);
+      assert.equal(live.frozen, null);
+      assert.equal(live.locator, null);
+      assert.equal(live.selection().length, 0);
+      assert.equal(live.error(), '');
+      assert.equal(live.busy(), false);
+      assert.equal(live.editable(), true);
+      await live.recover(true);
+      await live.save();
+      assert.equal(routePosts, oldPhase === 'saving' ? 1 : 0);
+      assert.equal(adapterPosts, 0);
+    }
+  }
   console.log(
     'Task dependencies production wire validators and component state checks passed',
   );
