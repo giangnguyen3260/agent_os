@@ -1,5 +1,14 @@
 # Tooling dependency security QC — 22 October 2026
 
+## October31 pattern-tooling follow-up
+
+PR37 candidate `c5f089fda148a18ac3b11f00bf4b2277b6c571e7` includes glob14.0.2/minimatch11.0.1 fixes for GHSA-3g3m-2fjr-6pw4 and GHSA-g3hv-75wg-m249. ESLint is10.14.0; retained Google gts7 config uses the same root ESLint via an explicit override despite declaring9. Explicit globals14 preserves the previously resolved Google-config import. Angular21.2, project ESLint config and Google rule severities remain unchanged. No audit suppression or omitted dev dependencies. This is a tested compatibility decision, not upstream gts support for10.
+
+Actual [Quality41170335575](https://github.com/giangnguyen3260/agent_os/actions/runs/41170335575), job124446722150, passed926 backend tests, including-dev audit0, lint/format/build, all production harnesses and tooling. New consumer controls exercise CJS/ESM ESLint entry points, the shared gts instance, actual Google diagnostics from a real temporary TypeScript project/file, file selection/ignores, package walking and cache cleanup alongside existing tmp/MCP/dev-server checks. Independent source review found no concrete tooling blocker; lock entries retain registry integrity and no old minimatch/eslintrc remains. The real-file fixture is required because CI single-run programs can ignore a lintText overlay on an existing project file.
+
+Docker41170335194/job124446721428 subsequently completed SUCCESS:656 regular backend tests, including-dev audit0,1068 disjoint real-backend browser invocations plus3 focused repeats, native PostgreSQL/SMTP, exact-session restart survival and logout replay denial. See [dependency QC](TASK_DEPENDENCIES_QC_REPORT.md) and [coding policy](../engineering/CODING_STANDARDS.md). The historical evidence below describes earlier candidates and dependency versions, not current vulnerability status.
+
+
 Status: accepted within this tooling patch scope; local gates, remote Code Quality and Docker/full browser regression passed. Draft PR [18](https://github.com/giangnguyen3260/agent_os/pull/18) remains unmerged. Branch fix/tooling-security stacks on draft/unmerged Task Intake PR17, base90700acb6412f9783298795fb2ee9d566f5035f0.
 
 ## Patch and scope
