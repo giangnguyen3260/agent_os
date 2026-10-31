@@ -1,0 +1,385 @@
+<div class="forest-shell">
+  <aside class="desktop-sidebar">
+    <div class="brand">agentos</div>
+    <nav aria-label="Workspace navigation">
+      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a>
+      <a [routerLink]="['/workspace', id, 'organization-map']"
+        >Organization map</a
+      >
+      <a [routerLink]="['/workspace', id, 'teams']">Teams</a>
+      <a [routerLink]="['/workspace', id, 'agents']">Agents</a>
+      <a [routerLink]="['/workspace', id, 'missions']" class="selected"
+        >Missions</a
+      >
+      <a [routerLink]="['/workspace', id, 'approvals']">Approvals</a>
+      <a [routerLink]="['/workspace', id, 'trace']">Trace</a>
+    </nav>
+  </aside>
+  <header class="compact-header">
+    <span class="brand">agentos</span
+    ><button
+      class="button secondary"
+      type="button"
+      aria-controls="dependencies-menu"
+      [attr.aria-expanded]="menuOpen()"
+      (click)="toggleMenu()"
+    >
+      Menu
+    </button>
+  </header>
+  <dialog
+    data-testid="dependencies-menu"
+    id="dependencies-menu"
+    aria-label="Workspace navigation"
+    (cancel)="closeMenu()"
+    (close)="closeMenu()"
+  >
+    <button class="button secondary" type="button" (click)="closeMenu()">
+      Close menu
+    </button>
+    <nav>
+      <a [routerLink]="['/workspace', id, 'dashboard']">Overview</a>
+      <a [routerLink]="['/workspace', id, 'organization-map']"
+        >Organization map</a
+      >
+      <a [routerLink]="['/workspace', id, 'teams']">Teams</a>
+      <a [routerLink]="['/workspace', id, 'agents']">Agents</a>
+      <a [routerLink]="['/workspace', id, 'missions']" class="selected"
+        >Missions</a
+      >
+      <a [routerLink]="['/workspace', id, 'approvals']">Approvals</a>
+      <a [routerLink]="['/workspace', id, 'trace']">Trace</a>
+    </nav>
+  </dialog>
+  <main
+    data-testid="task-dependencies"
+    [attr.aria-busy]="busy() || phase() === 'loading'"
+  >
+    <h1 tabindex="-1">Sửa phụ thuộc của task draft</h1>
+    <p>
+      Chỉ lưu cấu hình phụ thuộc của task DRAFT. Thao tác này không chạy task,
+      đổi trạng thái hoặc tự lập lịch.
+    </p>
+    @if (phase() === 'loading') {
+      <p data-testid="dependencies-loading" role="status">
+        Đang tải phụ thuộc…
+      </p>
+    }
+    @if (error()) {
+      <p data-testid="dependencies-error" role="alert">{{ error() }}</p>
+    }
+    @if (phase() === 'denied') {
+      <p data-testid="dependencies-denied">
+        Bạn không còn quyền quản trị để sửa phụ thuộc.
+      </p>
+    }
+    @if (phase() === 'conflict') {
+      <p data-testid="dependencies-conflict" role="alert">
+        Dữ liệu task hoặc đồ thị đã thay đổi. Tải lại và xem lại lựa chọn.
+      </p>
+    }
+    @if (context(); as c) {
+      <p>{{ c.teamName }} / {{ c.missionTitle }}</p>
+      <h2>{{ displayTitle(c.taskTitle) }}</h2>
+      <p>{{ c.taskStatus }}</p>
+      <section class="panel" data-testid="dependencies-current">
+        <h2>Phụ thuộc hiện tại</h2>
+        <ng-container
+          [ngTemplateOutlet]="rows"
+          [ngTemplateOutletContext]="{items: c.dependencies}"
+        />
+      </section>
+      @if (phase() === 'blocked') {
+        <section data-testid="dependencies-blocked" role="alert">
+          @for (b of c.blockers; track b) {
+            <p>{{ blockerLabels[b] }}</p>
+          }
+        </section>
+      }
+      @if (phase() === 'edit' || phase() === 'conflict') {
+        <section class="panel" data-testid="dependencies-edit">
+          <h2>Phụ thuộc sau thay đổi</h2>
+          <section data-testid="dependencies-selection">
+            <ng-container
+              [ngTemplateOutlet]="rows"
+              [ngTemplateOutletContext]="{items: selection(), removable: true}"
+            />
+          </section>
+          <div class="actions">
+            <button
+              data-testid="dependencies-add"
+              [disabled]="!editable() || selection().length >= 20"
+              (click)="openChooser()"
+            >
+              Thêm task phụ thuộc</button
+            ><button
+              data-testid="dependencies-clear-all"
+              [disabled]="!editable() || !selection().length"
+              (click)="clear()"
+            >
+              Xóa tất cả phụ thuộc
+            </button>
+          </div>
+          @if (selection().length === 20) {
+            <p>Tối đa 20 task phụ thuộc.</p>
+          }
+          <div class="actions">
+            <button
+              data-testid="dependencies-review-action"
+              [disabled]="!editable() || !dirty()"
+              (click)="review()"
+            >
+              Xem lại phụ thuộc</button
+            ><a class="button secondary" [routerLink]="detailLink()">Hủy</a>
+          </div>
+        </section>
+      }
+      @if (phase() === 'review') {
+        <section class="panel" data-testid="dependencies-review">
+          <h2>Xem lại phụ thuộc</h2>
+          <section data-testid="dependencies-before">
+            <h3>Trước thay đổi</h3>
+            <ng-container
+              [ngTemplateOutlet]="rows"
+              [ngTemplateOutletContext]="{
+                items: c.dependencies,
+                diff: 'before',
+              }"
+            />
+          </section>
+          <section data-testid="dependencies-after">
+            <h3>Sau thay đổi</h3>
+            <ng-container
+              [ngTemplateOutlet]="rows"
+              [ngTemplateOutletContext]="{items: selection(), diff: 'after'}"
+            />
+          </section>
+          <label class="ack"
+            ><input
+              data-testid="dependencies-ack"
+              type="checkbox"
+              [(ngModel)]="acknowledged"
+              [disabled]="busy()"
+            />Tôi đã xem lại thay đổi phụ thuộc.</label
+          >
+          <div class="actions">
+            <button
+              data-testid="dependencies-back-to-edit"
+              [disabled]="busy()"
+              (click)="back()"
+            >
+              Quay lại chỉnh sửa</button
+            ><button
+              data-testid="dependencies-save"
+              [disabled]="busy() || !acknowledged || !verified()"
+              (click)="save()"
+            >
+              Lưu phụ thuộc
+            </button>
+          </div>
+        </section>
+      }
+    }
+    @if (phase() === 'saving') {
+      <p data-testid="dependencies-saving" role="status">Đang lưu phụ thuộc…</p>
+    }
+    @if (phase() === 'unknown') {
+      <section class="panel" data-testid="dependencies-unknown" role="status">
+        <h2>
+          Chưa xác định kết quả lưu. Giữ nguyên yêu cầu để kiểm tra biên nhận.
+        </h2>
+        @if (!canReplay()) {
+          <p>
+            Chỉ có thể kiểm tra biên nhận; nội dung yêu cầu không còn được giữ.
+          </p>
+        }
+        <div class="actions">
+          <button
+            data-testid="dependencies-receipt-check"
+            [disabled]="busy()"
+            (click)="recover()"
+          >
+            Kiểm tra biên nhận</button
+          ><button
+            data-testid="dependencies-exact-retry"
+            [disabled]="busy() || !canReplay()"
+            (click)="recover(true)"
+          >
+            Gửi lại đúng yêu cầu này
+          </button>
+        </div>
+      </section>
+    }
+    @if (receipt(); as r) {
+      <section class="panel" data-testid="dependencies-saved">
+        <h2>Đã lưu phụ thuộc</h2>
+        <p>
+          Biên nhận ghi nhận cấu hình tại thời điểm lưu; trạng thái hiện tại có
+          thể đã thay đổi.
+        </p>
+        <p>{{ r.eventId }} · {{ r.revision }} · {{ r.committedAt }}</p>
+        <section data-testid="dependencies-before">
+          <h3>Trước thay đổi</h3>
+          <ng-container
+            [ngTemplateOutlet]="rows"
+            [ngTemplateOutletContext]="{items: r.before}"
+          />
+        </section>
+        <section data-testid="dependencies-after">
+          <h3>Sau thay đổi</h3>
+          <ng-container
+            [ngTemplateOutlet]="rows"
+            [ngTemplateOutletContext]="{items: r.after}"
+          />
+        </section>
+      </section>
+    }
+    <div class="actions">
+      <a
+        class="button secondary"
+        data-testid="dependencies-open-task"
+        [routerLink]="detailLink()"
+        >Mở task</a
+      ><button
+        data-testid="dependencies-reload"
+        [disabled]="busy() || uncertain()"
+        (click)="load()"
+      >
+        {{ phase() === 'error' ? 'Thử tải lại' : 'Tải lại dữ liệu' }}
+      </button>
+    </div>
+    <dialog
+      data-testid="dependencies-chooser"
+      aria-labelledby="dependencies-chooser-title"
+      (cancel)="closeChooser()"
+      (close)="chooserClosed()"
+    >
+      <h2 id="dependencies-chooser-title">Chọn task phụ thuộc</h2>
+      <button (click)="closeChooser()">Đóng</button>
+      <form (ngSubmit)="search()">
+        <label for="dependencies-query">Tìm task</label
+        ><input
+          id="dependencies-query"
+          data-testid="dependencies-search"
+          name="query"
+          [(ngModel)]="query"
+          autofocus
+        /><button
+          data-testid="dependencies-search-submit"
+          type="submit"
+          [disabled]="chooserLoading() || !editable()"
+        >
+          Tìm kiếm
+        </button>
+      </form>
+      @if (chooserLoading()) {
+        <p role="status">Đang tải phụ thuộc…</p>
+      }
+      @if (chooserError()) {
+        <p role="alert">{{ chooserError() }}</p>
+      }
+      @if (candidates(); as p) {
+        @for (t of p.items; track t.id) {
+          <article
+            class="candidate"
+            [attr.data-testid]="'dependency-candidate-' + t.id"
+          >
+            <div>
+              <strong>{{ title(t) }}</strong>
+              <p>{{ t.status }}</p>
+            </div>
+            <button
+              [attr.data-testid]="'dependency-choose-' + t.id"
+              [attr.aria-label]="'Chọn ' + title(t)"
+              [disabled]="
+                isSelected(t.id) || selection().length >= 20 || !editable()
+              "
+              (click)="choose(t)"
+            >
+              {{ isSelected(t.id) ? 'Đã chọn' : 'Chọn ' + title(t) }}
+            </button>
+          </article>
+        } @empty {
+          <p data-testid="dependencies-empty-candidates">
+            Không tìm thấy task phù hợp.
+          </p>
+        }
+        <div class="actions">
+          <button
+            data-testid="dependencies-previous"
+            [disabled]="chooserLoading() || page === 0"
+            (click)="search(page - 1)"
+          >
+            Trang trước</button
+          ><span>Trang {{ page + 1 }}</span
+          ><button
+            data-testid="dependencies-next"
+            [disabled]="
+              chooserLoading() || (page + 1) * 20 >= p.total || page >= 100000
+            "
+            (click)="search(page + 1)"
+          >
+            Trang sau
+          </button>
+        </div>
+      }
+    </dialog>
+    <dialog
+      data-testid="dependencies-discard-dialog"
+      aria-labelledby="dependencies-discard-title"
+      (cancel)="finishDiscard(false)"
+    >
+      <h2 id="dependencies-discard-title">
+        {{
+          uncertain()
+            ? 'Kết quả lưu chưa rõ. Rời trang sẽ mất khả năng gửi lại đúng yêu cầu; biên nhận vẫn cần được kiểm tra.'
+            : 'Bỏ thay đổi phụ thuộc chưa lưu?'
+        }}
+      </h2>
+      <div class="actions">
+        <button autofocus (click)="finishDiscard(false)">
+          {{ uncertain() ? 'Ở lại' : 'Tiếp tục chỉnh sửa' }}</button
+        ><button (click)="finishDiscard(true)">
+          {{ uncertain() ? 'Rời trang' : 'Bỏ thay đổi' }}
+        </button>
+      </div>
+    </dialog>
+    <ng-template
+      #rows
+      let-items="items"
+      let-removable="removable"
+      let-diff="diff"
+      ><p data-testid="dependencies-count">{{ items.length }}/20 task</p>
+      @for (t of items; track t.id) {
+        <article
+          class="candidate"
+          [attr.data-testid]="'dependency-row-' + t.id"
+        >
+          <div>
+            <a [routerLink]="detailLink(t.id)" data-testid="dependency-title">{{
+              title(t)
+            }}</a>
+            <p data-testid="dependency-status">{{ t.status }}</p>
+            @if (diff === 'before' && !isSelected(t.id)) {
+              <p>Đã bỏ</p>
+            }
+            @if (diff === 'after' && isAdded(t.id)) {
+              <p>Đã thêm</p>
+            }
+          </div>
+          @if (removable) {
+            <button
+              [attr.data-testid]="'dependency-remove-' + t.id"
+              [disabled]="!editable()"
+              (click)="remove(t.id)"
+            >
+              Bỏ {{ title(t) }}
+            </button>
+          }
+        </article>
+      } @empty {
+        <p>Không có phụ thuộc</p>
+      }
+    </ng-template>
+  </main>
+</div>

@@ -38,6 +38,45 @@ export class AuthFailure extends Error {
   }
 }
 
+// Validate before publishing a session to shared identity observers.
+function sessionUser(value: unknown): AuthUser {
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    Array.isArray(value) ||
+    Object.keys(value).sort().join(',') !== 'displayName,email,id'
+  )
+    throw new AuthFailure('server');
+  const user = value as Record<string, unknown>;
+  if (
+    typeof user['id'] !== 'string' ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(
+      user['id'],
+    ) ||
+    typeof user['email'] !== 'string' ||
+    !user['email'].trim() ||
+    typeof user['displayName'] !== 'string'
+  )
+    throw new AuthFailure('server');
+  for (const [text, max] of [
+    [user['email'], 320],
+    [user['displayName'], 255],
+  ] as const) {
+    if (Array.from(text).length > max) throw new AuthFailure('server');
+    for (let i = 0; i < text.length; i++) {
+      const c = text.charCodeAt(i);
+      if (c < 32 || (c >= 127 && c <= 159) || c === 0x2028 || c === 0x2029)
+        throw new AuthFailure('server');
+      if (c >= 0xd800 && c <= 0xdbff) {
+        const next = text.charCodeAt(++i);
+        if (!(next >= 0xdc00 && next <= 0xdfff))
+          throw new AuthFailure('server');
+      } else if (c >= 0xdc00 && c <= 0xdfff) throw new AuthFailure('server');
+    }
+  }
+  return value as AuthUser;
+}
+
 @Injectable({providedIn: 'root'})
 export class AuthService {
   private readonly http = inject(HttpClient);
@@ -85,8 +124,9 @@ export class AuthService {
       const response = await firstValueFrom(
         this.http.get<ApiResponse<AuthUser>>(`${this.base}/session`),
       );
-      if (epoch === this.authEpoch) this.currentUser.set(response.data);
-      return response.data;
+      const user = sessionUser(response.data);
+      if (epoch === this.authEpoch) this.currentUser.set(user);
+      return user;
     });
   }
 

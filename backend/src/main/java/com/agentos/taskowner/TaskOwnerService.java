@@ -117,11 +117,12 @@ public class TaskOwnerService {
   private Snapshot snapshot(Scope s) {
     return jdbc.queryForObject(
         "select t.*,g.name as team_name,g.status as team_status,m.title as mission_title,m.status"
-            + " as mission_status,m.task_intake_paused,m.task_intake_version,g.updated_at as team_updated_at,m.updated_at as mission_updated_at,g.created_at as team_created_at,m.created_at as mission_created_at from tasks t join"
-            + " teams g on g.organization_id=t.organization_id and g.id=t.team_id join missions m"
-            + " on m.organization_id=t.organization_id and m.team_id=t.team_id and"
-            + " m.id=t.mission_id where t.organization_id=? and t.team_id=? and t.mission_id=? and"
-            + " t.id=?",
+            + " as mission_status,m.task_intake_paused,m.task_intake_version,g.updated_at as"
+            + " team_updated_at,m.updated_at as mission_updated_at,g.created_at as"
+            + " team_created_at,m.created_at as mission_created_at from tasks t join teams g on"
+            + " g.organization_id=t.organization_id and g.id=t.team_id join missions m on"
+            + " m.organization_id=t.organization_id and m.team_id=t.team_id and m.id=t.mission_id"
+            + " where t.organization_id=? and t.team_id=? and t.mission_id=? and t.id=?",
         (rs, n) -> {
           UUID rawOwner = rs.getObject("owner_agent_id", UUID.class);
           Agent agent = agent(s, rawOwner);
@@ -143,7 +144,7 @@ public class TaskOwnerService {
           String fingerprint =
               hash(
                   Arrays.asList(
-                      "TASK_OWNER_SNAPSHOT_V1",
+                      "TASK_OWNER_SNAPSHOT_V2",
                       s,
                       rs.getString("title"),
                       rs.getString("description"),
@@ -173,7 +174,8 @@ public class TaskOwnerService {
                       rs.getObject("team_created_at", OffsetDateTime.class).toInstant().toString(),
                       rs.getObject("mission_created_at", OffsetDateTime.class)
                           .toInstant()
-                          .toString()));
+                          .toString(),
+                      rs.getInt("dependency_revision")));
           return new Snapshot(
               safeStored(rs.getString("title"), 255, true),
               rawOwner,
@@ -379,7 +381,8 @@ public class TaskOwnerService {
     if (id == null) return null;
     var rows =
         jdbc.query(
-            "select id,name,level,status,updated_at from agents where organization_id=? and team_id=? and id=?",
+            "select id,name,level,status,updated_at from agents where organization_id=? and"
+                + " team_id=? and id=?",
             (rs, n) -> candidateRow(scope, rs),
             scope.organizationId(),
             scope.teamId(),
@@ -427,7 +430,8 @@ public class TaskOwnerService {
     String pattern =
         "%" + normalized.replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%";
     String where =
-        " from agents where organization_id=? and team_id=? and status in ('DRAFT','ACTIVE') and lower(name) like lower(?) escape '!'";
+        " from agents where organization_id=? and team_id=? and status in ('DRAFT','ACTIVE') and"
+            + " lower(name) like lower(?) escape '!'";
     long total = jdbc.queryForObject("select count(*)" + where, Long.class, org, team, pattern);
     if (total < 0 || total > 9007199254740991L) throw failure(500, "TASK_OWNER_UNAVAILABLE");
     var items =
@@ -449,9 +453,9 @@ public class TaskOwnerService {
         jdbc.query(
             "select r.event_id,r.body_sha256,r.original_response,e.revision,e.created_at,"
                 + "r.created_at,e.before_owner_agent_id,e.after_owner_agent_id,e.before_json,e.after_json"
-                + " from task_owner_receipts r left join task_owner_events e on e.id=r.event_id"
-                + " and e.organization_id=r.organization_id and e.team_id=r.team_id"
-                + " and e.mission_id=r.mission_id and e.task_id=r.task_id and e.actor_id=r.actor_id"
+                + " from task_owner_receipts r left join task_owner_events e on e.id=r.event_id and"
+                + " e.organization_id=r.organization_id and e.team_id=r.team_id and"
+                + " e.mission_id=r.mission_id and e.task_id=r.task_id and e.actor_id=r.actor_id"
                 + " where r.organization_id=? and r.team_id=? and r.mission_id=? and r.task_id=?"
                 + " and r.actor_id=? and r.idempotency_key=?",
             (rs, n) ->
@@ -628,7 +632,9 @@ public class TaskOwnerService {
     OffsetDateTime timestamp = OffsetDateTime.parse(time);
     UUID event = UUID.randomUUID();
     if (jdbc.update(
-            "update tasks set owner_agent_id=?,task_owner_revision=?,updated_at=? where organization_id=? and team_id=? and mission_id=? and id=? and task_owner_revision=?",
+            "update tasks set owner_agent_id=?,task_owner_revision=?,updated_at=? where"
+                + " organization_id=? and team_id=? and mission_id=? and id=? and"
+                + " task_owner_revision=?",
             command.ownerAgentId(),
             revision,
             timestamp,

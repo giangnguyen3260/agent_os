@@ -3,12 +3,14 @@ package com.agentos.mission.application;
 import com.agentos.auth.HumanIdentity;
 import com.agentos.mission.api.dto.TaskCreateRequest;
 import com.agentos.mission.application.MissionCreateService.Conflict;
+import com.agentos.taskdependencies.TaskDependenciesGraph;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityNotFoundException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.List;
@@ -68,7 +70,8 @@ public class TaskCreateService {
     if (teams.isEmpty()) throw new EntityNotFoundException("Team not found");
     var rows =
         jdbc.query(
-            "select title,status,task_intake_version,task_intake_paused from missions where organization_id=? and team_id=? and id=?"
+            "select title,status,task_intake_version,task_intake_paused from missions where"
+                + " organization_id=? and team_id=? and id=?"
                 + (lock ? " for update" : ""),
             (rs, n) ->
                 new Context(
@@ -144,7 +147,7 @@ public class TaskCreateService {
     }
   }
 
-  @Transactional
+  @Transactional(isolation = Isolation.READ_COMMITTED)
   public Created create(
       UUID org, UUID team, UUID mission, HumanIdentity human, UUID key, TaskCreateRequest input) {
     authorization.authorize(org, human, true, true);
@@ -153,11 +156,13 @@ public class TaskCreateService {
     String digest = hash(org, team, mission, r);
     var receipts =
         jdbc.query(
-            "select body_sha256,original_response from task_create_receipts where organization_id=? and account_id=? and idempotency_key=?",
+            "select body_sha256,original_response from task_create_receipts where organization_id=?"
+                + " and account_id=? and idempotency_key=?",
             (rs, n) -> new String[] {rs.getString(1), rs.getString(2)},
             org,
             human.id(),
             key);
+    authorization.authorize(org, human, true, false);
     if (!receipts.isEmpty()) {
       var receipt = receipts.getFirst();
       if (!digest.equals(receipt[0])) throw new Conflict("IDEMPOTENCY_CONFLICT");
@@ -182,9 +187,11 @@ public class TaskCreateService {
               r.ownerAgentId());
       if (owners.isEmpty() || !owners.getFirst()) throw new Conflict("TASK_SETUP_CONFLICT");
     }
-    for (UUID dependency : r.dependencyIds()) {
+    for (UUID dependency :
+        r.dependencyIds().stream().sorted(Comparator.comparing(UUID::toString)).toList()) {
       if (jdbc.query(
-              "select id from tasks where organization_id=? and team_id=? and mission_id=? and id=? for update",
+              "select id from tasks where organization_id=? and team_id=? and mission_id=? and id=?"
+                  + " for update",
               (rs, n) -> rs.getObject(1, UUID.class),
               org,
               team,
@@ -192,10 +199,16 @@ public class TaskCreateService {
               dependency)
           .isEmpty()) throw new Conflict("TASK_SETUP_CONFLICT");
     }
+    authorization.authorize(org, human, true, false);
+    TaskDependenciesGraph.validate(jdbc, org, team, mission);
+    // Lock sorting does not alter the historical canonical body/digest order.
+    authorization.authorize(org, human, true, false);
     // A server-generated new task can only depend on existing tasks, preventing cycles.
     UUID id = UUID.randomUUID();
     jdbc.update(
-        "insert into tasks(id,organization_id,team_id,mission_id,title,status,description,acceptance_criteria,priority,owner_agent_id) values (?,?,?,?,?,'DRAFT',?,?,?,?)",
+        "insert into"
+            + " tasks(id,organization_id,team_id,mission_id,title,status,description,acceptance_criteria,priority,owner_agent_id)"
+            + " values (?,?,?,?,?,'DRAFT',?,?,?,?)",
         id,
         org,
         team,
@@ -207,27 +220,34 @@ public class TaskCreateService {
         r.ownerAgentId());
     for (UUID dependency : r.dependencyIds())
       jdbc.update(
-          "insert into task_dependencies(organization_id,team_id,mission_id,task_id,dependency_task_id) values (?,?,?,?,?)",
+          "insert into"
+              + " task_dependencies(organization_id,team_id,mission_id,task_id,dependency_task_id)"
+              + " values (?,?,?,?,?)",
           org,
           team,
           mission,
           id,
           dependency);
     jdbc.update(
-        "update missions set task_intake_version=task_intake_version+1 where organization_id=? and team_id=? and id=?",
+        "update missions set task_intake_version=task_intake_version+1 where organization_id=? and"
+            + " team_id=? and id=?",
         org,
         team,
         mission);
     var response = details.get(org, team, mission, id, human);
     jdbc.update(
-        "insert into task_create_receipts(organization_id,account_id,idempotency_key,body_sha256,original_response) values (?,?,?,?,?)",
+        "insert into"
+            + " task_create_receipts(organization_id,account_id,idempotency_key,body_sha256,original_response)"
+            + " values (?,?,?,?,?)",
         org,
         human.id(),
         key,
         digest,
         encode(response));
     jdbc.update(
-        "insert into audit_events(id,organization_id,mission_id,task_id,actor_type,actor_id,event_type,payload,created_at) values (?,?,?,?,'HUMAN',?,'TASK_CREATED',?,current_timestamp)",
+        "insert into"
+            + " audit_events(id,organization_id,mission_id,task_id,actor_type,actor_id,event_type,payload,created_at)"
+            + " values (?,?,?,?,'HUMAN',?,'TASK_CREATED',?,current_timestamp)",
         UUID.randomUUID(),
         org,
         mission,
@@ -256,7 +276,8 @@ public class TaskCreateService {
     candidatesAllowed(org, team, mission, human);
     String search = pattern(page, query);
     String where =
-        " where organization_id=? and team_id=? and status in ('DRAFT','ACTIVE') and lower(name) like ? escape '!'";
+        " where organization_id=? and team_id=? and status in ('DRAFT','ACTIVE') and lower(name)"
+            + " like ? escape '!'";
     long total =
         jdbc.queryForObject("select count(*) from agents" + where, Long.class, org, team, search);
     return new Candidates<>(
@@ -282,7 +303,8 @@ public class TaskCreateService {
     candidatesAllowed(org, team, mission, human);
     String search = pattern(page, query);
     String where =
-        " where organization_id=? and team_id=? and mission_id=? and lower(title) like ? escape '!'";
+        " where organization_id=? and team_id=? and mission_id=? and lower(title) like ? escape"
+            + " '!'";
     long total =
         jdbc.queryForObject(
             "select count(*) from tasks" + where, Long.class, org, team, mission, search);
