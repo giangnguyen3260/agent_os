@@ -18,6 +18,89 @@ const environment = {
   FORCE_COLOR: '0',
 };
 
+async function checkPatternConsumers() {
+  // Check both supported module entry points after the ESLint major upgrade.
+  await import('@eslint/config-array');
+  const esm = await import('eslint');
+  const {ESLint} = require('eslint');
+  assert.equal(esm.ESLint, ESLint);
+  const googleRequire = createRequire(require.resolve('gts/package.json'));
+  assert.equal(googleRequire('eslint').ESLint, ESLint);
+  const google = new ESLint({cwd: workspace});
+  const [googleResult] = await google.lintText(
+    'export function toolingFixture(value: number) {\n' +
+      '  var result = value == 1;\n' +
+      '  Promise.resolve(result);\n' +
+      '  return result;\n' +
+      '}\n',
+    {filePath: path.join(workspace, 'src/main.ts')},
+  );
+  for (const rule of [
+    'no-var',
+    'eqeqeq',
+    '@typescript-eslint/no-floating-promises',
+  ]) {
+    assert.ok(
+      googleResult.messages.some(message => message.ruleId === rule),
+      `Google config must still enforce ${rule} through ESLint 10`,
+    );
+  }
+  const fixture = await fs.mkdtemp(
+    path.join(os.tmpdir(), 'agentos-pattern-qc-'),
+  );
+  try {
+    await fs.mkdir(path.join(fixture, 'src'));
+    await fs.writeFile(path.join(fixture, 'src/keep.js'), 'debugger;\n');
+    await fs.writeFile(path.join(fixture, 'src/skip.js'), 'debugger;\n');
+    const eslint = new ESLint({
+      cwd: fixture,
+      overrideConfigFile: true,
+      overrideConfig: [
+        {ignores: ['**/skip.js']},
+        {files: ['**/*.js'], rules: {'no-debugger': 'error'}},
+      ],
+    });
+    const results = await eslint.lintFiles(['src/**/*.js']);
+    assert.deepEqual(
+      results.map(result => path.basename(result.filePath)),
+      ['keep.js'],
+    );
+    assert.equal(results[0].errorCount, 1);
+    assert.equal(results[0].messages[0].ruleId, 'no-debugger');
+
+    // Exercise the CLI's package/cache consumers, rather than just new APIs.
+    const pacoteRequire = createRequire(cliRequire.resolve('pacote'));
+    const packlistRequire = createRequire(
+      pacoteRequire.resolve('npm-packlist'),
+    );
+    const walk = packlistRequire('ignore-walk');
+    await fs.writeFile(path.join(fixture, '.npmignore'), '**/skip.js\n');
+    const files = await walk({path: fixture, ignoreFiles: ['.npmignore']});
+    assert.ok(files.includes('src/keep.js'));
+    assert.ok(!files.includes('src/skip.js'));
+
+    const cacache = pacoteRequire('cacache');
+    const cache = path.join(fixture, 'cache');
+    await cacache.put(cache, 'kept-entry', 'kept-content');
+    const orphan = path.join(cache, 'content-v2/sha512/aa/bb/orphan');
+    await fs.mkdir(path.dirname(orphan), {recursive: true});
+    await fs.writeFile(orphan, 'unreferenced-content');
+    const verified = await cacache.verify(cache);
+    assert.equal(verified.verifiedContent, 1);
+    assert.equal(verified.reclaimedCount, 1);
+    assert.equal(
+      (await cacache.get(cache, 'kept-entry')).data.toString(),
+      'kept-content',
+    );
+    await assert.rejects(fs.access(orphan), {code: 'ENOENT'});
+    console.log(
+      'PASS: ESLint CJS/ESM, glob selection/ignores, package ignore-walk and cache glob cleanup',
+    );
+  } finally {
+    await fs.rm(fixture, {recursive: true, force: true});
+  }
+}
+
 async function checkMcpConsumer() {
   const {Client} = cliRequire('@modelcontextprotocol/sdk/client/index.js');
   const {StdioClientTransport} = cliRequire(
@@ -158,6 +241,7 @@ async function checkDevServerConsumer() {
 }
 
 (async () => {
+  await checkPatternConsumers();
   await checkMcpConsumer();
   await checkDevServerConsumer();
 })().catch(error => {
