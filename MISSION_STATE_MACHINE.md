@@ -1,5 +1,7 @@
 # AgentOS Mission and Task State Machines v0.1
 
+Historical conceptual design. The persisted Task vocabulary differs from this document; do not implement its state names or migrate data by inference. See the [current proposed runtime lifecycle/authority contract](docs/engineering/RUNTIME_LIFECYCLE_AUTHORITY_CONTRACT.md) for compatibility rules and review status. No runtime transitions are implemented by these documents.
+
 ## 1. Design Principle
 
 State machines must be deterministic.
