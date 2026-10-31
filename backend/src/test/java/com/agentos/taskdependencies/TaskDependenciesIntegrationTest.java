@@ -129,7 +129,11 @@ public class TaskDependenciesIntegrationTest extends DependencyHttpFixture {
     for (var row : jdbc.queryForList("select * from audit_events where organization_id=?", org)) {
       assertThat(row.get("task_id")).isEqualTo(task);
       assertThat(row.get("mission_id")).isEqualTo(mission);
-      fields(json.readTree((String) row.get("payload")), "eventId", "revision");
+      var payload = json.readTree((String) row.get("payload"));
+      assertThat(payload.isObject()).isTrue();
+      assertThat(payload.size()).isEqualTo(2);
+      assertThat(payload.has("eventId")).isTrue();
+      assertThat(payload.has("revision")).isTrue();
     }
   }
 
@@ -658,7 +662,9 @@ public class TaskDependenciesIntegrationTest extends DependencyHttpFixture {
       throws Exception {
     boolean owner = editor.equals("OWNER");
     if (!owner)
-      jdbc.update("update tasks set description='',acceptance_criteria='' where id=?", task);
+      jdbc.update(
+          "update tasks set description='Description',acceptance_criteria='Criteria' where id=?",
+          task);
     jdbc.update("update tasks set priority='NORMAL' where id=?", task);
     UUID target = node("Target", "DRAFT"), agent = null;
     if (owner) {
@@ -691,8 +697,8 @@ public class TaskDependenciesIntegrationTest extends DependencyHttpFixture {
         }
       } else {
         body.put("title", i == 0 ? "Changed" : "Source");
-        body.put("description", "");
-        body.put("acceptanceCriteria", "");
+        body.put("description", "Description");
+        body.put("acceptanceCriteria", "Criteria");
         body.put("priority", "NORMAL");
       }
       data(
@@ -747,8 +753,8 @@ public class TaskDependenciesIntegrationTest extends DependencyHttpFixture {
       a.put("status", "DRAFT");
     } else {
       body.put("title", "Historical title");
-      body.put("description", "");
-      body.put("acceptanceCriteria", "");
+      body.put("description", "Description");
+      body.put("acceptanceCriteria", "Criteria");
       body.put("priority", "NORMAL");
       before = json.createObjectNode();
       before.put("title", "Source");
@@ -757,8 +763,8 @@ public class TaskDependenciesIntegrationTest extends DependencyHttpFixture {
       before.putNull("priority");
       after = before.deepCopy();
       after.put("title", "Historical title");
-      after.put("description", "");
-      after.put("acceptanceCriteria", "");
+      after.put("description", "Description");
+      after.put("acceptanceCriteria", "Criteria");
       after.put("priority", "NORMAL");
     }
     var receipt = json.createObjectNode();

@@ -219,7 +219,7 @@ abstract class DependencyHttpFixture {
   void fields(JsonNode value, String... expected) {
     List<String> actual = new ArrayList<>();
     value.fieldNames().forEachRemaining(actual::add);
-    assertThat(actual).containsExactlyInAnyOrder(expected);
+    assertThat(actual).containsExactly(expected);
   }
 
   long count(String table) {
