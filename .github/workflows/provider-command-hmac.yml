@@ -1,0 +1,37 @@
+name: Provider command HMAC
+on:
+  pull_request:
+    paths:
+      - 'backend/src/main/java/com/agentos/providercommands/**'
+      - 'backend/src/test/java/com/agentos/providercommands/**'
+      - 'backend/src/test/resources/providercommands/**'
+      - 'scripts/provider-command-vectors.py'
+      - 'docs/engineering/PROVIDER_COMMAND_HMAC_CONTRACT.md'
+      - '.github/workflows/provider-command-hmac.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  command-hmac:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Verify independent command vectors
+        run: python3 scripts/provider-command-vectors.py --check
+      - name: Google Java import rules
+        run: python3 scripts/check-java-imports.py
+      - name: Verify command and credential boundaries
+        run: mvn --batch-mode --no-transfer-progress -f backend/pom.xml '-Dtest=CommandBoundaryTest,CredentialBoundaryTest' verify
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: provider-command-hmac-evidence
+          path: |
+            backend/target/surefire-reports
+            backend/target/site/jacoco
