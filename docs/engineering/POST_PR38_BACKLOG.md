@@ -10,7 +10,7 @@ BA-02 proposed lifecycle/authority contract and44 requirement cases are authored
 
 BA-03 design checkpoint: exact proposed connection API/security rules,109 authored cases and72 editable Figma frames are ready with bounded independent design review. See [API](PROVIDER_CONNECTION_API_CONTRACT.md), [handoff](PROVIDER_CONNECTION_FIGMA_HANDOFF.md) and [review](../qc/PROVIDER_CONNECTION_DESIGN_REVIEW.md). No feature runtime is implemented; persistence/key boundary and adapter/UI implementation with real QC are next.
 
-Latest storage instruction: [provider storage amendment](PROVIDER_CREDENTIAL_STORAGE_AMENDMENT.md) supersedes DB credential ciphertext. The initial credential boundary is implemented/tested separately; actual DB/secret-manager/API integration remains pending. [Token inventory](TOKEN_STORAGE_INVENTORY.md) also leaves session/CSRF one-way storage compatibility OPEN; treat that as a P0 hardening slice before claiming system-wide compliance. Do not infer that all legacy framework tokens are already hashed.
+Latest storage instruction: [provider storage amendment](PROVIDER_CREDENTIAL_STORAGE_AMENDMENT.md) supersedes DB credential ciphertext. The initial credential boundary is implemented/tested separately. Draft PR42 adds internal JDBC persistence with focused Java21/H2/PostgreSQL evidence; secret-manager/API/UI integration remains pending. See [persistence QC](../qc/PROVIDER_CONNECTION_PERSISTENCE_QC_REPORT.md) for exact candidate identities and broader gate status. [Token inventory](TOKEN_STORAGE_INVENTORY.md) also leaves session/CSRF one-way storage compatibility OPEN; treat that as a P0 hardening slice before claiming system-wide compliance. Do not infer that all legacy framework tokens are already hashed.
 
 ## Current boundary
 
@@ -57,7 +57,7 @@ Initial successful vertical slice: authorized human configures one provider/Agen
 
 Each slice has a frozen BA contract, reviewed API/DTO/error and authority boundary, migration/rollback plan when applicable, responsive Figma flow review before implementation, real persisted UI/API behavior and independent QC findings/retests. Cover normal/empty/error/denied/stale/unknown outcomes where relevant, scope and role revocation, concurrency/idempotency/rollback and secret/privacy boundaries. Use actual PostgreSQL and suitable browser/restart tests with exact commit provenance; authored or collected tests are not passes. Maintain clean Google coding style and existing CI gates; Sonar stays paused. No production sample records or hardcoded success statistics.
 
-Passwords and verification capabilities use one-way hashes; provider API keys need authenticated reversible encryption because the server must use them. Retain this distinction in requirements rather than imposing one-way hashing on every sensitive field.
+Passwords and verification capabilities use one-way hashes. The later user instruction and storage amendment supersede the original provider-ciphertext proposal: the application DB stores scoped one-way HMAC metadata plus opaque external secret references; usable provider keys stay outside this DB in an explicitly configured secret manager. Session/CSRF compatibility remains OPEN; do not claim system-wide one-way storage completion.
 
 ## Inputs to resolve at the relevant contract
 
