@@ -1,5 +1,12 @@
 # Provider completion boundary candidate — 1 November 2026
 
+Provider options policy candidate (`feature/provider-options-policy`): authored ADMIN-only
+options API, V024 empty policy/security admission tables, trusted operator CLI and actual
+Docker cookie-session probe. No automatic provider defaults, provider/key calls, public
+writes or FE change. Java21/native/Docker verification and independent final acceptance
+remain pending. See `docs/qc/PROVIDER_OPTIONS_POLICY_QC_REPORT.md` and
+`backend/PROVIDER_POLICY_OPERATIONS.md`. Prior PR45 gates are closed separately.
+
 Explicit prepared-write and own-receipt lookup boundaries now own their transaction completion, refuse ambient context and distinguish confirmed success/rejection from uncertain completion without exposing provisional data. No retry, automatic lookup, key/vault work or compensation. Java21 focused177/0 passed, including61 H2 and62 native PostgreSQL completion cases; full Quality passed1385 backend tests, audit0/frontend gates; Completion Docker passed902 regular backend tests,1101 retained browser invocations plus3 focused repeats, native PostgreSQL/SMTP and exact-session restart/logout; independent source/test review found no publication blocker. This is not a public HTTP route, universal framework-log privacy or actual TCP-partition acceptance. See [QC](docs/qc/PROVIDER_COMPLETION_BOUNDARY_QC_REPORT.md). No migration, merge/deploy; Sonar paused.
 
 # Provider command receipt candidate — 1 November 2026

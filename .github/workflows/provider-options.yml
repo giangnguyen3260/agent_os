@@ -1,0 +1,51 @@
+name: Provider options policy
+on:
+  pull_request:
+    paths:
+      - 'backend/**'
+      - '.github/workflows/provider-options.yml'
+      - 'docs/engineering/PROVIDER_OPTIONS_POLICY*'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  provider-options:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: provider_options_test
+          POSTGRES_USER: agentos
+          POSTGRES_PASSWORD: provider_options_ci_only
+        ports:
+          - 15432:5432
+        options: >-
+          --health-cmd "pg_isready -U agentos -d provider_options_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Check imports
+        run: python3 scripts/check-java-imports.py
+      - name: H2 structural and actual session HTTP suites
+        run: mvn --batch-mode --no-transfer-progress -f backend/pom.xml -Dtest=ProviderPolicyIntegrationTest,ProviderOptionsHttpTest test
+      - name: Mandatory native PostgreSQL core and HTTP suites
+        env:
+          TASK_EDIT_TEST_JDBC_URL: jdbc:postgresql://127.0.0.1:15432/provider_options_test
+          TASK_EDIT_TEST_DB_USER: agentos
+          TASK_EDIT_TEST_DB_PASSWORD: provider_options_ci_only
+        run: mvn --batch-mode --no-transfer-progress -f backend/pom.xml -Dtest=ProviderPolicyPostgresIT,ProviderOptionsPostgresIT verify
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: provider-options-evidence
+          path: |
+            backend/target/surefire-reports
+            backend/target/site/jacoco

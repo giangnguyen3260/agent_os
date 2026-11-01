@@ -58,6 +58,14 @@ jobs:
       - name: Verify migrated identity and session schema
         run: |
           docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT version, success FROM flyway_schema_history ORDER BY installed_rank;"'
+      - name: Provision isolated provider options fixtures
+        run: docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < scripts/provider-options-ci-fixture.sql
+      - name: PostgreSQL provider policy operator and options boundary
+        timeout-minutes: 5
+        env:
+          PROVIDER_OPTIONS_DISPOSABLE: '1'
+          E2E_BASE_URL: http://127.0.0.1:18080
+        run: python3 scripts/provider-options-probe.py
       # Separate disposable humans keep password reset tests from changing the login fixture.
       - name: Provision isolated recovery test accounts
         run: |
