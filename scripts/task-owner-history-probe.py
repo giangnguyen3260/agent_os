@@ -37,7 +37,8 @@ def snapshot():
     # This observes final committed effects, not rolled-back SQL attempts.
     tables = sql("SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename NOT IN ('flyway_schema_history','authentication_audit','authentication_attempts') AND tablename NOT LIKE 'spring_session%' ORDER BY tablename;").splitlines()
     entries = [f"'{table}',(SELECT md5(coalesce(string_agg(row_to_json(x)::text||'@'||x.xmin::text||':'||x.ctid::text,'|' ORDER BY row_to_json(x)::text,x.ctid),'')) FROM {table} x)" for table in tables]
-    return json.loads(sql('SELECT json_build_object(' + ','.join(entries) + ');'))
+    # Aggregate pairs in one SQL snapshot without PostgreSQL's 100-argument limit.
+    return json.loads(sql('SELECT json_object_agg(k,v) FROM (VALUES ' + ','.join('(' + entry + ')' for entry in entries) + ') AS snapshots(k,v);'))
 
 class Client:
     def __init__(self, kind='admin'):
