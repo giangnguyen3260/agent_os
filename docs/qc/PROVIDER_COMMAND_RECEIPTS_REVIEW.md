@@ -184,3 +184,96 @@ QC read the newly completed `/tmp/agentos-receipt-tools/isolated-h2.log`: **35 t
 The four extra shared invocations are the migrated-column test plus three wrong-tenant FK cases. Native now has **44 authored invocations including inherited shared tests**; compilation does not establish their success. **54 retained focused + 35 H2 + 44 native = 133 is an expected future focused CI total only, not 133 passed.** Native schema/FK/legacy-retention, observed concurrency/revocation and production clock acceptance await actual completed CI logs and exact source/tested-merge identity. No additional first-writer rollback-handoff or historical-key race requirement is introduced by this retest.
 
 Only this owned review file was appended. No implementation/test/contract/CI/old-report edits or remote writes, merge or deployment were performed. No public HTTP/health/key/vault/visual/whole-system claim is made.
+
+## Checkpoint 6 — published PR44 identity and actual focused Java21/native FAILURE
+
+Date: 1 November 2026, approximately 10:57 UTC. Independently queried PR44, commit-associated runs, job states and decoded focused job logs through the GitHub connector. PR44 is open/draft/unmerged. Source `5bb7aa85339c458f6bd79db6ed986c407b3bc1ad`, source tree `f80f220442e7bb8dc56ffe42c31713da6f432362`, base `69131db3c62d42159bfd9f3cf77bdd32f1201a7a` are independently confirmed. Checkout logs identify tested merge `19fc0609c66892ef1eb4a2fb2f2158cb69b180bf`, explicitly merging this source into that base. GitHub source-to-merge comparison reports one merge commit ahead, zero changed files and identical tree. Local HEAD matches published source; git diff of the six reviewed BE files against that source returned 0.
+
+[Focused run 41299598356](https://github.com/giangnguyen3260/agent_os/actions/runs/41299598356), [job 124827607496](https://github.com/giangnguyen3260/agent_os/actions/runs/41299598356/job/124827607496): independently observed **completed/failure**, and actual decoded logs were fetched. Initial running-job log requests returned BlobNotFound and supplied no evidence; the completed download succeeded. Logs show Temurin **21.0.13+9**, Google import check passed, Spotless **259 clean files**, real native **PostgreSQL 16.15** on the configured PostgreSQL JDBC URL, and Flyway applied all **23 migrations through V023** on both H2 and native PostgreSQL.
+
+| Actual Surefire suite | Tests / failures / errors / skipped |
+| --- | --- |
+| CredentialBoundaryTest | 31 / 0 / 0 / 0 |
+| ProviderReceiptIntegrationTest (H2) | 35 / 0 / 0 / 0 |
+| ProviderReceiptPostgresIT | **44 / 4 / 13 / 0** |
+| CommandBoundaryTest | 23 / 0 / 0 / 0 |
+| Aggregate | **133 / 4 / 13 / 0** |
+
+Maven reports **BUILD FAILURE**, finished **10:56:51 UTC**. Thus 133 is now an actual executed total, **not 133 passes**. Artifact upload finalized ID `13079744814`; artifact existence does not turn the failure into acceptance.
+
+### R2 — High: PostgreSQL untyped timestamp mapping breaks fresh non-CREATE execution
+
+Production before-state validation obtains parent with queryForList, then directly casts `parent.get("created_at")` and `parent.get("updated_at")` to OffsetDateTime. Actual native log assertions independently expose this driver's untyped timestamptz map value as **java.sql.Timestamp**, not OffsetDateTime. A Timestamp cannot satisfy that Java cast; safe() converts the resulting runtime failure to generic RECEIPT_UNAVAILABLE. This is a concrete source-derived explanation for fresh native non-CREATE service failures, rather than a timing/clock-contract issue. The sanitized service log does not expose a ClassCastException stack, so the diagnosis combines the demonstrated native map type and inspected cast instead of claiming a directly logged nested cause.
+
+Observed native errors include malformed-selected-row setup variants (six), wrong-tenant FK setup variants (three), named-reference setup, second-ADMIN mutation, legacy creation-retention setup and the RENAME observed-wait execution. Fresh revision/no-change precedence also fails with expected 409 versus actual 500. These outcomes do not establish that their intended corruption/FK/clock assertions were reached. The native CREATE-only race can exercise a different path; no whole native pass is inferred from partial cases.
+
+Required resolution by BE: use typed JDBC reads for parent timestamps (or an explicitly correct timestamp conversion preserving instants/precision), without assuming an untyped map returns OffsetDateTime. Preserve complete parent/event comparisons and failure privacy. Retest actual PostgreSQL rename/rotate/state paths and the previously failing setup/assertion cases on the corrected published identity. **This new native finding supersedes prior no-blocker source disposition; native correctness/overall acceptance is blocked pending correction and retest.** QC edits no implementation.
+
+### R3 — test portability: recorded_at raw-map assertion uses incompatible Java types
+
+All three provider variants in completeRowsAllOperationsAndImmutableHistory fail at inspectRow's raw `row.get("recorded_at")` equality with receipt.recordedAt. Actual logs show, for example, expected `2026-11-01T10:56:50.453883Z (java.time.OffsetDateTime)` versus `2026-11-01T10:56:50.453 (java.sql.Timestamp)`. Raw toString formatting is not evidence of stored precision loss; inspectRow must compare typed timestamps/instants while preserving actual fractional precision. This assertion failure is separate from R2's production cast and must be fixed without weakening the all-column comparison. Three CREATE sequences fail before their later operation assertions; those native after-state paths are not established by these executions.
+
+### Other run state and boundaries
+
+[Quality 41299598314](https://github.com/giangnguyen3260/agent_os/actions/runs/41299598314), verify job `124827607489`, remains **in_progress** at this observation; no completed full-suite result is asserted. [Docker 41299598302](https://github.com/giangnguyen3260/agent_os/actions/runs/41299598302) was independently observed running (compose-smoke `124827607508`, formatting `124827607622`); full Docker acceptance remains **PENDING**, with no hour-long wait or new visual review. Prior PR43 Docker success supplied by main belongs to that prior identity and is not edited into the frozen old report or used as receipt acceptance.
+
+Only this review was appended. No production/test fixes, CI retry, remote comments/approval, merge or deployment were performed. Native failure is actual evidence that H2 structural passes and source review were insufficient to establish PostgreSQL portability; subsequent corrections must retain this failed checkpoint chronologically.
+
+## Checkpoint 7 — C2 typed-parent and full-precision timestamp source retest
+
+Date: 1 November 2026. Main announced C2 fix freeze/publication and requested bounded R2/R3 source retest. Local source is `3cba4276027ce4082674e4cf9e0bc2d9871a1eb4`, tree `20019298573ea613cc3c7fd09ccf5e4443bcb6c6`. Git comparison with failed C1 source `5bb7aa85339c458f6bd79db6ed986c407b3bc1ad` lists exactly two changed files: ProviderReceiptService and ProviderReceiptFixture. Reviewed the complete two-file diff; other four frozen BE files retain checkpoint 5/6 identities.
+
+| Corrected file | SHA-256 |
+| --- | --- |
+| ProviderReceiptService.java | `1c244835183eed7f0a336a1152833e82d35d10f22131b1736c78d9a956ffe996` |
+| ProviderReceiptFixture.java | `c807e1231b25ad933e698af934e250db49a5281e0929dd3ae3cdf1264d25591c` |
+
+**Bounded source retest: R2 and R3 corrections are adequate at source/assertion level; no new source blocker identified. Their native runtime closure remains PENDING the corrected-source CI execution.** C1's actual failed native checkpoint is retained and is not reclassified as a pass.
+
+R2: parent lookup now uses JdbcTemplate.query with a typed ResultSet mapper instead of an untyped column map. New parent(rs) maps both created_at and updated_at with `rs.getObject(column, OffsetDateTime.class)`, UUIDs through the existing validating helper, provider/mode enums, strings and revisions through typed accessors. The selected row remains scoped and FOR UPDATE; missing parent remains NOT_FOUND, and multiple rows fail closed. The historical-event projection is compared with all safe parent fields; **configuration revision now also has an explicit equality guard**, and both timestamp comparisons use exact Instant equality. No Timestamp-to-OffsetDateTime cast remains in the receipt package. Null/malformed mapping or mismatched fields still go through safe() to cause-free RECEIPT_UNAVAILABLE and rollback-only. Receipt-first replay, authority/lock order, mutation path, after validation and transaction boundaries are unchanged.
+
+R3: inspectRow retains the exact 13-column allowlist and other value assertions. recorded_at is now independently queried by the same org/actor/idempotency namespace with typed `getObject("recorded_at", OffsetDateTime.class)`, asserted non-null, then compared using exact `storedRecordedAt.toInstant().equals(result.recordedAt.toInstant())` semantics. Instant comparison preserves the entire fractional second supplied by the JDBC/database types; there is no millisecond conversion, truncation, tolerance or formatted-string comparison. Different timezone offsets representing the same instant are appropriately equivalent. This removes the incompatible raw-map class equality without weakening stored-value/precision validation.
+
+QC independently inspected the completed **BE-executed** `/tmp/agentos-receipt-tools/receipt-h2-typed-parent.log`: **35 found/started/successful, zero failed/skipped/aborted**, ten successful containers; completion approximately **10:59:33 UTC** (17:59:33 +07). This corroborates the supplied local H2 result, not a new QC-executed suite, full application/Java21 run or PostgreSQL portability pass. Only an actual native rerun can establish that the previously failing non-CREATE, full-row, legacy-retention and clock cases now complete on PostgreSQL. No native corrected-source result was inspected at this source checkpoint, and **133 passed is unclaimed**.
+
+Only this review file was appended by QC. Concurrent main-owned report/status edits are outside QC ownership. No implementation/test/migration/contract changes, remote writes, CI retries, merge or deployment were performed.
+
+## Checkpoint 8 — C2 published identity and independently fetched successful native Java21 retest
+
+Date: 1 November 2026, approximately 11:02 UTC. Independently queried the specified C2 workflows, PR44 metadata/source comparison and completed focused decoded logs through GitHub tools. Published C2 source is `ad012b4fc9bb26b6b31c9ae27a7190c39e59467a`, tree `20019298573ea613cc3c7fd09ccf5e4443bcb6c6`, base `69131db3c62d42159bfd9f3cf77bdd32f1201a7a`. This tree equals checkpoint 7's locally reviewed correction tree despite its different intermediate commit ID. Local HEAD is the published C2 source; diff of all six reviewed files against C2 returned 0, and C1-to-C2 lists only the service and fixture changes already reviewed. PR checkout logs explicitly record tested merge `b8944e8d3478ced01126affe9b964b0057730807`. GitHub source-to-tested-merge comparison shows one merge commit ahead, **zero changed files**, identical tree. Exact source/base/merge attribution is established independently rather than inferred from branch name.
+
+[Focused C2 run 41299958386](https://github.com/giangnguyen3260/agent_os/actions/runs/41299958386), [job 124828660709](https://github.com/giangnguyen3260/agent_os/actions/runs/41299958386/job/124828660709): job independently observed **completed/success**; actual decoded logs inspected. Temurin **21.0.13+9**, Google import check passed, Spotless **259 clean files**, native PostgreSQL JDBC URL identifies **PostgreSQL 16.15**. Flyway applied **23 migrations through V023** on each H2/native database. Maven selected the retained credential/command plus receipt H2/native suites and ran verify.
+
+| Actual completed C2 suite | Tests / failures / errors / skipped |
+| --- | --- |
+| CredentialBoundaryTest | 31 / 0 / 0 / 0 |
+| ProviderReceiptIntegrationTest | 35 / 0 / 0 / 0 |
+| ProviderReceiptPostgresIT | **44 / 0 / 0 / 0** |
+| CommandBoundaryTest | 23 / 0 / 0 / 0 |
+| Independently summed / Surefire aggregate | **133 / 0 / 0 / 0** |
+
+Maven **BUILD SUCCESS**, finished **11:02:07 UTC**; evidence artifact finalized ID `13080996916`. **133 is now an actual passing focused result for C2**, superseding only the pending expectation, not erasing C1's failed result. Shared cases included in H2 and native are executions in both environments, not 79 distinct test definitions.
+
+**R2/R3 native runtime retest gate is satisfied for the exact corrected source/tested merge.** The native suite now completes its all-provider/five-operation full after/row comparisons, schema and named scoped-FK tests, legacy CREATE retention, rollback/context/authorization cases, observed identical/mismatch races, second Result replay identity and production post-wait clock bounds. This statement combines actual completed suite evidence with prior inspected method bodies; the summary log does not supply a separate per-case row/lock trace or prove scenarios outside those assertions. No new cases were added or claimed beyond the frozen suite. Trusted HMAC correlation, supported-writer event immutability and outer-completion/public-boundary exclusions remain as documented.
+
+### C1 full Quality chronology independently corroborated
+
+Separately fetched actual decoded [C1 Quality 41299598314](https://github.com/giangnguyen3260/agent_os/actions/runs/41299598314), job `124827607489`. Independently summed **59 per-suite result rows = 1,262 tests, 4 failures, 13 errors, zero skips**; only ProviderReceiptPostgresIT has nonzero failure/error counts. Maven **BUILD FAILURE** at **10:58:53 UTC**, artifact ID `13080548550`. This corroborates main's earlier report of the same native timestamp defect family; no unrelated failing suite was identified in these rows. That run remains failed historical evidence, not a C2 regression pass.
+
+### Remaining run gates
+
+[C2 Quality 41299958432](https://github.com/giangnguyen3260/agent_os/actions/runs/41299958432), verify job `124828660978`, remains **in_progress** at this observation. Completed full Quality evidence has not yet been inspected; no C2 full-suite count or frontend success is asserted. [C2 Docker 41299958408](https://github.com/giangnguyen3260/agent_os/actions/runs/41299958408), compose-smoke `124828660993`, remains pending; formatting job `124828661105` was observed successful, which does not establish compose-smoke acceptance. No full Docker wait/acceptance or new visual inspection is claimed.
+
+Updated disposition: bounded source/assertion review and focused Java21/native gates satisfied for C2; **full Quality and Docker remain pending**. Only this owned review was appended. No production/test/contract edits, remote comments/approvals, CI mutation, merge or deployment were performed.
+
+## Checkpoint 9 — independently corroborated completed C2 full Quality success
+
+Date: 1 November 2026. Independently fetched latest-attempt job state and actual decoded logs for [C2 Code quality run 41299958432](https://github.com/giangnguyen3260/agent_os/actions/runs/41299958432), [verify job 124828660978](https://github.com/giangnguyen3260/agent_os/actions/runs/41299958432/job/124828660978) through GitHub tools. Job and all steps are **completed/success**. Checkout explicitly identifies tested merge `b8944e8d3478ced01126affe9b964b0057730807`, merging source `ad012b4fc9bb26b6b31c9ae27a7190c39e59467a` into base `69131db3c62d42159bfd9f3cf77bdd32f1201a7a`; exact identical source/merge tree and zero changed files were independently established in checkpoint 8.
+
+Actual logs show Temurin **21.0.13+9**, Google import check passed and Spotless **259 clean files**. Independently summed **59 per-suite Surefire rows = 1,262 tests, failures 0, errors 0, skipped 0**, matching the aggregate. Included rows explicitly confirm **CredentialBoundaryTest 31**, **CommandBoundaryTest 23**, **ProviderReceiptIntegrationTest 35**, **ProviderReceiptPostgresIT 44**, and **ProviderConnectionPostgresIT 69**, each with zero failures/errors/skips. Maven reports **BUILD SUCCESS**, finished **11:03:51 UTC**. The focused 133 executions are included regression coverage, not an additional distinct set to add to 1,262. No uninspected coverage percentage/threshold is inferred from report generation.
+
+Frontend dependency install and security audit steps succeeded; actual audit output reports **zero vulnerabilities**. Frontend Google style/type/build step completed successfully, including Prettier success, production harness pass messages and Angular application bundle generation completed at **11:04:36 UTC**. These script outputs are not additional JUnit cases. Quality evidence artifact finalized, ID `13080554279`. Successful job state corroborates completion through artifact upload and cleanup, rather than only a backend intermediate result.
+
+**Updated bounded disposition: source/assertion review, R2/R3 corrected native retest, focused Java21 133/0/0/0 and full Quality 1,262/0/0/0 gates are satisfied for C2's identified source/tested merge. No remaining blocker identified within the reviewed internal five-command receipt scope.** C1's failed native/focused/Quality evidence remains chronological above; C2 successful retests close those defects without rewriting that history.
+
+**Docker 41299958408 remains explicitly PENDING for this review; no compose-smoke closure, full Docker acceptance or new visual inspection is asserted.** This checkpoint does not await the long Docker run. Public HTTP/health snapshots, key/vault/provider integration, outer-completion/UNKNOWN privacy, authorization outside the tested internal service, deployment and whole-system acceptance remain outside this bounded result. Only this review file was appended; no source/test/contract edits, remote writes/approvals, CI retry, merge or deployment were performed.

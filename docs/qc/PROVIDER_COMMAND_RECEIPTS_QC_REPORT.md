@@ -25,3 +25,25 @@ Coordinator independently recompiled the final strengthened sources and executed
 Independent QC's final source/assertion retest found no remaining publication blocker after the four depth additions. It inspected the actual final35-case local log and preserved the isolated Java17/H2 limitation. Native44, Java21 project integration and published source/tested-merge evidence remain pending; expected133 is not a pass. Clock-amendment BA/SA follow-up is tracked separately without inventing approval.
 
 BA/SA clock-amendment reread also completed requirements PASS: H2 structural/rollback evidence is separate from the native PostgreSQL post-wait clock lower-bound requirement. B1 remains resolved; no SA runtime/source approval is inferred.
+
+## C1 native CI failure
+
+Published source5bb7aa85339c458f6bd79db6ed986c407b3bc1ad, treef80f220442e7bb8dc56ffe42c31713da6f432362. Focused run41299598356/job124827607496 executed133 tests with4 failures,13 errors,0 skips: retained31/23 and H2 receipt35 passed, native receipt44 did not. Production fresh-before mapping cast JdbcTemplate column-map timestamps to OffsetDateTime, which PostgreSQL returns as java.sql.Timestamp; this caused fresh non-CREATE errors. Three full-row assertions likewise compared a raw timestamp object to OffsetDateTime. BE is correcting typed ResultSet temporal access and preserving full-precision instant assertions. No native receipt acceptance is claimed for C1; other failed mutation expectations depend on the same mapping path and require the actual rerun, not assumption.
+
+## C2 typed temporal correction
+
+Sourcead012b4fc9bb26b6b31c9ae27a7190c39e59467a, tree20019298573ea613cc3c7fd09ccf5e4443bcb6c6, changes only typed parent mapping and the corresponding persisted-time assertion. Parent ResultSet reads both timestamps explicitly as OffsetDateTime and compares instants while preserving complete configuration/provenance checks. The row test fetches the same recorded_at through a typed getter and compares full-precision instants; it does not weaken the time assertion. BE's corrected local H2 run35/0 is recorded in receipt-h2-typed-parent.log; native correction still requires actual C2 execution.
+
+C1 full Quality also executed1262 tests with4 failures/13 errors/0 skips in the same native receipt paths. C2 reruns: focused41299958386, Quality41299958432 and Docker41299958408; pending at this entry. Earlier failed C1 results are retained and are not labelled passes.
+
+## C2 focused Java21/native acceptance evidence
+
+[Focused41299958386/job124828660709](https://github.com/giangnguyen3260/agent_os/actions/runs/41299958386/job/124828660709) completed SUCCESS for sourcead012b4fc9bb26b6b31c9ae27a7190c39e59467a, tree20019298573ea613cc3c7fd09ccf5e4443bcb6c6, tested mergeb8944e8d3478ced01126affe9b964b0057730807 against69131db3c62d42159bfd9f3cf77bdd32f1201a7a. Actual totals31 credential+23 command+35 H2 receipt+44 native PostgreSQL receipt=133 tests,0 failures/errors/skips; BUILD SUCCESS at11:02:07 UTC. This is actual application test-context/Java21/Flyway/PostgreSQL evidence, superseding the isolated-only limitation for these suites. The C1 failures are corrected and the previously failed native paths executed successfully, including type/full-instant comparison, concurrent receipt replay, scoped constraints and production clock bounds. This does not establish public receipt/API/health/secret-manager/UNKNOWN completion acceptance. Full Quality and Docker remain separate gates at this entry.
+
+## C2 full Quality evidence
+
+[Quality41299958432/job124828660978](https://github.com/giangnguyen3260/agent_os/actions/runs/41299958432/job/124828660978) completed SUCCESS for the same C2 source/tested merge. Actual1262 backend tests,0 failures/errors/skips; including-development audit0 vulnerabilities; frontend lint/format/tooling/validation/build all passed. The focused133 selection overlaps this full1262 set and is not additive. Independent focused/native review corroborated C2 identity and44 PostgreSQL passes, inspected constraint/clock/concurrent-replay assertions and closed the native temporal-fix gate. Full Quality corroboration is recorded separately in its appended review.
+
+C2 Docker41299958408 remains in progress and is not a final pass. Prior PR43 Docker completed successfully as recorded in its QC chronology; that baseline is not a substitute for the new receipt candidate's longer native/browser/restart regression. Subsequent Markdown evidence changes do not alter tested production/test/migration/workflow files. No public HTTP/health/UNKNOWN completion, vault/provider integration, merge/deploy or system-wide token-storage acceptance is inferred.
+
+Independent QC checkpoint9 independently corroborated completed C2 full Quality1262/0/0/0, successful frontend checks and audit0. At the final checkpoint Docker build/start and native steps through owner history passed; compose-smoke continues later retained regression, so no full Docker acceptance is claimed. This checkpoint changes Markdown only.
