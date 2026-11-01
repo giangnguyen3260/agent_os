@@ -1,6 +1,6 @@
 # Provider command HMAC candidate — 1 November 2026
 
-New internal command equality primitive covers CREATE, RENAME, ROTATE, DISABLE, ENABLE, ACCESS_CHECK and MODEL_DISCOVERY, with a distinct command-key namespace/domain, historical versions, strict typed canonical framing and redacted failures. Scoped authorization, receipt persistence/recovery, deadlines, policy/health and public transport remain future orchestration work. Local Java17 selected execution54/0 (23 new+31 retained); Java21 CI pending. Independent requirements freeze is accepted; source review/K1 retest evidence is recorded separately. See [QC](docs/qc/PROVIDER_COMMAND_HMAC_QC_REPORT.md). No merge/deploy; Sonar paused.
+New internal command equality primitive covers CREATE, RENAME, ROTATE, DISABLE, ENABLE, ACCESS_CHECK and MODEL_DISCOVERY, with a distinct command-key namespace/domain, historical versions, strict typed canonical framing and redacted failures. Scoped authorization, receipt persistence/recovery, deadlines, policy/health and public transport remain future orchestration work. Local Java17 selected execution54/0 (23 new+31 retained); Java21 CI pending. Independent requirements freeze is accepted; independent source review and K1 retest found no remaining source/test blocker. See [QC](docs/qc/PROVIDER_COMMAND_HMAC_QC_REPORT.md). No merge/deploy; Sonar paused.
 
 # Provider persistence candidate — 1 November2026
 
