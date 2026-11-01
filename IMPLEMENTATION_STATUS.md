@@ -1,3 +1,7 @@
+# Provider command receipt candidate — 1 November 2026
+
+Internal five-command receipt execution/own lookup now composes prepared equality, the existing configuration mutation and an event-pinned receipt in one REQUIRED transaction. The namespace is organization/actor/idempotency UUID; replay precedes mutable target gates. B1 creation-event retention is fixed in the contract/migration. Actual isolated H2 integration35/0; native44 authored cases and Java21/full application gates pending. Requirements accepted; independent source/assertion retest found no publication blocker. No HTTP/public health snapshot, actual key/vault integration, end-to-end UNKNOWN/completion privacy, merge or deploy. See [QC](docs/qc/PROVIDER_COMMAND_RECEIPTS_QC_REPORT.md); Sonar paused.
+
 # Provider command HMAC candidate — 1 November 2026
 
 New internal command equality primitive covers CREATE, RENAME, ROTATE, DISABLE, ENABLE, ACCESS_CHECK and MODEL_DISCOVERY, with a distinct command-key namespace/domain, historical versions, strict typed canonical framing and redacted failures. Scoped authorization, receipt persistence/recovery, deadlines, policy/health and public transport remain future orchestration work. Java21 focused CI passed54/0 (23 new+31 retained); full Quality passed1183 backend tests, audit0 and frontend gates. Docker regression is still running. Independent requirements freeze is accepted; independent source review and K1 retest found no remaining source/test blocker. See [QC](docs/qc/PROVIDER_COMMAND_HMAC_QC_REPORT.md). No merge/deploy; Sonar paused.
