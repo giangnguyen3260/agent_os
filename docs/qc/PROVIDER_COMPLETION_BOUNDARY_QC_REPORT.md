@@ -21,3 +21,17 @@ Coordinator rebuilt the selected sources/all new test sources with Java17 and ex
 Remaining explicit limits: controlled acknowledgement faults are not live TCP drops; read invalid-context combinations and unrelated seeded-tenant collateral/privacy permutations are not exhaustive. No universal framework/driver/server logging or root serialization suppression is claimed. Existing receipt/persistence regression suites remain required and unchanged.
 
 Independent QC checkpoint9 inspected the actual61-case log and matching frozen source hashes, closed the test-only Q3 delegate issue and found no concrete source/test publication blocker. This is local/source readiness, not native or Java21 acceptance. Existing coverage/privacy limits remain explicit in the review.
+
+## C2 focused Java21/native evidence
+
+Draft [PR45](https://github.com/giangnguyen3260/agent_os/pull/45), source50ed3a5a928bf2161ae1a501099b0ce33a8bfd45, treeee6ed52c67b87a77a7fbe63b1d8aa80d78ec2853, tested mergeab1fba89394192e9bee4a08c952ce7b1825c8edf againstad5216ed94a0c968d0905972620500d2da70a9ad.
+
+[Focused41323817532/job124899449431](https://github.com/giangnguyen3260/agent_os/actions/runs/41323817532/job/124899449431) completed SUCCESS:31 credential+23 command+61 H2 completion+62 native PostgreSQL completion=177 tests,0 failures/errors/skips; BUILD SUCCESS at15:58:43 UTC. This is actual project Java21 compilation and application-context/native execution, superseding the isolated-only limitation for those selected suites. It verifies controlled manager acknowledgement fault cases and native RR snapshot assertions; it is not a live TCP acknowledgement-drop demonstration, public HTTP or universal logging acceptance. Focused cases overlap full Quality and must not be added to that total. Full Quality41323817485 and Docker41323817480 remain separate pending gates at this entry.
+
+## C2 full Quality gate
+
+[Quality41323817485/job124899449333](https://github.com/giangnguyen3260/agent_os/actions/runs/41323817485/job/124899449333) completed SUCCESS on the same C2 source/tested merge. Actual1385 backend tests,0 failures/errors/skips, BUILD SUCCESS; including-development audit0 vulnerabilities and frontend lint/format/tooling/validation/build steps passed. Focused177 overlaps this full1385 and must not be added. Independent QC accepted focused/native execution with matching source hashes; full Quality corroboration is tracked in its appended report.
+
+Docker41323817480 is still running; formatting and build/start passed and retained native/browser/restart regression is not yet complete. No full Docker acceptance is claimed for this candidate. Previous PR44 Docker is a separate verified baseline. This Markdown checkpoint changes no production/test/workflow source and adds no public API, live provider/vault, universal log privacy or TCP-drop evidence. No migration/merge/deploy; Sonar paused.
+
+Independent QC checkpoint12 fetched completed full Quality logs, corroborated1385/0/0/0 plus audit0/frontend success and retained the focused/native177 gate with exact source/tested-merge identity. No concrete source/test blocker remains within the bounded reviewed scope. Latest Docker observation: build/start and native owner-history steps passed; later retained regression is still running, with no full Docker closure. This checkpoint is Markdown-only and does not broaden the disclosed test/privacy limits.

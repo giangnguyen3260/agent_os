@@ -1,6 +1,6 @@
 # Provider completion boundary candidate — 1 November 2026
 
-Explicit prepared-write and own-receipt lookup boundaries now own their transaction completion, refuse ambient context and distinguish confirmed success/rejection from uncertain completion without exposing provisional data. No retry, automatic lookup, key/vault work or compensation. Current isolated H2 actual61/0; native62 authored, Java21/full Quality pending; independent source/test review found no publication blocker. This is not a public HTTP route, universal framework-log privacy or actual TCP-partition acceptance. See [QC](docs/qc/PROVIDER_COMPLETION_BOUNDARY_QC_REPORT.md). No migration, merge/deploy; Sonar paused.
+Explicit prepared-write and own-receipt lookup boundaries now own their transaction completion, refuse ambient context and distinguish confirmed success/rejection from uncertain completion without exposing provisional data. No retry, automatic lookup, key/vault work or compensation. Java21 focused177/0 passed, including61 H2 and62 native PostgreSQL completion cases; full Quality passed1385 backend tests, audit0/frontend gates; Completion Docker regression is still running; independent source/test review found no publication blocker. This is not a public HTTP route, universal framework-log privacy or actual TCP-partition acceptance. See [QC](docs/qc/PROVIDER_COMPLETION_BOUNDARY_QC_REPORT.md). No migration, merge/deploy; Sonar paused.
 
 # Provider command receipt candidate — 1 November 2026
 
