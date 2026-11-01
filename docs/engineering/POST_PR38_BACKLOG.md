@@ -10,6 +10,8 @@ BA-02 proposed lifecycle/authority contract and44 requirement cases are authored
 
 BA-03 design checkpoint: exact proposed connection API/security rules,109 authored cases and72 editable Figma frames are ready with bounded independent design review. See [API](PROVIDER_CONNECTION_API_CONTRACT.md), [handoff](PROVIDER_CONNECTION_FIGMA_HANDOFF.md) and [review](../qc/PROVIDER_CONNECTION_DESIGN_REVIEW.md). No feature runtime is implemented; persistence/key boundary and adapter/UI implementation with real QC are next.
 
+Latest storage instruction: [provider storage amendment](PROVIDER_CREDENTIAL_STORAGE_AMENDMENT.md) supersedes DB credential ciphertext. The initial credential boundary is implemented/tested separately; actual DB/secret-manager/API integration remains pending. [Token inventory](TOKEN_STORAGE_INVENTORY.md) also leaves session/CSRF one-way storage compatibility OPEN; treat that as a P0 hardening slice before claiming system-wide compliance. Do not infer that all legacy framework tokens are already hashed.
+
 ## Current boundary
 
 Authentication/recovery/workspace, persisted Team/Agent/Mission/Task configuration, draft input/owner/dependency editing and histories, member/invitation/grant management, bounded approvals, navigation and recorded-activity Trace have delivery evidence in their individual contracts and QC reports. PR38 automated gates passed; subsequent independent review found no blocker in its bounded scope as recorded above. Draft PRs are not a merged or deployed product. Configuration ownership is not runtime assignment; saved status and activity are not execution telemetry. Existing activation review is preflight, not a working activation command.
