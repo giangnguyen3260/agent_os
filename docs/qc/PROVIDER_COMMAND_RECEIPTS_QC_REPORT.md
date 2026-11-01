@@ -1,0 +1,55 @@
+# Internal provider command receipts QC chronology
+
+Status: implementation in progress, 1 November2026. Branch feature/provider-command-receipts based on PR43 Markdown checkpoint69131db3c62d42159bfd9f3cf77bdd32f1201a7a. No receipt API, public health projection, deployed key/vault/provider integration or end-to-end UNKNOWN recovery is claimed.
+
+The [contract](../engineering/PROVIDER_COMMAND_RECEIPTS_CONTRACT.md) limits execution to five configuration commands and composes prepared command equality with existing JDBC mutation in one REQUIRED transaction. Safe historical results project pinned before/after/creation events. B1 identified the previously unpinned creation-event dependency; contract correction adds explicit scoped creation_event_id FK and legacy-deletion verification. Independent [requirements review](../engineering/PROVIDER_COMMAND_RECEIPTS_REQUIREMENTS_REVIEW.md) retested and closed B1 at requirements level. Initial [QC review](PROVIDER_COMMAND_RECEIPTS_REVIEW.md) found no blocking contract contradiction; source/runtime verification is pending.
+
+No new Java/H2/PostgreSQL result is yet claimed. Prior PR43 focused54/Quality1183 results belong to their recorded source, not this implementation. Google style and explicit PostgreSQL selection remain required; Sonar paused. Native environment absence must fail instead of skip. Receipt rows may contain only scoped identifiers, pinned safe event identities, prepared command HMAC metadata and DB timestamps; no raw command or usable/reversible credential. All row/schema assertions and rollback/concurrency evidence remain to execute.
+
+Initial local DDL smoke exposed two distinct issues: the manual harness first omitted the existing application-test TIMESTAMPTZ domain initialization (harness-only), then reached a genuine V023 compatibility failure because H2 PostgreSQL mode requires a referenced UNIQUE constraint, not only a standalone unique index, for the composite event FK. The migration correction is assigned to BE; no DDL pass is claimed before its actual rerun.
+
+Corrected V023 now uses the named scoped UNIQUE constraint. Actual V001–V023 H2 RunScript execution passed23 migration scripts with the existing test-domain initialization. This is DDL smoke only, not Flyway/Spring or native PostgreSQL acceptance.
+
+## Local isolated receipt execution
+
+Selected production sources and all three receipt test sources compile with release17 against resolved project test dependencies. An isolated Spring Boot configuration imports the real receipt and connection services with standard JDBC/JPA/Flyway auto-configuration and excludes unrelated web-security auto-configuration. Actual H2 execution passed31 invocations,0 failures/skips/aborts. Flyway applied the real migrations. This confirms selected service integration/transaction behavior in that isolated context, not Java21/full AgentOsApplication or PostgreSQL concurrency. The native suite has40 authored invocations including inherited cases; those are not yet executed passes. Existing54 command/credential invocations are retained, not counted as newly executed by this receipt harness.
+
+Pre-publication import checks identified wildcard imports despite formatter success; explicit import cleanup is required before CI. H2 current_timestamp is transaction-stable and does not prove the post-lock wall clock. The contract now explicitly requires PostgreSQL clock_timestamp() as production clock authority and native observed-wait receipt/event lower-bound checks; H2 supplies structural/rollback evidence only. Probe command metadata now has explicit JsonIgnore at the record component to prevent root-probe serialization exposure; full independent source/test retest is pending.
+
+## Frozen test-depth completion
+
+Independent QC source review found no remaining concrete blocker, while disclosing test-depth gaps. The candidate tests were strengthened before publication: all11 after-Configuration fields now compare to independent operation expectations, all13 migrated columns check type/nullability/default/length, each scoped event FK has a wrong-tenant negative with named-constraint identity, and the second identical native concurrent call must return replayed=true with the winner's exact receipt. Production behavior is unchanged by these test additions. Final authored counts35 H2 and44 native PostgreSQL; actual rerun evidence follows separately. Focused selected total133 (existing54+35+44) is expected, not a pass claim.
+
+Coordinator independently recompiled the final strengthened sources and executed the isolated Spring/Flyway H2 suite:35 found/started/successful,0 failures/skips/aborts. This supersedes the earlier31-case local count for the final test candidate only;44 PostgreSQL invocations remain authored until native CI. Source-level cleanup and added assertions do not expand the deliberate HTTP/public-health/completion exclusions.
+
+Independent QC's final source/assertion retest found no remaining publication blocker after the four depth additions. It inspected the actual final35-case local log and preserved the isolated Java17/H2 limitation. Native44, Java21 project integration and published source/tested-merge evidence remain pending; expected133 is not a pass. Clock-amendment BA/SA follow-up is tracked separately without inventing approval.
+
+BA/SA clock-amendment reread also completed requirements PASS: H2 structural/rollback evidence is separate from the native PostgreSQL post-wait clock lower-bound requirement. B1 remains resolved; no SA runtime/source approval is inferred.
+
+## C1 native CI failure
+
+Published source5bb7aa85339c458f6bd79db6ed986c407b3bc1ad, treef80f220442e7bb8dc56ffe42c31713da6f432362. Focused run41299598356/job124827607496 executed133 tests with4 failures,13 errors,0 skips: retained31/23 and H2 receipt35 passed, native receipt44 did not. Production fresh-before mapping cast JdbcTemplate column-map timestamps to OffsetDateTime, which PostgreSQL returns as java.sql.Timestamp; this caused fresh non-CREATE errors. Three full-row assertions likewise compared a raw timestamp object to OffsetDateTime. BE is correcting typed ResultSet temporal access and preserving full-precision instant assertions. No native receipt acceptance is claimed for C1; other failed mutation expectations depend on the same mapping path and require the actual rerun, not assumption.
+
+## C2 typed temporal correction
+
+Sourcead012b4fc9bb26b6b31c9ae27a7190c39e59467a, tree20019298573ea613cc3c7fd09ccf5e4443bcb6c6, changes only typed parent mapping and the corresponding persisted-time assertion. Parent ResultSet reads both timestamps explicitly as OffsetDateTime and compares instants while preserving complete configuration/provenance checks. The row test fetches the same recorded_at through a typed getter and compares full-precision instants; it does not weaken the time assertion. BE's corrected local H2 run35/0 is recorded in receipt-h2-typed-parent.log; native correction still requires actual C2 execution.
+
+C1 full Quality also executed1262 tests with4 failures/13 errors/0 skips in the same native receipt paths. C2 reruns: focused41299958386, Quality41299958432 and Docker41299958408; pending at this entry. Earlier failed C1 results are retained and are not labelled passes.
+
+## C2 focused Java21/native acceptance evidence
+
+[Focused41299958386/job124828660709](https://github.com/giangnguyen3260/agent_os/actions/runs/41299958386/job/124828660709) completed SUCCESS for sourcead012b4fc9bb26b6b31c9ae27a7190c39e59467a, tree20019298573ea613cc3c7fd09ccf5e4443bcb6c6, tested mergeb8944e8d3478ced01126affe9b964b0057730807 against69131db3c62d42159bfd9f3cf77bdd32f1201a7a. Actual totals31 credential+23 command+35 H2 receipt+44 native PostgreSQL receipt=133 tests,0 failures/errors/skips; BUILD SUCCESS at11:02:07 UTC. This is actual application test-context/Java21/Flyway/PostgreSQL evidence, superseding the isolated-only limitation for these suites. The C1 failures are corrected and the previously failed native paths executed successfully, including type/full-instant comparison, concurrent receipt replay, scoped constraints and production clock bounds. This does not establish public receipt/API/health/secret-manager/UNKNOWN completion acceptance. Full Quality and Docker remain separate gates at this entry.
+
+## C2 full Quality evidence
+
+[Quality41299958432/job124828660978](https://github.com/giangnguyen3260/agent_os/actions/runs/41299958432/job/124828660978) completed SUCCESS for the same C2 source/tested merge. Actual1262 backend tests,0 failures/errors/skips; including-development audit0 vulnerabilities; frontend lint/format/tooling/validation/build all passed. The focused133 selection overlaps this full1262 set and is not additive. Independent focused/native review corroborated C2 identity and44 PostgreSQL passes, inspected constraint/clock/concurrent-replay assertions and closed the native temporal-fix gate. Full Quality corroboration is recorded separately in its appended review.
+
+C2 Docker41299958408 remains in progress and is not a final pass. Prior PR43 Docker completed successfully as recorded in its QC chronology; that baseline is not a substitute for the new receipt candidate's longer native/browser/restart regression. Subsequent Markdown evidence changes do not alter tested production/test/migration/workflow files. No public HTTP/health/UNKNOWN completion, vault/provider integration, merge/deploy or system-wide token-storage acceptance is inferred.
+
+Independent QC checkpoint9 independently corroborated completed C2 full Quality1262/0/0/0, successful frontend checks and audit0. At the final checkpoint Docker build/start and native steps through owner history passed; compose-smoke continues later retained regression, so no full Docker acceptance is claimed. This checkpoint changes Markdown only.
+
+## Final bounded receipt verification
+
+Latest source44dd7c0f8c124c892da23fcccef5bdca8d0b8f17, tested merge2c0a5adcce32ad6d9d4f93a1c0ee91b130cb3915 against69131db3c62d42159bfd9f3cf77bdd32f1201a7a, completed all gates: focused41300465531/job124830133870 with133/0; Quality41300465583/job124830133765 with1262/0 and audit0/frontend gates; Docker41300465665/compose124830134263 and formatting124830133994 SUCCESS. Docker backend selection841/0; retained browser invocations33+75+42+81+90+780=1101 plus3 focused repeats all passed. Native PostgreSQL/SMTP and exact-session backend restart/logout passed at12:05:22 UTC. Prior corrected C2 Docker41299958408 also passed. Counts overlap across workflows and are not additive.
+
+Independent QC fetched completed logs, checked source/tested-merge identity and closed the bounded internal receipt scope. No screenshots were newly reviewed; retained auth restart is not provider-receipt-specific process-restart acceptance. No public receipt/HTTP/health, actual key/vault/provider or outer-completion/UNKNOWN handling is implied. The subsequent completion boundary is separate work and inherits no new implementation acceptance. This final Markdown closure changes no tested source/test/migration/workflow content; no merge/deploy, Sonar paused.
