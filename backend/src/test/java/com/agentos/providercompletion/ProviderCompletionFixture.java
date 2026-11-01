@@ -33,6 +33,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.mockito.Mockito;
 import org.springframework.aop.framework.ProxyFactory;
 import org.springframework.aop.support.AopUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -202,6 +203,19 @@ abstract class ProviderCompletionFixture {
     var persisted = rows();
     persisted.values().forEach(value -> assertThat(value).hasSize(1));
     var parent = persisted.get("provider_connections").get(0);
+    assertThat(parent.keySet())
+        .containsExactlyInAnyOrder(
+            "id",
+            "organization_id",
+            "provider",
+            "mode",
+            "name",
+            "workspace",
+            "state",
+            "configuration_revision",
+            "credential_revision",
+            "created_at",
+            "updated_at");
     assertThat(parent)
         .containsEntry("id", id)
         .containsEntry("organization_id", org)
@@ -213,6 +227,18 @@ abstract class ProviderCompletionFixture {
         .containsEntry("configuration_revision", 1L)
         .containsEntry("credential_revision", 1L);
     var version = persisted.get("provider_credential_versions").get(0);
+    assertThat(version.keySet())
+        .containsExactlyInAnyOrder(
+            "organization_id",
+            "connection_id",
+            "provider",
+            "credential_revision",
+            "external_locator",
+            "external_key_version",
+            "hmac_key_version",
+            "hmac_domain_version",
+            "verifier",
+            "created_at");
     assertThat(version)
         .containsEntry("organization_id", org)
         .containsEntry("connection_id", id)
@@ -224,6 +250,22 @@ abstract class ProviderCompletionFixture {
         .containsEntry("hmac_domain_version", "v2")
         .containsEntry("verifier", credential.digest());
     var event = persisted.get("provider_connection_events").get(0);
+    assertThat(event.keySet())
+        .containsExactlyInAnyOrder(
+            "id",
+            "organization_id",
+            "connection_id",
+            "configuration_revision",
+            "credential_revision",
+            "kind",
+            "provider",
+            "mode",
+            "name",
+            "workspace",
+            "state",
+            "actor_id",
+            "created_at");
+    assertThat(event.get("id")).isInstanceOf(UUID.class);
     assertThat(event)
         .containsEntry("organization_id", org)
         .containsEntry("connection_id", id)
@@ -241,6 +283,21 @@ abstract class ProviderCompletionFixture {
         .isEqualTo(parent.get("updated_at"));
     assertThat(version.get("created_at")).isEqualTo(parent.get("created_at"));
     var receipt = persisted.get("provider_command_receipts").get(0);
+    assertThat(receipt.keySet())
+        .containsExactlyInAnyOrder(
+            "organization_id",
+            "actor_id",
+            "idempotency_key",
+            "command_id",
+            "operation",
+            "connection_id",
+            "before_event_id",
+            "after_event_id",
+            "creation_event_id",
+            "digest_version",
+            "key_version",
+            "command_digest",
+            "recorded_at");
     assertThat(receipt)
         .containsEntry("organization_id", org)
         .containsEntry("actor_id", actor)
@@ -303,12 +360,17 @@ abstract class ProviderCompletionFixture {
     BEGIN_THROW,
     NORMAL_ROLLBACK,
     CONTRADICTORY_ACK,
-    ROLLBACK_MISSING_ACK
+    ROLLBACK_MISSING_ACK,
+    MALFORMED_THEN_COMMITTED,
+    MALFORMED_THEN_ROLLED_BACK,
+    INCOMPLETE_STATUS,
+    RECEIPT_FAILURE_AFTER_COMMIT
   }
 
   class FaultManager implements PlatformTransactionManager {
     final Fault fault;
     int begins, commits, rollbacks;
+    TransactionStatus delegated;
 
     FaultManager(Fault fault) {
       this.fault = fault;
@@ -325,6 +387,7 @@ abstract class ProviderCompletionFixture {
                   : TransactionDefinition.ISOLATION_READ_COMMITTED);
       if (fault == Fault.BEGIN_THROW) throw new IllegalStateException(SENTINEL);
       var status = manager.getTransaction(definition);
+      delegated = status;
       assertThat(status.isNewTransaction()).isTrue();
       if (fault == Fault.AFTER_COMMIT_THROW)
         TransactionSynchronizationManager.registerSynchronization(
@@ -334,41 +397,56 @@ abstract class ProviderCompletionFixture {
                 throw new IllegalStateException(SENTINEL);
               }
             });
+      if (fault == Fault.INCOMPLETE_STATUS)
+        return (TransactionStatus)
+            Proxy.newProxyInstance(
+                getClass().getClassLoader(),
+                new Class<?>[] {TransactionStatus.class},
+                (proxy, method, args) ->
+                    method.getName().equals("isCompleted") ? false : method.invoke(status, args));
       return status;
+    }
+
+    private void replaceAcknowledgements(int... statuses) {
+      var syncs = TransactionSynchronizationManager.getSynchronizations();
+      TransactionSynchronizationManager.clearSynchronization();
+      TransactionSynchronizationManager.initSynchronization();
+      for (var synchronization : syncs)
+        for (int status : statuses) synchronization.afterCompletion(status);
     }
 
     public void commit(TransactionStatus status) {
       commits++;
       assertThat(status.isNewTransaction()).isTrue();
-      if (fault == Fault.MISSING_ACK
-          || fault == Fault.BAD_ACK
-          || fault == Fault.CONTRADICTORY_ACK) {
-        var syncs = TransactionSynchronizationManager.getSynchronizations();
-        TransactionSynchronizationManager.clearSynchronization();
-        TransactionSynchronizationManager.initSynchronization();
-        if (fault == Fault.CONTRADICTORY_ACK)
-          syncs.forEach(
-              s -> {
-                s.afterCompletion(TransactionSynchronization.STATUS_COMMITTED);
-                s.afterCompletion(TransactionSynchronization.STATUS_ROLLED_BACK);
-              });
-        if (fault == Fault.BAD_ACK)
-          syncs.forEach(s -> s.afterCompletion(TransactionSynchronization.STATUS_UNKNOWN));
+      switch (fault) {
+        case MISSING_ACK -> replaceAcknowledgements();
+        case BAD_ACK -> replaceAcknowledgements(TransactionSynchronization.STATUS_UNKNOWN);
+        case CONTRADICTORY_ACK ->
+            replaceAcknowledgements(
+                TransactionSynchronization.STATUS_COMMITTED,
+                TransactionSynchronization.STATUS_ROLLED_BACK);
+        case MALFORMED_THEN_COMMITTED ->
+            replaceAcknowledgements(-1, TransactionSynchronization.STATUS_COMMITTED);
+        case MALFORMED_THEN_ROLLED_BACK ->
+            replaceAcknowledgements(-1, TransactionSynchronization.STATUS_ROLLED_BACK);
+        default -> {}
       }
-      if (fault == Fault.ROLLBACK_THEN_THROW || fault == Fault.NORMAL_ROLLBACK)
-        manager.rollback(status);
-      else manager.commit(status);
+      if (fault == Fault.ROLLBACK_THEN_THROW
+          || fault == Fault.NORMAL_ROLLBACK
+          || fault == Fault.MALFORMED_THEN_ROLLED_BACK) manager.rollback(delegated);
+      else manager.commit(delegated);
+      if (fault == Fault.RECEIPT_FAILURE_AFTER_COMMIT)
+        throw new ProviderReceiptFailure(401, "UNAUTHORIZED");
       if (fault == Fault.COMMIT_THEN_THROW || fault == Fault.ROLLBACK_THEN_THROW)
         throw new IllegalStateException(SENTINEL);
     }
 
     public void rollback(TransactionStatus status) {
       rollbacks++;
-      if (fault == Fault.ROLLBACK_MISSING_ACK) {
-        TransactionSynchronizationManager.clearSynchronization();
-        TransactionSynchronizationManager.initSynchronization();
-      }
-      manager.rollback(status);
+      if (fault == Fault.ROLLBACK_MISSING_ACK) replaceAcknowledgements();
+      if (fault == Fault.MALFORMED_THEN_ROLLED_BACK)
+        replaceAcknowledgements(-1, TransactionSynchronization.STATUS_ROLLED_BACK);
+      manager.rollback(delegated);
       if (fault == Fault.ROLLBACK_ACK_THROW) throw new IllegalStateException(SENTINEL);
     }
   }
@@ -383,7 +461,11 @@ abstract class ProviderCompletionFixture {
         "MISSING_ACK",
         "BAD_ACK",
         "NORMAL_ROLLBACK",
-        "CONTRADICTORY_ACK"
+        "CONTRADICTORY_ACK",
+        "MALFORMED_THEN_COMMITTED",
+        "MALFORMED_THEN_ROLLED_BACK",
+        "INCOMPLETE_STATUS",
+        "RECEIPT_FAILURE_AFTER_COMMIT"
       })
   void uncertainWriteNeverRetriesAndHealthyLookupRecovers(Fault fault) {
     var tm = new FaultManager(fault);
@@ -401,10 +483,14 @@ abstract class ProviderCompletionFixture {
     var lookup = healthy.lookupOwn(human, org, key);
     assertThat(lookup.state())
         .isEqualTo(
-            (fault == Fault.ROLLBACK_THEN_THROW || fault == Fault.NORMAL_ROLLBACK)
+            (fault == Fault.ROLLBACK_THEN_THROW
+                    || fault == Fault.NORMAL_ROLLBACK
+                    || fault == Fault.MALFORMED_THEN_ROLLED_BACK)
                 ? LookupState.ABSENT
                 : LookupState.FOUND);
-    if (fault == Fault.ROLLBACK_THEN_THROW || fault == Fault.NORMAL_ROLLBACK) empty();
+    if (fault == Fault.ROLLBACK_THEN_THROW
+        || fault == Fault.NORMAL_ROLLBACK
+        || fault == Fault.MALFORMED_THEN_ROLLED_BACK) empty();
     else one();
     assertThat(tm.begins).isEqualTo(1);
   }
@@ -442,16 +528,100 @@ abstract class ProviderCompletionFixture {
     assertThat(before.get("provider_connections")).isEqualTo(rows().get("provider_connections"));
   }
 
-  @Test
-  void readCompletionDiscardsFoundAndAbsent() {
+  @ParameterizedTest
+  @EnumSource(
+      value = Fault.class,
+      names = {
+        "COMMIT_THEN_THROW", "ROLLBACK_THEN_THROW", "AFTER_COMMIT_THROW", "MISSING_ACK",
+        "BAD_ACK", "NORMAL_ROLLBACK", "CONTRADICTORY_ACK", "MALFORMED_THEN_COMMITTED",
+        "MALFORMED_THEN_ROLLED_BACK", "INCOMPLETE_STATUS", "RECEIPT_FAILURE_AFTER_COMMIT"
+      })
+  void readCompletionDiscardsFoundAndAbsent(Fault fault) {
     for (boolean found : List.of(false, true)) {
-      if (found) execute(healthy);
-      var tm = new FaultManager(Fault.COMMIT_THEN_THROW);
+      ProviderReceiptService.Receipt historical = null;
+      if (found) {
+        historical = execute(healthy).result().receipt();
+      }
+      var before = rows();
+      int executions = executeCalls,
+          lookups = lookupCalls,
+          keysBefore = keyCalls,
+          storesBefore = stores;
+      var tm = new FaultManager(fault);
       var outcome = boundary(tm).lookupOwn(human, org, key);
       assertThat(outcome.state()).isEqualTo(LookupState.UNAVAILABLE);
       assertThat(outcome.receipt()).isNull();
+      assertThat(outcome.failure().code()).isEqualTo(Code.LOOKUP_UNAVAILABLE);
+      assertThat(tm.begins).isEqualTo(1);
       assertThat(tm.commits).isEqualTo(1);
       assertThat(tm.rollbacks).isZero();
+      assertThat(executeCalls).isEqualTo(executions);
+      assertThat(lookupCalls).isEqualTo(lookups + 1);
+      assertThat(keyCalls).isEqualTo(keysBefore);
+      assertThat(stores).isEqualTo(storesBefore);
+      assertThat(rows()).isEqualTo(before);
+      cleanThread();
+      var recovery = healthy.lookupOwn(human, org, key);
+      assertThat(recovery.state()).isEqualTo(found ? LookupState.FOUND : LookupState.ABSENT);
+      assertThat(recovery.receipt()).isEqualTo(historical);
+      assertThat(tm.begins).isEqualTo(1);
+    }
+  }
+
+  @Test
+  void malformedThenRollbackCannotConfirmBodyRejection() {
+    var writeManager = new FaultManager(Fault.MALFORMED_THEN_ROLLED_BACK);
+    var write =
+        boundary(writeManager).executePrepared(null, org, key, command, prepared, id, credential);
+    assertThat(write.state()).isEqualTo(WriteState.UNKNOWN);
+    assertThat(write.result()).isNull();
+    assertThat(write.failure().code()).isEqualTo(Code.COMMAND_OUTCOME_UNKNOWN);
+    assertThat(writeManager.begins).isEqualTo(1);
+    assertThat(writeManager.commits).isZero();
+    assertThat(writeManager.rollbacks).isEqualTo(1);
+    cleanThread();
+    var readManager = new FaultManager(Fault.MALFORMED_THEN_ROLLED_BACK);
+    var read = boundary(readManager).lookupOwn(null, org, key);
+    assertThat(read.state()).isEqualTo(LookupState.UNAVAILABLE);
+    assertThat(read.receipt()).isNull();
+    assertThat(read.failure().code()).isEqualTo(Code.LOOKUP_UNAVAILABLE);
+    assertThat(readManager.begins).isEqualTo(1);
+    assertThat(readManager.commits).isZero();
+    assertThat(readManager.rollbacks).isEqualTo(1);
+    empty();
+    cleanThread();
+  }
+
+  @Test
+  void recorderRegistrationFailureCannotFabricateAcknowledgement() {
+    try (var ignored =
+        Mockito.mockStatic(
+            TransactionSynchronizationManager.class,
+            invocation -> {
+              if (invocation.getMethod().getName().equals("registerSynchronization")) {
+                Object synchronization = invocation.getArgument(0);
+                if (synchronization != null
+                    && synchronization.getClass().getEnclosingClass()
+                        == ProviderCompletionBoundary.class)
+                  throw new IllegalStateException(SENTINEL);
+              }
+              return invocation.callRealMethod();
+            })) {
+      var writeManager = new FaultManager(Fault.MISSING_ACK);
+      assertThat(execute(boundary(writeManager)).state()).isEqualTo(WriteState.UNKNOWN);
+      assertThat(writeManager.begins).isEqualTo(1);
+      assertThat(writeManager.commits).isZero();
+      assertThat(writeManager.rollbacks).isEqualTo(1);
+      cleanThread();
+      var readManager = new FaultManager(Fault.MISSING_ACK);
+      assertThat(boundary(readManager).lookupOwn(human, org, key).state())
+          .isEqualTo(LookupState.UNAVAILABLE);
+      assertThat(readManager.begins).isEqualTo(1);
+      assertThat(readManager.commits).isZero();
+      assertThat(readManager.rollbacks).isEqualTo(1);
+      assertThat(executeCalls).isZero();
+      assertThat(lookupCalls).isZero();
+      empty();
       cleanThread();
     }
   }
@@ -740,7 +910,8 @@ abstract class ProviderCompletionFixture {
             @Override
             public TransactionStatus getTransaction(TransactionDefinition definition) {
               begins++;
-              return manager.getTransaction(definition);
+              delegated = manager.getTransaction(definition);
+              return delegated;
             }
           };
       var boundary =
