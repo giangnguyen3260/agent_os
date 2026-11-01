@@ -158,34 +158,29 @@ public class ProviderReceiptService {
           Event before = null;
           if (!creating) {
             var parents =
-                jdbc.queryForList(
+                jdbc.query(
                     "select * from provider_connections where organization_id=? and id=? for"
                         + " update",
+                    (rs, n) -> parent(rs),
                     org,
                     target);
             if (parents.isEmpty()) throw fail(404, "NOT_FOUND");
-            long revision = ((Number) parents.get(0).get("configuration_revision")).longValue();
-            before = eventAt(org, target, revision);
+            require(parents.size() == 1);
+            Configuration parent = parents.get(0);
+            before = eventAt(org, target, parent.revision());
             Configuration historical = configuration(before, creation(org, target));
-            var parent = parents.get(0);
             require(
-                org.equals(parent.get("organization_id"))
-                    && target.equals(parent.get("id"))
-                    && historical.provider().name().equals(parent.get("provider"))
-                    && historical.credentialMode().name().equals(parent.get("mode"))
-                    && historical.name().equals(parent.get("name"))
-                    && Objects.equals(historical.workspaceId(), parent.get("workspace"))
-                    && historical.state().equals(parent.get("state"))
-                    && historical.credentialRevision()
-                        == ((Number) parent.get("credential_revision")).longValue()
-                    && historical
-                        .createdAt()
-                        .toInstant()
-                        .equals(((OffsetDateTime) parent.get("created_at")).toInstant())
-                    && historical
-                        .updatedAt()
-                        .toInstant()
-                        .equals(((OffsetDateTime) parent.get("updated_at")).toInstant()));
+                org.equals(parent.organizationId())
+                    && target.equals(parent.id())
+                    && historical.provider() == parent.provider()
+                    && historical.credentialMode() == parent.credentialMode()
+                    && historical.name().equals(parent.name())
+                    && Objects.equals(historical.workspaceId(), parent.workspaceId())
+                    && historical.state().equals(parent.state())
+                    && historical.revision() == parent.revision()
+                    && historical.credentialRevision() == parent.credentialRevision()
+                    && historical.createdAt().toInstant().equals(parent.createdAt().toInstant())
+                    && historical.updatedAt().toInstant().equals(parent.updatedAt().toInstant()));
           }
           ProviderConnectionService.Connection changed;
           if (command instanceof Create c) {
@@ -395,6 +390,21 @@ public class ProviderReceiptService {
         e.credentialRevision(),
         creation.time(),
         e.time());
+  }
+
+  private Configuration parent(ResultSet rs) throws SQLException {
+    return new Configuration(
+        id(rs, "organization_id"),
+        id(rs, "id"),
+        Provider.valueOf(rs.getString("provider")),
+        CredentialMode.valueOf(rs.getString("mode")),
+        rs.getString("name"),
+        rs.getString("workspace"),
+        rs.getString("state"),
+        rs.getLong("configuration_revision"),
+        rs.getLong("credential_revision"),
+        rs.getObject("created_at", OffsetDateTime.class),
+        rs.getObject("updated_at", OffsetDateTime.class));
   }
 
   private Event creation(UUID org, UUID target) {

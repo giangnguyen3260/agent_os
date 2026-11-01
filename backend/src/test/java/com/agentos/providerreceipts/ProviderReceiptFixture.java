@@ -377,7 +377,16 @@ abstract class ProviderReceiptFixture {
     assertThat(row.get("digest_version")).isEqualTo(proof.digestVersion());
     assertThat(row.get("key_version")).isEqualTo(proof.keyVersion());
     assertThat(row.get("command_digest")).isEqualTo(proof.digest());
-    assertThat(row.get("recorded_at")).isEqualTo(r.recordedAt());
+    OffsetDateTime storedRecordedAt =
+        jdbc.queryForObject(
+            "select recorded_at from provider_command_receipts where organization_id=? and"
+                + " actor_id=? and idempotency_key=?",
+            (rs, n) -> rs.getObject("recorded_at", OffsetDateTime.class),
+            org,
+            actor,
+            receiptKey);
+    assertThat(storedRecordedAt).isNotNull();
+    assertThat(storedRecordedAt.toInstant()).isEqualTo(r.recordedAt().toInstant());
     var events =
         jdbc.queryForList(
             "select id from provider_connection_events where organization_id=? and connection_id=?"
