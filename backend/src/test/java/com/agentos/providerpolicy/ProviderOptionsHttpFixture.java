@@ -37,6 +37,7 @@ abstract class ProviderOptionsHttpFixture {
 
   @BeforeEach
   void seed() throws Exception {
+    OptionsCompletionFaults.FAIL_NEXT.set(null);
     jdbc.update("delete from provider_read_admission");
     jdbc.update("delete from provider_deployment_policy");
     org = UUID.randomUUID();
@@ -233,8 +234,8 @@ abstract class ProviderOptionsHttpFixture {
   void strictWireConsumesSlotsAndAcceptSpecificityIsRespected() throws Exception {
     login();
     policies.provision(Set.of(Provider.OPENAI));
-    for (String suffix : List.of("?", "?x=1"))
-      error(request(client, "GET", path() + suffix, null, null), 400, "BAD_REQUEST");
+    error(rawGet(path() + "?"), 400, "BAD_REQUEST");
+    error(request(client, "GET", path() + "?x=1", null, null), 400, "BAD_REQUEST");
     error(request(client, "GET", path(), "{}", null), 400, "BAD_REQUEST");
     error(
         request(
@@ -252,11 +253,22 @@ abstract class ProviderOptionsHttpFixture {
             "application/json;q=wat",
             "application/json;q=1.1",
             "application/json, application/json;q=0",
-            "application/json,"))
-      error(request(client, "GET", path(), null, accept), 400, "BAD_REQUEST");
-    assertThat(slots()).isEqualTo(10);
+            "application/json,",
+            "application/json;q=0;q=1",
+            "application/json;q=1e0",
+            "application/json;profile=a;PROFILE=b",
+            "application/json;q=0.0001",
+            "application/json;q=+1",
+            "",
+            " ")) error(request(client, "GET", path(), null, accept), 400, "BAD_REQUEST");
+    assertThat(slots()).isEqualTo(17);
     for (String accept :
-        List.of("application/json", "application/*;q=0.5", "*/*", "application/json;q=1, */*;q=0"))
+        List.of(
+            "application/json",
+            "application/*;q=0.5",
+            "*/*",
+            "application/json;q=1, */*;q=0",
+            "application/json;profile=\"x;q=1\""))
       assertThat(request(client, "GET", path(), null, accept).statusCode()).isEqualTo(200);
   }
 
@@ -287,5 +299,124 @@ abstract class ProviderOptionsHttpFixture {
     var before = jdbc.queryForList("select * from provider_read_admission");
     error(request(client, "GET", path(), null, null), 503, "PROVIDER_CONNECTION_UNAVAILABLE");
     assertThat(jdbc.queryForList("select * from provider_read_admission")).isEqualTo(before);
+  }
+
+  @Test
+  void separateAdmissionAndReadCommitUncertaintyNeverReleasesData() throws Exception {
+    login();
+    policies.provision(Set.of(Provider.OPENAI));
+    for (String operation : List.of("AdmissionService.acquire", "PolicyService.options")) {
+      long before = slots();
+      OptionsCompletionFaults.FAIL_NEXT.set("com.agentos.providerpolicy." + operation);
+      var response = request(client, "GET", path(), null, null);
+      error(response, 503, "PROVIDER_CONNECTION_UNAVAILABLE");
+      assertThat(response.body())
+          .doesNotContain(
+              "commit-sensitive-SQL-sentinel", "organizationId", "policyRevision", "providers");
+      assertThat(slots()).isEqualTo(before + 1);
+      assertThat(OptionsCompletionFaults.FAIL_NEXT.get()).isNull();
+    }
+  }
+
+  @Test
+  void hugeStoredArrayReturnsSafeUnavailableWithoutChangingSecurityRow() throws Exception {
+    login();
+    policies.provision(Set.of(Provider.OPENAI));
+    assertThat(request(client, "GET", path(), null, null).statusCode()).isEqualTo(200);
+    String oversized = "[" + String.join(",", java.util.Collections.nCopies(1000, "0")) + "]";
+    jdbc.update(
+        "update provider_read_admission set recent_requests=? where organization_id=? and"
+            + " actor_id=?",
+        oversized,
+        org,
+        actor);
+    var before = jdbc.queryForList("select * from provider_read_admission");
+    error(request(client, "GET", path(), null, null), 503, "PROVIDER_CONNECTION_UNAVAILABLE");
+    assertThat(jdbc.queryForList("select * from provider_read_admission")).isEqualTo(before);
+  }
+
+  /** Preserve the exact request-target: Java HttpClient can drop a trailing empty query. */
+  private HttpResponse<String> rawGet(String target) throws Exception {
+    URI uri = URI.create("http://localhost:" + port + target);
+    var cookies = (CookieManager) client.cookieHandler().orElseThrow();
+    var wire =
+        new StringBuilder("GET ")
+            .append(target)
+            .append(" HTTP/1.1\r\nHost: localhost:")
+            .append(port)
+            .append("\r\nConnection: close\r\n");
+    for (var header : cookies.get(uri, Map.of()).entrySet())
+      for (String value : header.getValue())
+        wire.append(header.getKey()).append(": ").append(value).append("\r\n");
+    wire.append("\r\n");
+    try (var socket = new java.net.Socket("localhost", port)) {
+      socket.setSoTimeout(20_000);
+      socket.getOutputStream().write(wire.toString().getBytes(StandardCharsets.US_ASCII));
+      socket.getOutputStream().flush();
+      var input = socket.getInputStream();
+      String status = wireLine(input);
+      int code = Integer.parseInt(status.split(" ")[1]);
+      var headers = new java.util.LinkedHashMap<String, List<String>>();
+      String line;
+      while (!(line = wireLine(input)).isEmpty()) {
+        int colon = line.indexOf(':');
+        headers
+            .computeIfAbsent(
+                line.substring(0, colon).toLowerCase(java.util.Locale.ROOT),
+                key -> new java.util.ArrayList<>())
+            .add(line.substring(colon + 1).strip());
+      }
+      byte[] body;
+      if (headers.getOrDefault("transfer-encoding", List.of()).stream()
+          .anyMatch(value -> value.equalsIgnoreCase("chunked"))) {
+        var bytes = new java.io.ByteArrayOutputStream();
+        while (true) {
+          int size = Integer.parseInt(wireLine(input).split(";", 2)[0], 16);
+          if (size == 0) break;
+          bytes.write(input.readNBytes(size));
+          assertThat(wireLine(input)).isEmpty();
+        }
+        body = bytes.toByteArray();
+      } else body = input.readAllBytes();
+      return new RawResponse(
+          code,
+          java.net.http.HttpHeaders.of(headers, (key, value) -> true),
+          new String(body, StandardCharsets.UTF_8),
+          uri);
+    }
+  }
+
+  private static String wireLine(java.io.InputStream input) throws java.io.IOException {
+    var bytes = new java.io.ByteArrayOutputStream();
+    int value;
+    while ((value = input.read()) != -1) {
+      if (value == '\n') return bytes.toString(StandardCharsets.US_ASCII).replace("\r", "");
+      bytes.write(value);
+    }
+    throw new java.io.EOFException("Incomplete test HTTP response");
+  }
+
+  private record RawResponse(
+      int statusCode, java.net.http.HttpHeaders headers, String body, URI uri)
+      implements HttpResponse<String> {
+    @Override
+    public HttpRequest request() {
+      return HttpRequest.newBuilder(uri).GET().build();
+    }
+
+    @Override
+    public java.util.Optional<HttpResponse<String>> previousResponse() {
+      return java.util.Optional.empty();
+    }
+
+    @Override
+    public java.util.Optional<javax.net.ssl.SSLSession> sslSession() {
+      return java.util.Optional.empty();
+    }
+
+    @Override
+    public HttpClient.Version version() {
+      return HttpClient.Version.HTTP_1_1;
+    }
   }
 }

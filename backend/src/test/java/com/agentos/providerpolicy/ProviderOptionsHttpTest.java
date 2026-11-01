@@ -8,6 +8,7 @@ import org.springframework.test.context.DynamicPropertySource;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
+@org.springframework.context.annotation.Import(OptionsCompletionFaults.class)
 public class ProviderOptionsHttpTest extends ProviderOptionsHttpFixture {
   private static final String DATABASE = "options_http_" + UUID.randomUUID();
 

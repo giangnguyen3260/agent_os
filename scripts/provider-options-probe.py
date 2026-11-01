@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -51,14 +52,98 @@ def business_snapshot():
     return {table: native(table) for table in tables}
 
 
-def operator(*args, success=True):
+def strict_json(raw):
+    def object_fields(pairs):
+        result = {}
+        for key, value in pairs:
+            check(key not in result, 'Duplicate JSON field')
+            result[key] = value
+        return result
+    return json.loads(raw, object_pairs_hook=object_fields)
+
+
+def operator(*args, status='CONFIRMED', revision=None, enabled=None):
     result = subprocess.run(CLI + list(args), capture_output=True, text=True, timeout=60)
-    check((result.returncode == 0) == success, 'Operator CLI unexpected exit status')
-    if success:
-        try:
-            return json.loads(result.stdout)
-        except ValueError:
-            raise RuntimeError('Operator CLI must emit JSON') from None
+    expected_exit = 0 if status == 'CONFIRMED' else 2 if status == 'UNCONFIRMED' else 1
+    check(result.returncode == expected_exit, 'Operator CLI unexpected exit status')
+    try:
+        payload = strict_json(result.stdout)
+    except (ValueError, TypeError):
+        raise RuntimeError('Operator CLI must emit exact JSON') from None
+    check(type(payload) is dict, 'Operator output must be an object')
+    if status == 'CONFIRMED':
+        check(set(payload) == {'status', 'revision', 'providers'}, 'Operator output fields mismatch')
+        check(payload['status'] == status and type(payload['revision']) is str
+              and payload['revision'] == str(revision), 'Operator status/revision mismatch')
+        flags = payload['providers']
+        check(type(flags) is dict and set(flags) == {'OPENAI', 'ANTHROPIC', 'GOOGLE_GEMINI'},
+              'Operator provider fields mismatch')
+        check(all(type(value) is bool for value in flags.values()), 'Operator flags must be JSON booleans')
+        check(flags == {provider: provider in enabled for provider in flags}, 'Operator flags mismatch')
+    elif status == 'UNCONFIRMED':
+        check(payload == {'status': 'UNCONFIRMED',
+                          'action': 'Run show before deciding; do not retry automatically'},
+              'Operator uncertainty output mismatch')
+    else:
+        check(payload == {'status': status}, 'Operator rejection output mismatch')
+    return payload
+
+
+def absent_lock_protocol():
+    """Native psql protocol evidence using actual emitted CLI SQL, not a CLI race.
+
+    Pause only after the absent SELECT FOR UPDATE / gset. Observation of the
+    named backend's PgSleep wait proves the replacement passed its first lock
+    before the real CLI provisions. Require that same wait after provision too.
+    """
+    emitted = subprocess.run(CLI + ['replace', '--providers', 'ANTHROPIC',
+        '--expected-revision', '1', '--sql-only'], capture_output=True, text=True, timeout=10)
+    check(emitted.returncode == 0, 'CLI SQL emission failed')
+    marker = ("WITH locked AS MATERIALIZED (SELECT id FROM provider_deployment_policy WHERE id=1 FOR UPDATE) "
+              "SELECT EXISTS (SELECT 1 FROM locked) AS policy_locked \\gset\n")
+    check(emitted.stdout.count(marker) == 1, 'CLI lock marker changed; review interleaving hook')
+    name = 'provider_options_cli3_' + uuid.uuid4().hex
+    script = ("SET application_name='" + name + "';\nSET statement_timeout='55s';\n" +
+              emitted.stdout.replace(marker, marker + 'SELECT pg_sleep(20);\n', 1))
+    waiting = ("SELECT count(*) FROM pg_stat_activity WHERE application_name='" + name +
+               "' AND state='active' AND wait_event_type='Timeout' AND wait_event='PgSleep' "
+               "AND query LIKE 'SELECT pg_sleep(20)%';")
+    proc = subprocess.Popen(PSQL, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE, text=True)
+    try:
+        proc.stdin.write(script)
+        proc.stdin.close()
+        proc.stdin = None
+        deadline = time.monotonic() + 10
+        observed = False
+        while time.monotonic() < deadline:
+            if sql(waiting) == '1':
+                observed = True
+                break
+            check(proc.poll() is None, 'Replacement exited before observed protocol barrier')
+            time.sleep(0.1)
+        check(observed, 'Did not observe replacement at native post-lock barrier')
+        check(native('provider_deployment_policy') == [], 'Policy appeared before concurrent provision')
+        operator('provision', '--providers', 'OPENAI,GOOGLE_GEMINI', revision=1,
+                 enabled={'OPENAI', 'GOOGLE_GEMINI'})
+        provisioned = native('provider_deployment_policy')
+        check(sql(waiting) == '1', 'Provision did not finish within observed replacement barrier')
+        stdout, _ = proc.communicate(timeout=30)
+        check(proc.returncode == 0, 'Emitted replacement psql protocol failed')
+        check(strict_json(stdout.strip()) == {'status': 'UNAVAILABLE'},
+              'Absent-lock replacement adopted concurrently provisioned policy')
+        check(len(provisioned) == 1 and provisioned[0]['revision'] == 1
+              and native('provider_deployment_policy') == provisioned,
+              'Absent-lock replacement changed complete provisioned policy row')
+        print('CLI3 emitted-SQL native psql absent-lock protocol passed (not CLI subprocess race)')
+    finally:
+        if proc.poll() is None:
+            # Terminate the named database session as well as the local Docker client.
+            try:
+                sql("SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE application_name='" + name + "';")
+            finally:
+                proc.kill()
+                proc.communicate(timeout=5)
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -100,7 +185,7 @@ def response(client, status=200, code=None, path=ROOT, method='GET', body=None, 
         check(raw == b'', 'HEAD returned a body')
         return None, hdr
     try:
-        data = json.loads(raw)
+        data = strict_json(raw)
     except ValueError:
         raise RuntimeError('Non-JSON feature response') from None
     check(set(data) == ({'data', 'meta'} if status == 200 else {'error', 'meta'}), 'Envelope field mismatch')
@@ -125,6 +210,9 @@ def options(client, revision, enabled):
     check(set(data) == {'organizationId', 'policyRevision', 'providers'}, 'Options fields mismatch')
     check(data['organizationId'] == ORG and data['policyRevision'] == str(revision), 'Options identity/revision mismatch')
     expected = [('OPENAI', 'OPENAI_API_KEY', 'EMPTY'), ('ANTHROPIC', 'ANTHROPIC_API_KEY', 'ANTHROPIC_WORKSPACE'), ('GOOGLE_GEMINI', 'GEMINI_API_KEY', 'EMPTY')]
+    check(type(data['providers']) is list and len(data['providers']) == 3
+          and all(type(item) is dict and type(item.get('enabled')) is bool for item in data['providers']),
+          'Provider enabled must be a JSON boolean')
     check(data['providers'] == [dict(provider=p, credentialMode=m, enabled=p in enabled, optionsSchema=s)
                                for p, m, s in expected], 'Provider descriptors/flags mismatch')
 
@@ -153,22 +241,22 @@ def main():
     check(native('provider_read_admission') == [], 'Denied authority/method consumed quota')
     response(admin, 503, 'PROVIDER_CONNECTION_UNAVAILABLE')
     # Replacing absent policy must fail, never initialize it or adopt a default.
-    operator('replace', '--providers', 'ANTHROPIC', '--expected-revision', '1', success=False)
+    operator('replace', '--providers', 'ANTHROPIC', '--expected-revision', '1', status='UNAVAILABLE')
     check(native('provider_deployment_policy') == [], 'Absent-policy replacement initialized policy')
-    operator('provision', '--providers', 'OPENAI,GOOGLE_GEMINI')
-    operator('show')
+    absent_lock_protocol()
+    operator('show', revision=1, enabled={'OPENAI', 'GOOGLE_GEMINI'})
     options(admin, 1, {'OPENAI', 'GOOGLE_GEMINI'})
     before = native('provider_deployment_policy')
-    operator('provision', '--providers', 'ANTHROPIC', success=False)
-    operator('replace', '--providers', 'ANTHROPIC', '--expected-revision', '2', success=False)
-    operator('replace', '--providers', 'OPENAI,GOOGLE_GEMINI', '--expected-revision', '1', success=False)
+    operator('provision', '--providers', 'ANTHROPIC', status='UNCONFIRMED')
+    operator('replace', '--providers', 'ANTHROPIC', '--expected-revision', '2', status='REVISION_CONFLICT')
+    operator('replace', '--providers', 'OPENAI,GOOGLE_GEMINI', '--expected-revision', '1', status='NO_CHANGE')
     check(native('provider_deployment_policy') == before, 'Rejected operator command changed policy')
-    operator('replace', '--providers', 'ANTHROPIC', '--expected-revision', '1')
+    operator('replace', '--providers', 'ANTHROPIC', '--expected-revision', '1', revision=2, enabled={'ANTHROPIC'})
     options(admin, 2, {'ANTHROPIC'})
     # Turn Anthropic off and back on: identical flags must carry a newer revision.
-    operator('replace', '--providers', 'OPENAI', '--expected-revision', '2')
+    operator('replace', '--providers', 'OPENAI', '--expected-revision', '2', revision=3, enabled={'OPENAI'})
     options(admin, 3, {'OPENAI'})
-    operator('replace', '--providers', 'ANTHROPIC', '--expected-revision', '3')
+    operator('replace', '--providers', 'ANTHROPIC', '--expected-revision', '3', revision=4, enabled={'ANTHROPIC'})
     options(admin, 4, {'ANTHROPIC'})
     policy = native('provider_deployment_policy')
     check(len(policy) == 1 and policy[0]['revision'] == 4 and policy[0]['anthropic_enabled']

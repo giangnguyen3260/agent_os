@@ -7,6 +7,7 @@ import org.springframework.test.context.DynamicPropertySource;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
+@org.springframework.context.annotation.Import(OptionsCompletionFaults.class)
 public class ProviderOptionsPostgresIT extends ProviderOptionsHttpFixture {
   @DynamicPropertySource
   static void postgres(DynamicPropertyRegistry properties) {

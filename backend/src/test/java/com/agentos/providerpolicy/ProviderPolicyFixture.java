@@ -23,6 +23,9 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
+@org.springframework.test.context.TestExecutionListeners(
+    listeners =
+        org.springframework.test.context.support.DependencyInjectionTestExecutionListener.class)
 abstract class ProviderPolicyFixture {
   @Autowired JdbcTemplate jdbc;
   @Autowired PolicyService policies;
@@ -239,7 +242,26 @@ abstract class ProviderPolicyFixture {
         };
     try {
       var first = executor.submit(attempt);
-      var second = executor.submit(attempt);
+      var secondInstance =
+          new org.springframework.aop.framework.ProxyFactory(
+              new AdmissionService(new PolicyJdbc(jdbc), new PolicyAuthority(jdbc)));
+      secondInstance.addAdvice(
+          new org.springframework.transaction.interceptor.TransactionInterceptor(
+              manager,
+              new org.springframework.transaction.annotation
+                  .AnnotationTransactionAttributeSource()));
+      var independent = (AdmissionService) secondInstance.getProxy();
+      var second =
+          executor.submit(
+              () -> {
+                start.await();
+                try {
+                  independent.acquire(human, org);
+                  return "WIN";
+                } catch (PolicyFailure failure) {
+                  return failure.code();
+                }
+              });
       start.countDown();
       assertThat(List.of(first.get(15, TimeUnit.SECONDS), second.get(15, TimeUnit.SECONDS)))
           .containsExactlyInAnyOrder("WIN", "RATE_LIMITED");
@@ -287,5 +309,187 @@ abstract class ProviderPolicyFixture {
                   table))
           .allMatch(value -> value == null);
     }
+  }
+
+  @Test
+  void exactWindowCutoffAndCeilBoundaries() {
+    long now = 120_000_000L;
+    assertThat(AdmissionService.append(List.of(now - 60_000_000L), now)).containsExactly(now);
+    for (long remaining : List.of(1L, 999_999L, 1_000_000L, 1_000_001L, 60_000_000L)) {
+      var full = java.util.Collections.nCopies(120, now - 60_000_000L + remaining);
+      assertThatThrownBy(() -> AdmissionService.append(full, now))
+          .isInstanceOfSatisfying(
+              PolicyFailure.class,
+              failure -> {
+                assertThat(failure.code()).isEqualTo("RATE_LIMITED");
+                assertThat(failure.retryAfter())
+                    .isEqualTo((int) ((remaining + 999_999L) / 1_000_000L));
+              });
+    }
+    assertThatThrownBy(() -> AdmissionService.micros(Instant.MAX))
+        .isInstanceOf(PolicyFailure.class);
+    assertThatThrownBy(() -> AdmissionService.micros(Instant.MIN))
+        .isInstanceOf(PolicyFailure.class);
+    for (String invalid :
+        List.of(
+            "[+1]",
+            "[1e0]",
+            "[1, 2]",
+            "[] ",
+            "[1]".repeat(1400),
+            "[" + String.join(",", java.util.Collections.nCopies(121, "0")) + "]"))
+      denied(
+          () -> AdmissionService.parse(invalid, Long.MAX_VALUE), "PROVIDER_CONNECTION_UNAVAILABLE");
+  }
+
+  @Test
+  void acceptedSecurityRowUsesExactlyOneMicrosecondObservation() {
+    admission.acquire(human, org);
+    var time =
+        jdbc.queryForObject(
+            "select updated_at from provider_read_admission where organization_id=? and actor_id=?",
+            java.time.OffsetDateTime.class,
+            org,
+            actor);
+    var requests =
+        AdmissionService.parse((String) quotaRows().get(0).get("recent_requests"), Long.MAX_VALUE);
+    assertThat(requests).containsExactly(AdmissionService.micros(time.toInstant()));
+    assertThat(time.getNano() % 1000).isZero();
+  }
+
+  @Test
+  void admissionOuterRollbackLeavesNoCandidateAndBucketsAreIndependent() {
+    var transaction = new TransactionTemplate(manager);
+    transaction.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
+    transaction.executeWithoutResult(
+        status -> {
+          admission.acquire(human, org);
+          status.setRollbackOnly();
+        });
+    assertThat(quotaRows()).isEmpty();
+    UUID other = UUID.randomUUID();
+    jdbc.update(
+        "insert into human_accounts(id,email,display_name,password_hash) values"
+            + " (?,?,'Other','unused')",
+        other,
+        other + "@example.test");
+    jdbc.update(
+        "insert into organization_memberships(account_id,organization_id,role) values"
+            + " (?,?,'ADMIN')",
+        other,
+        org);
+    admission.acquire(human, org);
+    admission.acquire(new HumanIdentity(other, "x", "x", 0), org);
+    assertThat(quotaRows()).hasSize(2);
+  }
+
+  @Test
+  void failedInitialAdmissionRollsBackCandidateInsert() {
+    var faultJdbc =
+        new JdbcTemplate(jdbc.getDataSource()) {
+          @Override
+          public <T> T queryForObject(String sql, Class<T> type) {
+            if (sql.equals("select clock_timestamp()") || sql.equals("select current_timestamp"))
+              return type.cast(java.time.OffsetDateTime.MAX);
+            return super.queryForObject(sql, type);
+          }
+        };
+    var failing = new AdmissionService(new PolicyJdbc(faultJdbc), new PolicyAuthority(faultJdbc));
+    var transaction = new TransactionTemplate(manager);
+    transaction.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
+    denied(
+        () -> transaction.executeWithoutResult(status -> failing.acquire(human, org)),
+        "PROVIDER_CONNECTION_UNAVAILABLE");
+    assertThat(quotaRows()).isEmpty();
+  }
+
+  @Test
+  void oversizedStoredArrayIsBoundedlyRejectedWithoutAnyRowChange() {
+    admission.acquire(human, org);
+    String oversized = "[" + String.join(",", java.util.Collections.nCopies(1000, "0")) + "]";
+    assertThat(oversized.length()).isLessThan(4096);
+    jdbc.update(
+        "update provider_read_admission set recent_requests=? where organization_id=? and"
+            + " actor_id=?",
+        oversized,
+        org,
+        actor);
+    var before = quotaRows();
+    denied(() -> admission.acquire(human, org), "PROVIDER_CONNECTION_UNAVAILABLE");
+    assertThat(quotaRows()).isEqualTo(before);
+  }
+
+  @Test
+  void acceptLexicalGrammarAndSpecificityAreStrict() throws Exception {
+    for (String accept :
+        List.of(
+            "",
+            " ",
+            "application/json;q=+1",
+            "application/json;q=1e0",
+            "application/json;q=0.1234",
+            "application/json;q=0;q=1",
+            "application/json;q=0, */*;q=1",
+            "application/json,application/json;q=0",
+            "application/json,",
+            "application/json, , */*",
+            "application/json;profile=a;PROFILE=b",
+            "application/json;profile=\"unclosed")) {
+      var request = new org.springframework.mock.web.MockHttpServletRequest();
+      request.addHeader("Accept", accept);
+      assertThatThrownBy(() -> OptionsWire.validate(request, org.toString()))
+          .isInstanceOfSatisfying(
+              PolicyFailure.class, failure -> assertThat(failure.code()).isEqualTo("BAD_REQUEST"));
+    }
+    for (String accept :
+        List.of(
+            "application/json",
+            "application/json;q=0.5",
+            "application/*;q=0.1",
+            "*/*",
+            "application/json;q=1,*/*;q=0",
+            "application/json;profile=\"x;q=1\"",
+            "application/json;profile=\"x,,y;q=1\";q=1")) {
+      var request = new org.springframework.mock.web.MockHttpServletRequest();
+      request.addHeader("Accept", accept);
+      OptionsWire.validate(request, org.toString());
+    }
+    var request = new org.springframework.mock.web.MockHttpServletRequest();
+    request.setQueryString("");
+    assertThatThrownBy(() -> OptionsWire.validate(request, org.toString()))
+        .isInstanceOf(PolicyFailure.class);
+  }
+
+  @Test
+  void completeColumnTypesAndBoundedSecurityStorage() {
+    var expected =
+        Map.ofEntries(
+            Map.entry("provider_deployment_policy.id", "smallint"),
+            Map.entry("provider_deployment_policy.revision", "bigint"),
+            Map.entry("provider_deployment_policy.openai_enabled", "boolean"),
+            Map.entry("provider_deployment_policy.anthropic_enabled", "boolean"),
+            Map.entry("provider_deployment_policy.gemini_enabled", "boolean"),
+            Map.entry("provider_deployment_policy.created_at", "timestamp with time zone"),
+            Map.entry("provider_deployment_policy.updated_at", "timestamp with time zone"),
+            Map.entry("provider_read_admission.organization_id", "uuid"),
+            Map.entry("provider_read_admission.actor_id", "uuid"),
+            Map.entry("provider_read_admission.recent_requests", "character varying"),
+            Map.entry("provider_read_admission.updated_at", "timestamp with time zone"));
+    var actual = new java.util.LinkedHashMap<String, String>();
+    jdbc.query(
+        "select table_name,column_name,data_type from information_schema.columns where table_name"
+            + " in ('provider_deployment_policy','provider_read_admission')",
+        (org.springframework.jdbc.core.RowCallbackHandler)
+            rs ->
+                actual.put(
+                    rs.getString(1) + "." + rs.getString(2),
+                    rs.getString(3).toLowerCase(java.util.Locale.ROOT)));
+    assertThat(actual).isEqualTo(expected);
+    assertThat(
+            jdbc.queryForObject(
+                "select character_maximum_length from information_schema.columns where"
+                    + " table_name='provider_read_admission' and column_name='recent_requests'",
+                Long.class))
+        .isEqualTo(4096L);
   }
 }

@@ -78,8 +78,8 @@ def sql_for(args):
     expected = args.expected_revision
     return (
         "BEGIN ISOLATION LEVEL READ COMMITTED;\n"
-        "SELECT false AS policy_locked \\gset\n"
-        "SELECT true AS policy_locked FROM provider_deployment_policy WHERE id=1 FOR UPDATE \\gset\n"
+        "WITH locked AS MATERIALIZED (SELECT id FROM provider_deployment_policy WHERE id=1 FOR UPDATE) "
+        "SELECT EXISTS (SELECT 1 FROM locked) AS policy_locked \\gset\n"
         "\\if :policy_locked\n"
         "WITH t AS MATERIALIZED (SELECT clock_timestamp() AS now), "
         "decision AS MATERIALIZED (SELECT p.*,t.now,CASE "

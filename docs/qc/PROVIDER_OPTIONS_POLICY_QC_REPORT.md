@@ -38,3 +38,28 @@ remain required. Any remaining coverage limitations must stay explicit.
 
 No user deployment, Mac command, merge or production provisioning occurred.
 SonarQube remains paused. No new UI or screenshot acceptance is claimed.
+
+## Initial published source and corrective work
+
+C1 `bc7320c81dc6e1f3bff39558256a3c7ab78b8e82`, tree
+`902f3f511f71654f91e24bf31e9f721fa3b5e2d1`, draft PR46 stacked on PR45.
+Focused run41337581413/job124940552811 executed Java21: 7 core H2 passed,
+7 actual-session HTTP tests ran with one failure (14 total,1 failure,0 errors/skips).
+The strict-wire test expected400 but observed200 at its query-suffix loop;
+the Java client can normalize an empty query before sending it. Corrective
+work uses a raw request-target test rather than inferring servlet input from a
+Java URI. Native step did not run after that failure; no native pass is claimed.
+
+Independent QC also reproduced bounded-parser stack exhaustion and permissive
+Accept lexical parsing in the initial source. BE is replacing the recursive
+quota regex and tightening wire validation, with service/HTTP regressions.
+Operator output is now allowlisted and strictly typed; duplicate/malformed JSON,
+extra stdout and timeout/nonzero process results cannot publish success. The
+lock query uses a materialized locking CTE and outer EXISTS (exactly one boolean
+row) before psql's conditional second statement. Missing policy cannot be
+adopted from a later snapshot. Native interleaving verification remains pending.
+
+QC-authored Docker-free operator tests passed11/0 locally. A later isolated
+Java17 core-only build passed12/0 on in-progress corrective source; this is
+structural H2 evidence, not the C1 source, full Java21 application or native
+acceptance. Updated source must be published and tested before closure.

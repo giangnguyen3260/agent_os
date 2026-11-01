@@ -32,11 +32,14 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
+      - name: Operator CLI fixed-output and uncertainty checks
+        run: python3 -B scripts/test-provider-policy-admin.py
       - name: Check imports
         run: python3 scripts/check-java-imports.py
       - name: H2 structural and actual session HTTP suites
         run: mvn --batch-mode --no-transfer-progress -f backend/pom.xml -Dtest=ProviderPolicyIntegrationTest,ProviderOptionsHttpTest test
       - name: Mandatory native PostgreSQL core and HTTP suites
+        if: ${{ !cancelled() }}
         env:
           TASK_EDIT_TEST_JDBC_URL: jdbc:postgresql://127.0.0.1:15432/provider_options_test
           TASK_EDIT_TEST_DB_USER: agentos

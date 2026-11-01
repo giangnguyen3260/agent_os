@@ -203,7 +203,13 @@ public class ProviderPolicyPostgresIT extends ProviderPolicyFixture {
       blocker.commit();
       waiting.get(15, TimeUnit.SECONDS);
       var row = quotaRows().get(0);
-      OffsetDateTime updated = (OffsetDateTime) row.get("updated_at");
+      OffsetDateTime updated =
+          jdbc.queryForObject(
+              "select updated_at from provider_read_admission where organization_id=? and"
+                  + " actor_id=?",
+              OffsetDateTime.class,
+              org,
+              actor);
       assertThat(updated).isAfterOrEqualTo(release);
       var requests = AdmissionService.parse((String) row.get("recent_requests"), Long.MAX_VALUE);
       assertThat(requests).hasSize(2);
@@ -211,5 +217,80 @@ public class ProviderPolicyPostgresIT extends ProviderPolicyFixture {
     } finally {
       executor.shutdownNow();
     }
+  }
+
+  @Test
+  void observedPolicyWaitUsesPostLockClockAndPreservesCreatedAt() throws Exception {
+    var before = policies.provision(Set.of(Provider.OPENAI));
+    var executor = Executors.newSingleThreadExecutor();
+    try (Connection blocker = jdbc.getDataSource().getConnection()) {
+      blocker.setAutoCommit(false);
+      try (var lock =
+              blocker.prepareStatement(
+                  "select * from provider_deployment_policy where id=1 for update");
+          var rows = lock.executeQuery()) {
+        assertThat(rows.next()).isTrue();
+      }
+      var waiting = executor.submit(() -> policies.replace(1, Set.of(Provider.ANTHROPIC)));
+      long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+      boolean observed = false;
+      while (System.nanoTime() < deadline) {
+        if (Boolean.TRUE.equals(
+            jdbc.queryForObject(
+                "select count(*)>0 from pg_stat_activity where datname=current_database() and"
+                    + " pid<>pg_backend_pid() and wait_event_type='Lock' and query like"
+                    + " '%provider_deployment_policy%'",
+                Boolean.class))) {
+          observed = true;
+          break;
+        }
+        Thread.sleep(20);
+      }
+      assertThat(observed).isTrue();
+      OffsetDateTime release =
+          jdbc.queryForObject("select clock_timestamp()", OffsetDateTime.class);
+      blocker.commit();
+      var changed = waiting.get(15, TimeUnit.SECONDS);
+      assertThat(changed.revision()).isEqualTo(2);
+      assertThat(changed.createdAt()).isEqualTo(before.createdAt());
+      assertThat(changed.updatedAt()).isAfterOrEqualTo(release.toInstant());
+    } finally {
+      executor.shutdownNow();
+    }
+  }
+
+  @Test
+  void nativeConstraintAndCascadeAllowlistsAreExact() {
+    var policy =
+        jdbc
+            .queryForList(
+                "select pg_get_constraintdef(oid) from pg_constraint where"
+                    + " conrelid='provider_deployment_policy'::regclass",
+                String.class)
+            .stream()
+            .map(value -> value.replaceAll("[\\s()]", "").toLowerCase(java.util.Locale.ROOT))
+            .toList();
+    assertThat(policy)
+        .containsExactlyInAnyOrder(
+            "primarykeyid",
+            "checkid=1",
+            "checkrevision>0",
+            "checkopenai_enabledoranthropic_enabledorgemini_enabled",
+            "checkupdated_at>=created_at");
+    assertThat(
+            jdbc.queryForList(
+                "select pg_get_constraintdef(oid) from pg_constraint where"
+                    + " conrelid='provider_read_admission'::regclass",
+                String.class))
+        .containsExactlyInAnyOrder(
+            "PRIMARY KEY (organization_id, actor_id)",
+            "FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE",
+            "FOREIGN KEY (actor_id) REFERENCES human_accounts(id) ON DELETE CASCADE");
+    assertThat(
+            jdbc.queryForList(
+                "select confdeltype::text from pg_constraint where"
+                    + " conrelid='provider_read_admission'::regclass and contype='f'",
+                String.class))
+        .containsExactlyInAnyOrder("c", "c");
   }
 }

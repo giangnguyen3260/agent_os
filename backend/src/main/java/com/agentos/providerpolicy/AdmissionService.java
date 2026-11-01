@@ -90,22 +90,32 @@ public class AdmissionService {
   static List<Long> parse(String json, long now) {
     if (json == null
         || json.length() > 4096
-        || !json.matches("\\[(?:0|[1-9][0-9]*)(?:,(?:0|[1-9][0-9]*))*\\]|\\[\\]"))
-      throw PolicyFailure.unavailable();
+        || json.length() < 2
+        || json.charAt(0) != '['
+        || json.charAt(json.length() - 1) != ']') throw PolicyFailure.unavailable();
     var values = new ArrayList<Long>();
     if (json.equals("[]")) return values;
+    int index = 1;
     long previous = -1;
-    try {
-      for (String number : json.substring(1, json.length() - 1).split(",")) {
-        long value = Long.parseLong(number);
-        if (value < previous || value > now || values.size() == 120)
-          throw PolicyFailure.unavailable();
-        values.add(value);
-        previous = value;
+    while (index < json.length() - 1) {
+      if (values.size() == 120) throw PolicyFailure.unavailable();
+      int first = index;
+      long value = 0;
+      while (index < json.length() - 1 && json.charAt(index) != ',') {
+        char digit = json.charAt(index++);
+        if (digit < '0'
+            || digit > '9'
+            || (index - first > 1 && json.charAt(first) == '0')
+            || value > (Long.MAX_VALUE - (digit - '0')) / 10) throw PolicyFailure.unavailable();
+        value = value * 10 + (digit - '0');
       }
-    } catch (NumberFormatException failure) {
-      throw PolicyFailure.unavailable();
+      if (index == first || value < previous || value > now) throw PolicyFailure.unavailable();
+      values.add(value);
+      previous = value;
+      if (index == json.length() - 1) return values;
+      index++;
+      if (index == json.length() - 1) throw PolicyFailure.unavailable();
     }
-    return values;
+    throw PolicyFailure.unavailable();
   }
 }
