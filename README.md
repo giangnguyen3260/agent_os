@@ -1,13 +1,17 @@
 # AgentOS
 
-Guarded provider evidence publication is under implementation in draft
+Guarded provider evidence publication is under verification in draft
 [PR48](https://github.com/giangnguyen3260/agent_os/pull/48). It adds an explicit
-operator-installed PostgreSQL boundary and worker JDBC client. Corrected metadata
-validation and privilege checks passed39 focused cases (27 native PostgreSQL,12
-client units); full Quality passed1490 backend tests and frontend gates. Initial CI failures and remaining protocol gaps are recorded.
+operator-installed PostgreSQL boundary and worker JDBC client. C6 passed46 focused
+cases (34 native PostgreSQL,12 client units) and1497 full backend tests with frontend
+gates/audit0. Covered regressions include authority/fence denial, atomic INSERT
+rollback and real loopback commit-acknowledgement loss with retained UNKNOWN after
+latest replacement. C3 Docker completed941 regular backend tests and1101 disjoint
+browser invocations plus3 repeats; later native additions have separate CI evidence.
 Full protocol QC acceptance, protected deployment and a real external observer
-remain pending. See [verification](docs/qc/PROVIDER_EVIDENCE_PUBLICATION_QC_REPORT.md)
-and [rollout prerequisites](backend/PROVIDER_PUBLICATION_ROLLOUT.md).
+remain open. See [verification](docs/qc/PROVIDER_EVIDENCE_PUBLICATION_QC_REPORT.md),
+[independent review](docs/qc/PROVIDER_EVIDENCE_PUBLICATION_REVIEW.md) and
+[rollout prerequisites](backend/PROVIDER_PUBLICATION_ROLLOUT.md).
 
 Provider evidence storage candidate adds V025 empty integrity/health/publisher-fence
 records and a SELECT-only reader capability; publisher remains ungranted. Verified

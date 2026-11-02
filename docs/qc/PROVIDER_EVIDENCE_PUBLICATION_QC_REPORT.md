@@ -152,3 +152,155 @@ privilege controls and cleanup/grace/pinning serialization. Q3 deployment separa
 and actual external observer verification are still separate open prerequisites.
 No public connection list/PRESENT projection, worker wiring, merge or deployment
 was performed. Follow the independent review's prioritized P01–P15 gap table next.
+
+## C4 authority, fencing and atomic rollback checkpoint
+
+Source `62b9b144bcbf49eebf8d3b03f4ca32459ed5dbb9`, tree
+`3660fdb257e53214bcf4940ae93732ffe42e4966`, adds five native methods (32
+authored native methods total) without changing production SQL/client/workflows.
+Coverage adds foreign org/provider/connection denial, disabled registration and
+removed HEALTH permission invalidating committed captures, separate valid metadata/
+verifier substitutions, an actual registry lock wait identified by blocker PID with
+fence change, and four injected INSERT failures at integrity/health/assertion/
+provenance boundaries. Rejection/rollback paths require NULL data and the unchanged
+eleven-table fingerprint; each injected-fault case has a fresh-capture successful
+control after fault removal. The fence baseline includes the operator's intended
+uncommitted fence update while the worker remains blocked. This avoids accepting
+a forbidden write that completed before a late baseline was measured.
+
+Google formatting/import and whitespace checks passed. Independent QC accepted
+the bounded source for execution; actual C4 focused/full results are pending.
+INSERT-path fault injection does not prove VERIFIED→FAILED UPDATE-path rollback,
+actual network uncertainty or server-log privacy. All remaining Q4 gaps retain
+their separate dispositions. Only disposable fixtures install temporary triggers;
+production installer/schema/permissions are unchanged.
+
+### C4 focused execution completed
+
+Run41486600473/job125418505578 completed BUILD SUCCESS on PR merge
+`c43c9ee`, merging62b9b144 into base643357e7. Actual result:12 client units
+and32 native PostgreSQL methods, total44,0 failures,0 errors,0 skips. This
+executes the five new authority/fence/binding/atomic-INSERT rollback methods and
+the retained protocol cases. Full Quality is tracked separately; aggregate focused
+success does not waive missing UPDATE-path rollback, actual transport loss, privacy,
+clock/cleanup and catalog/effective-privilege obligations.
+
+## C5 controlled durable-commit uncertainty checkpoint
+
+Source `4b9a39cae2db0ae22a1fc6a5b473666c28c1f189`, tree
+`ee1d6ead1e45628da0b2d0420ca59be87b1c69f3`, adds one native method
+(33 authored native methods total). The explicit worker DataSource wraps an actual
+JDBC connection: real commit completes before a controlled08006 exception is
+raised. The client must return UNKNOWN/COMPLETION_UNKNOWN with NULL value; operator
+reads verify durable health revision1 and consumed attempt. A fresh independent
+capture/publication replaces latest health at revision2; the original result stays
+UNKNOWN. Counters require one borrow, one statement factory, one commit and zero
+rollbacks before/after replacement. All three statement factories are counted.
+
+This is a controlled Java post-commit fault on a real database, not actual TCP or
+PostgreSQL-wire acknowledgement loss, universal query tracing, historical-recovery
+API execution or application/server-log sentinel proof. Unchanged production source
+separately confirms no retry/readback. Formatting/import and whitespace checks
+passed; independent QC accepted bounded source for execution. C5 results remain
+pending. No production SQL/client/workflow changes, merge or deployment.
+
+### C4 Full Quality completed
+
+Run41486600525/job125418505594 completed SUCCESS on merge `c43c9ee`
+(head62b9b144, base643357e7):1495 backend tests,0 failures,0 errors,0
+skips, BUILD SUCCESS. Frontend style/type/build gates passed; dependency audit
+found0 vulnerabilities. This is C4's32-native tree; it does not cover the later
+C5 controlled acknowledgement-loss method. Full Q4 acceptance remains separate.
+
+### C5 focused execution completed
+
+Run41487482046/job125421515379 completed BUILD SUCCESS:12 client units
+plus33 native PostgreSQL methods, total45,0 failures,0 errors,0 skips. This
+executes the controlled real-commit/Java08006/latest-replacement case with its
+explicit proof limits. It is not relabeled as a TCP-loss test. Full Quality is
+tracked separately. A further test-only loopback transport-drop fixture is under
+development to address the actual driver/wire acknowledgement-loss distinction.
+No result or source acceptance is claimed for that future fixture.
+
+### C5 Full Quality completed
+
+Run41487482117/job125421516619 completed SUCCESS on merge `5b939e2`
+(head4b9a39ca, base643357e7):1496 backend tests,0 failures,0 errors,0
+skips, BUILD SUCCESS; frontend style/type/build gates and audit0 passed.
+This remains C5's controlled Java post-commit fixture, not the later C6 loopback
+transport-drop source or evidence.
+
+## C6 real loopback commit-acknowledgement loss checkpoint
+
+Source `04efc15b42da3019412286d0d7bd63bdf53b48be`, tree
+`906e13910664767a61ab7d818eddc83d97c21711`, adds the test-only
+PostgresCommitAckProxy and one native method (34 authored native methods total).
+The bounded one-connection proxy binds IPv4 loopback and accepts only the validated
+local disposable fixture URL. It relays PostgreSQL3 startup/typed frames with
+TLS/GSS disabled for this local fixture, withholding backend CommandComplete COMMIT
+and the subsequent idle ReadyForQuery before closing both sockets. The native
+case requires that exact phase, a real PGJDBC class08 commit exception represented
+only by a boolean, UNKNOWN/NULL data, one borrow/statement/commit and no rollback,
+durable health revision1/consumption, then direct fresh revision2 replacement while
+the historical result stays UNKNOWN. No Java-thrown commit fault is injected here.
+
+Proxy buffers are bounded and cleared; no frontend SQL/authentication or packet
+payload is parsed into diagnostics or logged. Connect/read/accept and cleanup waits
+are bounded; resources close on success/failure. The helper compiled separately;
+main Google formatting/import and whitespace checks passed. Independent QC gave
+bounded source PASS for execution; native/full CI results remain pending. This is
+controlled real loopback transport loss, not an internet partition, every transport
+failure, historical-recovery API or whole server/application-log privacy proof.
+
+Framing reference: PostgreSQL16 primary documentation,
+https://www.postgresql.org/docs/16/protocol-message-formats.html (CommandComplete
+and ReadyForQuery). This reference supports framing; actual execution must establish
+the delivered JDBC behavior. Production SQL/client/workflows remain unchanged.
+
+## Completed C3 Docker regression evidence
+
+Run41479437511 completed SUCCESS: compose125393523676 and formatting
+125393524225. Checkout was merge `c4e8aea` for C3 ed651915/base643357e7.
+Actual build summary:941 regular backend tests,0 failures,0 errors,0 skips.
+Browser groups33+75+42+81+90+780 total1101 disjoint invocations plus3 focused
+repeats, all passed. Log confirms the exact session survives backend restart and
+logout rejects replay. These are completed C3 Docker results, not extrapolated
+C4/C5/C6 reruns. Subsequent C4–C6 production SQL/client/build/workflow source is
+unchanged; later native test additions have separate focused/Quality evidence.
+Newer Docker run statuses must retain their own source identities.
+
+### C6 focused execution completed
+
+Run41489057175/job125426924601 completed BUILD SUCCESS on merge
+`15e1947`, merging04efc15b into base643357e7. Actual result:12 client units
+plus34 native PostgreSQL methods, total46,0 failures,0 errors,0 skips. The
+real loopback transport-drop case therefore executes within the passing native
+class: committed-drop phase, real driver class08 failure, durable revision1, fresh
+revision2 replacement and retained UNKNOWN/control counters all passed. This is
+separate from C5's Java exception fixture. Full Quality is recorded separately.
+The single observed transport case does not close all native uncertainty, crash/
+network recovery, runtime/server-log privacy, clock, cleanup or catalog obligations.
+
+### C6 Full Quality completed and final checkpoint
+
+Run41489056730/job125426924786 completed SUCCESS on merge `15e1947`
+(head04efc15b, base643357e7). Actual backend result:1497 tests,0 failures,
+0 errors,0 skips, BUILD SUCCESS. The full selection includes12 client and34
+publication native methods. Frontend style/type/build gates passed and dependency
+audit found0 vulnerabilities. Sonar remains paused. Independent completed source/
+execution dispositions are maintained in the owned QC review.
+
+This continuation added seven native methods across C4–C6 plus a test-only bounded
+loopback proxy. Production SQL/client and build/workflow files remain unchanged
+from the earlier corrected checkpoint. A final evidence-only Markdown commit leaves
+the tested C6 source unchanged. C3 Docker's completed941/1101/3 evidence keeps
+its original source; later Docker reruns are not assumed successful here.
+
+Bounded authority/fencing/binding/INSERT-rollback and the two post-commit loss
+scenarios have passed their attributable focused/full gates. Full implementation/
+Q4 remains HOLD for the independent gap table: UPDATE/post-consumption rollback,
+combined clock/precedence and authority matrices, cleanup/grace/pinning races,
+complete catalog/effective-privilege checks and application/server-log sentinel
+privacy. One controlled real loopback loss does not establish every network/crash
+recovery path. Q3 deployment separation, the real trusted observer and public
+PRESENT/list projection remain separate. No merge, deployment or user DB action.

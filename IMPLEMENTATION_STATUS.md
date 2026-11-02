@@ -1,14 +1,20 @@
 # Guarded provider evidence publication candidate — 2 November 2026
 
 Draft PR48 adds six scoped real-LOGIN capture/publication functions and an explicit
-non-Spring worker JDBC client. No Flyway migration, external observer, public list
-route or user deployment. C1 failed focused/native and full Quality checks; C2
-corrects invalid PostgreSQL metadata regex bounds, publisher SELECT preflight and
-a unique-fence fixture. C3 passed39 focused cases (12 client,27 native) and full Quality
-passed1490 backend tests plus frontend gates. Remaining protocol gaps still prevent
-full independent QC acceptance. Q3 protected deployment and Q4 guarded-protocol acceptance remain open.
-See `docs/qc/PROVIDER_EVIDENCE_PUBLICATION_QC_REPORT.md` and
-`docs/qc/PROVIDER_EVIDENCE_PUBLICATION_REVIEW.md`.
+non-Spring worker JDBC client. Corrected C6 04efc15b passed46 focused cases
+(12 client,34 native) and1497 full backend tests; frontend gates and audit0 passed.
+New C4–C6 coverage includes observed fence/revocation/binding rejection, atomic
+INSERT rollback and both Java-wrapper and actual loopback commit-ack loss with
+latest replacement retaining UNKNOWN. C3 Docker completed941 regular backend
+tests,1101 disjoint browser invocations and3 repeats, with exact-session restart/
+logout. Evidence retains each source identity; no later Docker pass is inferred.
+
+Independent QC accepts the bounded corrections/cases. Full implementation/Q4 stays
+HOLD for the recorded remaining protocol/privacy/catalog/cleanup gaps. Q3 protected
+deployment and real observer/PRESENT prerequisites remain open. No Flyway migration,
+public list route, real external observer, merge, deployment or user DB action.
+Sonar remains paused. See `docs/qc/PROVIDER_EVIDENCE_PUBLICATION_QC_REPORT.md`
+and `docs/qc/PROVIDER_EVIDENCE_PUBLICATION_REVIEW.md`.
 
 # Provider evidence storage candidate — 2 November 2026
 

@@ -25,6 +25,22 @@ external observer remain prerequisites before connection-list PRESENT projection
 No provider connection UI, runtime activation or live execution is delivered by
 this SQL/client slice. See [publication QC](../qc/PROVIDER_EVIDENCE_PUBLICATION_QC_REPORT.md).
 
+Further BA-03 verification checkpoint,2 November2026: C4/C5 add authority and
+fence-wait denial, exact rollback fingerprints, binding substitutions and
+controlled post-commit uncertainty. C6 04efc15b adds a real loopback TCP commit-ack
+drop with durable revision1 then latest revision2 replacement, keeping the
+historical client result UNKNOWN. C6 focused46/0/0/0 passed (12 client,34 native);
+C6 Full Quality1497/0/0/0 and frontend gates passed. C3 Docker regression completed
+941 regular backend tests and1101 disjoint browser invocations plus3 repeats.
+These have separate source attributions in the publication QC report.
+
+Next Q4 work remains bounded UPDATE/post-consumption rollback and combined clock/
+precedence cases, cleanup grace/pinning races, complete effective-privilege/catalog
+checks and application/server-log sentinel privacy evidence. The specific real
+loopback acknowledgement-loss case is covered; broader network recovery is not
+implied. Complete independent Q4 disposition and Q3 runtime/migration/publisher
+separation before wiring the real trusted observer and public PRESENT projection.
+
 ## Current boundary
 
 Authentication/recovery/workspace, persisted Team/Agent/Mission/Task configuration, draft input/owner/dependency editing and histories, member/invitation/grant management, bounded approvals, navigation and recorded-activity Trace have delivery evidence in their individual contracts and QC reports. PR38 automated gates passed; subsequent independent review found no blocker in its bounded scope as recorded above. Draft PRs are not a merged or deployed product. Configuration ownership is not runtime assignment; saved status and activity are not execution telemetry. Existing activation review is preflight, not a working activation command.
