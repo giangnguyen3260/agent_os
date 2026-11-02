@@ -1,5 +1,16 @@
 # AgentOS
 
+Provider options policy candidate provides the first ADMIN-only public provider options
+read, empty durable policy storage, explicit operator provisioning/CAS and shared
+PostgreSQL read admission. C3 passed57 focused Java21 cases,11 CLI unittest methods,
+1442 full backend tests, audit0 and frontend gates. Docker passed926 regular backend
+tests,1101 disjoint browser invocations plus3 focused repeats, actual provider
+operator/cookie-session probes, retained native/SMTP and exact-session restart/logout.
+No automatic provider defaults, provider calls or FE changes. See
+[contract](docs/engineering/PROVIDER_OPTIONS_POLICY_CONTRACT.md),
+[operator runbook](backend/PROVIDER_POLICY_OPERATIONS.md) and
+[verification](docs/qc/PROVIDER_OPTIONS_POLICY_QC_REPORT.md).
+
 Provider completion candidate adds an explicit internal owner of prepared receipt transactions. It releases success only after confirmed commit, returns UNKNOWN after uncertain completion and uses a separate authenticated lookup for recovery; no hidden retry, lookup or compensation. Ambient transactions are refused. Java21 focused CI passed177 cases (61 H2/62 native completion plus54 retained boundary cases); full Quality passed1385 backend tests, audit0 and frontend gates. Completion Docker passed902 regular backend tests,1101 retained browser invocations plus3 focused repeats, native PostgreSQL/SMTP and exact-session restart/logout. Controlled acknowledgement fault tests are not a live TCP-drop demonstration. See [contract](docs/engineering/PROVIDER_COMPLETION_BOUNDARY_CONTRACT.md) and [QC](docs/qc/PROVIDER_COMPLETION_BOUNDARY_QC_REPORT.md).
 
 Internal provider receipt candidate composes five configuration mutations and one durable own-actor receipt in a REQUIRED transaction. Matching prepared HMAC replays pinned historical configuration events; before/after/creation FKs retain reconstruction dependencies. No raw command or credential is stored. Java21 focused CI passed133 tests, including35 H2 and44 native PostgreSQL receipt cases; full Quality passed1262 backend tests, audit0 and frontend gates. Receipt Docker passed841 regular backend tests,1101 retained disjoint browser invocations plus3 focused repeats, native PostgreSQL/SMTP and exact-session restart/logout. This is not the public receipt/HTTP/health/UNKNOWN completion boundary. See [contract](docs/engineering/PROVIDER_COMMAND_RECEIPTS_CONTRACT.md) and [QC](docs/qc/PROVIDER_COMMAND_RECEIPTS_QC_REPORT.md).

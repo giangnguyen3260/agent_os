@@ -1,0 +1,205 @@
+# Provider options and deployment policy verification
+
+Candidate date: 2 November 2026. Baseline: PR45 Markdown closure
+`eac1bc08775ced4f3f0f35a64eac896ae241afb4`. Branch:
+`feature/provider-options-policy`. This report distinguishes authored code and
+local checks from actual completed Java21/native/Docker acceptance.
+
+The candidate exposes only provider options to current organization ADMINs.
+V024 creates empty deployment policy and shared security admission tables.
+Explicit operator provisioning and revision-checked replacement use PostgreSQL;
+there are no automatically enabled providers, public policy writers, provider
+calls, secret-manager adapters or new FE screens. Existing credential storage
+remains scoped one-way HMAC plus opaque external references.
+
+Independent requirements review is in
+`docs/engineering/PROVIDER_OPTIONS_POLICY_REQUIREMENTS_REVIEW.md`;
+adversarial implementation review is tracked separately in
+`docs/qc/PROVIDER_OPTIONS_POLICY_REVIEW.md`. The source contract and operator
+runbook define admission/write/read boundaries and uncertainty handling.
+
+## Local checkpoint
+
+- Python AST parsing passed for the operator CLI and Docker probe.
+- CLI SQL-only emission passed for show, explicit provisioning and replacement
+  through the maximum BIGINT revision. It performed no database operation.
+- Missing/duplicate providers, prohibited show flags, leading-zero and oversized
+  revisions were rejected before any subprocess execution.
+- Google Java import check passed at this checkpoint.
+- Host Java is17 and Docker is unavailable. Full existing Java21 sources cannot
+  compile on17; no production source was backported for a test claim.
+
+These checks do not establish PostgreSQL transaction behavior, HTTP security
+compatibility or completed CI. Authored core/HTTP H2/native tests and the actual
+Docker operator/session probe must pass on the exact published source before
+acceptance. No test count, native lock/clock result or Docker pass is inferred
+from test source. The existing full Quality and retained Docker/browser gates
+remain required. Any remaining coverage limitations must stay explicit.
+
+No user deployment, Mac command, merge or production provisioning occurred.
+SonarQube remains paused. No new UI or screenshot acceptance is claimed.
+
+## Initial published source and corrective work
+
+C1 `bc7320c81dc6e1f3bff39558256a3c7ab78b8e82`, tree
+`902f3f511f71654f91e24bf31e9f721fa3b5e2d1`, draft PR46 stacked on PR45.
+Focused run41337581413/job124940552811 executed Java21: 7 core H2 passed,
+7 actual-session HTTP tests ran with one failure (14 total,1 failure,0 errors/skips).
+The strict-wire test expected400 but observed200 at its query-suffix loop;
+the Java client can normalize an empty query before sending it. Corrective
+work uses a raw request-target test rather than inferring servlet input from a
+Java URI. Native step did not run after that failure; no native pass is claimed.
+
+Independent QC also reproduced bounded-parser stack exhaustion and permissive
+Accept lexical parsing in the initial source. BE is replacing the recursive
+quota regex and tightening wire validation, with service/HTTP regressions.
+Operator output is now allowlisted and strictly typed; duplicate/malformed JSON,
+extra stdout and timeout/nonzero process results cannot publish success. The
+lock query uses a materialized locking CTE and outer EXISTS (exactly one boolean
+row) before psql's conditional second statement. Missing policy cannot be
+adopted from a later snapshot. Native interleaving verification remains pending.
+
+QC-authored Docker-free operator tests passed11/0 locally. A later isolated
+Java17 core-only build passed12/0 on in-progress corrective source; this is
+structural H2 evidence, not the C1 source, full Java21 application or native
+acceptance. Updated source must be published and tested before closure.
+
+## C2 Java21 focused execution
+
+Corrected source `da94917297e91a35115097bf5f2d9aaf4786952e`, tree
+`ef9f321a6507eae9d70cfc2b9f10a39a70372bb0`. Dedicated run41338037393,
+job124941933369 completed successfully. Actual logs record:
+
+| Suite | Executed | Failures/errors/skips |
+| --- | ---: | --- |
+| Core H2 | 14 | 0/0/0 |
+| Actual-session HTTP H2 | 9 | 0/0/0 |
+| Core native PostgreSQL | 21 | 0/0/0 |
+| Actual-session HTTP native PostgreSQL | 9 | 0/0/0 |
+| Total Java21 focused | 53 | 0/0/0 |
+| Docker-free CLI unittest methods | 11 | 0 |
+
+The native log includes observed lock waits, post-wait authorization/clock,
+RR snapshot and storage constraint assertions; this is not an inferred pass
+from H2. Full Quality and actual Docker operator/probe/browser gates remain
+pending for C2. C1 full Quality separately ran1418 with2 failures/1 error
+(both bare-query assertions and an untyped test timestamp cast); C1 Docker
+ran916 with1 failure and stopped during build. Those failed runs are not
+promoted to accepted regression results. C2 native tests use typed JDBC timestamp
+queries instead of assuming queryForList timestamp representation.
+
+A repeated local H2 contention run later produced safe unavailable because H2's
+transaction-start clock can precede a row written while a caller waits. Production
+future-state rejection remains unchanged. C3 moves the shared final-slot contention
+assertion to mandatory PostgreSQL and retains H2 as structural coverage. New C3
+storage-value/cascade and HTTP outage/nonhuman-session tests still require actual
+Java21 execution. In-progress local isolated H2 core passed13/0 after that move.
+
+## C2 full regression closure; C3 test hardening candidate
+
+Main inspected completed Quality run41338037343/job124941932901 and Docker
+run41338037350/job124941933406, both SUCCESS, on C2. Quality executed1438 backend
+tests with0 failures/errors/skips; frontend checks/build and audit0 passed.
+Docker executed925 regular backend tests with0 failures/errors/skips; all1101
+retained disjoint browser invocations and3 focused repeats passed. Native provider
+operator/cookie-session options probe and emitted-SQL CLI3 absent-lock protocol
+passed at18:47:05 UTC on1 November2026. The latter executes the CLI-emitted psql
+script with an observed test barrier, not a racing invocation of CLI replace.
+Exact existing-session restart and logout rejection passed at19:21:18 UTC.
+Retained native/SMTP gates also completed. No new UI screenshots are claimed.
+
+C2's configured gates are closed. C3 adds tests and documentation only: native-only
+last-slot contention, invalid storage values/cascades, safe storage outages,
+nonhuman sessions and quoted/duplicate Accept parameters. Production Java and V024
+are byte-identical to C2. C3 requires its own focused/full regression result; C2's
+counts are not silently assigned to the new candidate. No raw secrets, public
+writer, provider call, live network acknowledgement fault or universal log-privacy
+proof is introduced. Native locks and controlled commit faults have bounded
+assertion coverage; they do not cover every possible database/network failure.
+
+## C3 focused and full Quality checkpoint
+
+Test-hardening source `0d6970a4e34aa6dce6b102e22b4e23a8f9f44825`, tree
+`39796c92565ad7b861891cbc4977965c63820b3f`. Focused run41371335255,
+job125042246505 completed SUCCESS: H2 core13 + HTTP11 =24; mandatory native
+PostgreSQL core22 + HTTP11 =33; **57 Java21 tests,0 failures/errors/skips**.
+The separate CLI unittest invocation again passed11 methods. New storage-value,
+cascade, HTTP storage-outage and serialized nonhuman-session assertions executed;
+last-slot contention now executes only against mandatory native PostgreSQL.
+
+Quality run41371335279/job125042246858 completed SUCCESS: **1442 backend tests,
+0 failures/errors/skips**, BUILD SUCCESS; audit0 and frontend checks/build passed.
+These are overlapping regression suites, not1442+57 unique cases. Production
+Java/migration/scripts/workflows remain identical to C2; only tests/docs changed.
+Independent QC is corroborating these completed logs in its owned review.
+
+Docker run41371335229 is still in progress at this checkpoint. Formatting passed;
+compose build/start and later full provider/native/browser/restart results are
+not yet assigned to C3. The complete C2 Docker result above remains evidence for
+its exact tested source. Keep final C3 Docker closure pending, rather than
+reporting every current-head gate green. No merge/deploy/user provisioning or
+SonarQube result is claimed.
+
+Docker progress at final checkpoint: job125042246928 step inventory reports
+build/start, schema verification, isolated provider fixture and PostgreSQL
+provider operator/options probe completed SUCCESS. It has advanced to retained
+Task history regression. This is in-progress step evidence, not decoded final
+job logs or full Docker acceptance. Final browser/SMTP/restart closure remains
+pending for C3. QC checkpoints11/12 independently corroborate C3 focused/Quality.
+QC records a nonblocking nonhuman-cookie assertion limitation: the401 test alone
+cannot distinguish restored nonhuman authentication from an ignored cookie;
+production's explicit HumanIdentity gate is source-reviewed. Do not overstate
+that particular branch's session restoration evidence.
+
+## C3 completed Docker closure — 2 November 2026
+
+This checkpoint supersedes earlier C3 Docker-pending statements. Main inspected
+completed Docker run41371335229/job125042246928: SUCCESS, with format-review
+job125042246689 also SUCCESS. Tested source remains0d6970a4e34aa6dce6b102e22b4e23a8f9f44825,
+tree39796c92565ad7b861891cbc4977965c63820b3f, synthetic merge786cf384116fb2522a3c059d9c47a07d8ffc5237.
+
+Actual decoded logs record926 regular Java tests,0 failures/errors/skips. Disjoint
+browser summaries33+75+42+81+90+780 total1101 invocations; the separate invitation
+repeat group passed3. The retained780 group completed at02:09:44 UTC (25.9 minutes).
+No failed browser case was retried: workflow remains one worker, zero retries,
+max-failures1 and all retained selections unchanged.
+
+The actual provider CLI/cookie-session probe and emitted-SQL native absent-lock
+protocol passed at01:18:09 UTC. Retained PostgreSQL/SMTP probes passed. The
+account-first concurrent login/reset and stale-session probe passed at02:10:09 UTC;
+the exact existing session survived backend restart and logout rejected replay
+at02:10:21 UTC. This is completed evidence, not inference from an in-progress step.
+
+Together with independently corroborated focused57 Java21 cases plus11 CLI methods,
+Quality1442/0/0/0, audit0 and frontend gates, C3's configured acceptance gates are
+complete. These overlapping suite totals are not added as unique cases. Existing
+limits remain: controlled emitted-script protocol rather than an unmodified CLI
+replace subprocess race; injected post-commit fault rather than live TCP-drop;
+nonhuman-cookie401 restoration assertion limit; no universal logging privacy.
+No provider-network/key adapter, public writer, FE design change, new screenshot
+acceptance, Sonar gate, merge, deployment or user provisioning is claimed.
+
+## Final checkpoint HEAD verification — 2 November 2026
+
+The Markdown checkpoint5018b0b9be63e62c187214027bce242df1bf1a81 also completed all
+configured gates: focused run41371869052, Quality41371869059/job125043853563 and
+Docker41371869066/job125043853690 (format-review125043853914), all SUCCESS.
+Focused again recorded57 Java21 cases and11 CLI unittest methods; Quality again
+recorded1442 tests with0 failures/errors/skips, audit0 and frontend checks/build.
+These repeat runs are corroboration, not additional unique-case totals.
+
+Main independently inspected completed Docker logs:926 regular tests with0
+failures/errors/skips; disjoint browser groups33+75+42+81+90+780 =1101, plus3
+separate focused repeats. Actual provider CLI/emitted-script protocol/cookie
+probe passed at01:23:54 UTC. Retained native/SMTP passed; concurrent login/reset
+barrier passed at02:15:59 UTC. Exact existing session survived backend restart,
+and logout rejected replay at02:16:10 UTC. All previously pending C3 and
+checkpoint Docker gates are now closed for their actual tested checkouts.
+
+Independent QC corroborates completed logs in the owned review. Final evidence
+publication changes Markdown only; production Java, tests, V024, scripts and
+workflows remain exactly as verified above. No new runtime pass is inferred for
+that later documentation-only commit. Existing controlled-fault/protocol,
+nonhuman-cookie assertion and logging-privacy limits remain explicitly retained.
+PR46 stays draft/unmerged/undeployed; this closes the options/policy/read-admission
+slice, not the future provider connection/credential/check/runtime features.
