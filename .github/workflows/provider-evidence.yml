@@ -1,0 +1,48 @@
+name: Provider evidence SQL foundation
+on:
+  pull_request:
+    paths:
+      - 'backend/**'
+      - '.github/workflows/provider-evidence.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  provider-evidence:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: provider_evidence_test
+          POSTGRES_USER: agentos
+          POSTGRES_PASSWORD: provider_evidence_ci_only
+        ports:
+          - 15432:5432
+        options: >-
+          --health-cmd "pg_isready -U agentos -d provider_evidence_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: H2 migration portability and schema constraints
+        run: mvn --batch-mode --no-transfer-progress -f backend/pom.xml -Dtest=ProviderEvidenceStructureTest test
+      - name: Mandatory native PostgreSQL migration and actual operator-role checks
+        if: ${{ !cancelled() }}
+        env:
+          TASK_EDIT_TEST_JDBC_URL: jdbc:postgresql://127.0.0.1:15432/provider_evidence_test
+          TASK_EDIT_TEST_DB_USER: agentos
+          TASK_EDIT_TEST_DB_PASSWORD: provider_evidence_ci_only
+          PROVIDER_EVIDENCE_ALLOW_ROLE_TESTS: 'true'
+        run: mvn --batch-mode --no-transfer-progress -f backend/pom.xml -Dtest=ProviderEvidencePostgresIT verify
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: provider-evidence-sql-results
+          path: backend/target/surefire-reports
