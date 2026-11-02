@@ -21,8 +21,8 @@ BEGIN
  'provider_credential_versions','provider_evidence_publishers','provider_credential_integrity',
  'provider_credential_health') AND
  (c.relowner=(SELECT r.oid FROM pg_catalog.pg_roles r WHERE r.rolname='agentos_provider_evidence_publisher')
- OR pg_catalog.has_table_privilege('agentos_provider_evidence_publisher',c.oid,'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
- OR pg_catalog.has_any_column_privilege('agentos_provider_evidence_publisher',c.oid,'INSERT,UPDATE,REFERENCES'))) THEN
+ OR pg_catalog.has_table_privilege('agentos_provider_evidence_publisher',c.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+ OR pg_catalog.has_any_column_privilege('agentos_provider_evidence_publisher',c.oid,'SELECT,INSERT,UPDATE,REFERENCES'))) THEN
   RAISE EXCEPTION 'Publisher retains unreviewed effective privileges';
  END IF;
  IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname='agentos_provider_evidence_reader'
@@ -156,9 +156,12 @@ RETURNS pg_catalog.bool LANGUAGE plpgsql IMMUTABLE
 SET search_path=pg_catalog,agentos_evidence_private,pg_temp AS $binding$
 DECLARE decoded pg_catalog.bytea;
 BEGIN
- IF NOT COALESCE(p_locator ~ '^[A-Za-z0-9_./:@-]{1,256}$'
- AND p_external ~ '^[A-Za-z0-9_./:@-]{1,256}$'
- AND p_hmac ~ '^[A-Za-z0-9_./:@-]{1,256}$' AND p_domain='v2'
+ IF NOT COALESCE(pg_catalog.char_length(p_locator) BETWEEN 1 AND 256
+ AND p_locator ~ '^[A-Za-z0-9_./:@-]+$'
+ AND pg_catalog.char_length(p_external) BETWEEN 1 AND 256
+ AND p_external ~ '^[A-Za-z0-9_./:@-]+$'
+ AND pg_catalog.char_length(p_hmac) BETWEEN 1 AND 256
+ AND p_hmac ~ '^[A-Za-z0-9_./:@-]+$' AND p_domain='v2'
  AND p_verifier ~ '^[A-Za-z0-9+/]{43}=$',false) THEN RETURN false; END IF;
  decoded:=pg_catalog.decode(p_verifier,'base64');
  RETURN pg_catalog.octet_length(decoded)=32 AND pg_catalog.encode(decoded,'base64')=p_verifier;

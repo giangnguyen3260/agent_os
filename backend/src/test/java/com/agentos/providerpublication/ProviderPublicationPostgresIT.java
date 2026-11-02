@@ -51,6 +51,7 @@ class ProviderPublicationPostgresIT {
   private boolean databaseCreated;
   private boolean unsafePublisherRefused;
   private boolean unsafeReaderRefused;
+  private boolean publisherReadRefused;
 
   private static String required(String name) {
     String value = System.getenv("PROVIDER_PUBLICATION_" + name);
@@ -100,17 +101,20 @@ class ProviderPublicationPostgresIT {
     try (var statement = operator.createStatement()) {
       statement.execute(script);
     } catch (SQLException failure) {
-      String state = failure.getSQLState();
-      if (state == null || !state.matches("[0-9A-Z]{5}")) state = "XXXXX";
-      int position = 0;
-      if (failure instanceof org.postgresql.util.PSQLException postgres
-          && postgres.getServerErrorMessage() != null) {
-        position = Math.max(0, postgres.getServerErrorMessage().getPosition());
-      }
       // Static installer diagnostics only: never attach the driver exception or its message.
-      throw new IllegalStateException(
-          "Publication installer failed [SQLSTATE=" + state + ",position=" + position + "]");
+      throw safeSqlFailure("Publication installer failed", failure);
     }
+  }
+
+  private static IllegalStateException safeSqlFailure(String label, SQLException failure) {
+    String state = failure.getSQLState();
+    if (state == null || !state.matches("[0-9A-Z]{5}")) state = "XXXXX";
+    int position = 0;
+    if (failure instanceof org.postgresql.util.PSQLException postgres
+        && postgres.getServerErrorMessage() != null) {
+      position = Math.max(0, postgres.getServerErrorMessage().getPosition());
+    }
+    return new IllegalStateException(label + " [SQLSTATE=" + state + ",position=" + position + "]");
   }
 
   @BeforeAll
@@ -176,8 +180,9 @@ class ProviderPublicationPostgresIT {
       }
       statement.execute("grant " + READER + " to " + login("reader"));
       createdRoles.add(DEFINER);
-      proveUnsafeCapabilityRefusedWithoutRepair(connection, PUBLISHER);
-      proveUnsafeCapabilityRefusedWithoutRepair(connection, READER);
+      proveUnsafeCapabilityRefusedWithoutRepair(connection, PUBLISHER, "UPDATE", "state");
+      proveUnsafeCapabilityRefusedWithoutRepair(connection, PUBLISHER, "SELECT", "state");
+      proveUnsafeCapabilityRefusedWithoutRepair(connection, READER, "UPDATE", "state");
       installActualPublicationScript(connection);
     } catch (SQLException failure) {
       throw new IllegalStateException("Publication base capability installation failed");
@@ -185,11 +190,16 @@ class ProviderPublicationPostgresIT {
     // Every operator connection is closed before JUnit performs worker actions.
   }
 
-  private void proveUnsafeCapabilityRefusedWithoutRepair(Connection operator, String capability)
-      throws Exception {
+  private void proveUnsafeCapabilityRefusedWithoutRepair(
+      Connection operator, String capability, String privilege, String column) throws Exception {
     try (var statement = operator.createStatement()) {
       statement.execute(
-          "grant update(state) on public.provider_credential_integrity to " + capability);
+          "grant "
+              + privilege
+              + "("
+              + column
+              + ") on public.provider_credential_integrity to "
+              + capability);
       try {
         statement.execute(Files.readString(operation("provider-evidence-publication.sql")));
         throw new AssertionError("Installer must refuse a contaminated evidence capability");
@@ -203,7 +213,11 @@ class ProviderPublicationPostgresIT {
               "select"
                   + " has_column_privilege('"
                   + capability
-                  + "','public.provider_credential_integrity','state','UPDATE'),"
+                  + "','public.provider_credential_integrity','"
+                  + column
+                  + "','"
+                  + privilege
+                  + "'),"
                   + " (select count(*) from pg_catalog.pg_roles where rolname='"
                   + DEFINER
                   + "'), (select count(*) from pg_catalog.pg_namespace where"
@@ -214,8 +228,14 @@ class ProviderPublicationPostgresIT {
         assertThat(rows.getLong(3)).isZero();
       }
       statement.execute(
-          "revoke update(state) on public.provider_credential_integrity from " + capability);
-      if (capability.equals(PUBLISHER)) unsafePublisherRefused = true;
+          "revoke "
+              + privilege
+              + "("
+              + column
+              + ") on public.provider_credential_integrity from "
+              + capability);
+      if (capability.equals(PUBLISHER) && privilege.equals("SELECT")) publisherReadRefused = true;
+      else if (capability.equals(PUBLISHER)) unsafePublisherRefused = true;
       else unsafeReaderRefused = true;
     }
   }
@@ -228,6 +248,11 @@ class ProviderPublicationPostgresIT {
   @Test
   void contaminatedReaderCapabilityWasRefusedWithoutRepair() {
     assertThat(unsafeReaderRefused).isTrue();
+  }
+
+  @Test
+  void publisherColumnReadGrantWasRefusedWithoutRepair() {
+    assertThat(publisherReadRefused).isTrue();
   }
 
   @BeforeEach
@@ -247,6 +272,79 @@ class ProviderPublicationPostgresIT {
   private ProviderPublicationClient client(String name) {
     return new ProviderPublicationClient(
         new DriverManagerDataSource(databaseUrl, login(name), password(name)));
+  }
+
+  private ProviderPublicationClient.Result<ProviderPublicationClient.Capture> checkedCapture(
+      String name, ProviderPublicationClient.Scope scope, String kind) throws Exception {
+    var publisher = client(name);
+    var result =
+        switch (kind) {
+          case "HEALTH" -> publisher.beginHealth(scope);
+          case "PREPARE" -> publisher.beginPreparationAssertion(scope);
+          case "INTEGRITY_FAILURE" -> publisher.beginIntegrityVerification(scope);
+          default -> throw new IllegalArgumentException("Unknown fixture capture kind");
+        };
+    if (result.status() != ProviderPublicationClient.Status.ACCEPTED) {
+      // This diagnostic is test-only, uses a real LOGIN, and always rolls its extra probe back.
+      String raw = rawCaptureDiagnostic(name, scope, kind);
+      throw new AssertionError(
+          "Expected accepted capture [clientStatus="
+              + result.status()
+              + ",clientReason="
+              + result.reason()
+              + ",raw="
+              + raw
+              + "]");
+    }
+    assertThat(result.value()).isNotNull();
+    return result;
+  }
+
+  private String rawCaptureDiagnostic(
+      String name, ProviderPublicationClient.Scope scope, String kind) throws Exception {
+    String sql =
+        switch (kind) {
+          case "HEALTH" ->
+              "select * from"
+                  + " agentos_evidence_private.begin_health(?::uuid,?::uuid,?::text,?::bigint)";
+          case "PREPARE" ->
+              "select * from"
+                  + " agentos_evidence_private.begin_preparation_assertion(?::uuid,?::uuid,?::text,?::bigint)";
+          case "INTEGRITY_FAILURE" ->
+              "select * from"
+                  + " agentos_evidence_private.begin_integrity_verification(?::uuid,?::uuid,?::text,?::bigint)";
+          default -> throw new IllegalArgumentException("Unknown fixture capture kind");
+        };
+    try (var worker = actor(name)) {
+      worker.setAutoCommit(false);
+      worker.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
+      try (var statement = worker.prepareStatement(sql)) {
+        statement.setObject(1, scope.organizationId());
+        statement.setObject(2, scope.connectionId());
+        statement.setString(3, scope.provider());
+        statement.setLong(4, scope.revision());
+        try (var rows = statement.executeQuery()) {
+          if (!rows.next()) return "NO_ENVELOPE";
+          try {
+            var status = ProviderPublicationClient.Status.valueOf(rows.getString("status"));
+            var reason = ProviderPublicationClient.Reason.valueOf(rows.getString("reason"));
+            return status.name() + "/" + reason.name();
+          } catch (IllegalArgumentException | NullPointerException malformed) {
+            return "INVALID_ENVELOPE";
+          }
+        }
+      } catch (SQLException failure) {
+        return safeSqlFailure("Capture SQL failure", failure).getMessage();
+      } finally {
+        try {
+          worker.rollback();
+        } catch (SQLException failure) {
+          throw safeSqlFailure("Capture diagnostic rollback failed", failure);
+        }
+      }
+    } catch (SQLException failure) {
+      throw safeSqlFailure("Capture diagnostic close failed", failure);
+    }
   }
 
   private ProviderPublicationClient.Scope seed() throws Exception {
@@ -299,7 +397,7 @@ class ProviderPublicationPostgresIT {
       for (int index = 0; index < args.length; index++) statement.setObject(index + 1, args[index]);
       statement.executeUpdate();
     } catch (SQLException failure) {
-      throw new IllegalStateException("Publication fixture update failed");
+      throw safeSqlFailure("Publication fixture update failed", failure);
     }
   }
 
@@ -384,6 +482,100 @@ class ProviderPublicationPostgresIT {
   }
 
   @Test
+  void realLoginCapturesEachBindingFieldAtOne255And256Characters() throws Exception {
+    for (String column : List.of("external_locator", "external_key_version", "hmac_key_version")) {
+      for (int length : List.of(1, 255, 256)) {
+        var scope = seed();
+        // Exercise the complete allowed alphabet, including the literal trailing hyphen.
+        String alphabet = "Az09_./:@-";
+        String value = alphabet.repeat(29).substring(0, length);
+        replaceBindingMetadata(scope, column, value);
+        var expected =
+            new ProviderPublicationClient.Binding(
+                scope,
+                column.equals("external_locator") ? value : "ref",
+                column.equals("external_key_version") ? value : "external-v1",
+                column.equals("hmac_key_version") ? value : "hmac-v1",
+                "v2");
+        for (String kind : List.of("HEALTH", "PREPARE", "INTEGRITY_FAILURE")) {
+          var captured = checkedCapture(kind.equals("PREPARE") ? "prepare" : "health", scope, kind);
+          assertThat(captured.status())
+              .as("%s length %s / %s", column, length, kind)
+              .isEqualTo(ProviderPublicationClient.Status.ACCEPTED);
+          assertThat(captured.value().binding()).isEqualTo(expected);
+        }
+      }
+    }
+  }
+
+  @Test
+  void realLoginRejectsEachEmptyOrInvalidBindingFieldWithoutAnyWrites() throws Exception {
+    for (String column : List.of("external_locator", "external_key_version", "hmac_key_version")) {
+      for (String value : List.of("", "invalid!")) {
+        var scope = seed();
+        replaceBindingMetadata(scope, column, value);
+        for (String kind : List.of("HEALTH", "PREPARE", "INTEGRITY_FAILURE")) {
+          String before = fingerprint();
+          var publisher = client(kind.equals("PREPARE") ? "prepare" : "health");
+          var rejected =
+              switch (kind) {
+                case "HEALTH" -> publisher.beginHealth(scope);
+                case "PREPARE" -> publisher.beginPreparationAssertion(scope);
+                case "INTEGRITY_FAILURE" -> publisher.beginIntegrityVerification(scope);
+                default -> throw new IllegalArgumentException("Unknown fixture capture kind");
+              };
+          assertThat(rejected.status())
+              .as("%s length %s / %s", column, value.length(), kind)
+              .isEqualTo(ProviderPublicationClient.Status.REJECTED);
+          assertThat(rejected.reason()).isEqualTo(ProviderPublicationClient.Reason.BINDING);
+          assertThat(rejected.value()).isNull();
+          assertThat(fingerprint()).isEqualTo(before);
+        }
+      }
+    }
+  }
+
+  @Test
+  void storageRejectsEach257CharacterBindingFieldWithoutAnyWrites() throws Exception {
+    var scope = seed();
+    // V022 varchar(256) rejects this fixture before capture can run. Preserve that real
+    // guard: do not widen columns or grant publishers access to the private validation helper.
+    for (String column : List.of("external_locator", "external_key_version", "hmac_key_version")) {
+      String before = fingerprint();
+      try {
+        replaceBindingMetadata(scope, column, "A".repeat(257));
+        throw new AssertionError("Storage must reject a 257-character binding field");
+      } catch (SQLException expected) {
+        assertThat(expected.getSQLState()).as("%s storage bound", column).isEqualTo("22001");
+      }
+      assertThat(fingerprint()).isEqualTo(before);
+    }
+  }
+
+  /** Operator-only fixture mutation before capture; publishers still use the unchanged protocol. */
+  private void replaceBindingMetadata(
+      ProviderPublicationClient.Scope scope, String column, String value) throws Exception {
+    if (!List.of("external_locator", "external_key_version", "hmac_key_version").contains(column)) {
+      throw new IllegalArgumentException("Unknown fixture binding column");
+    }
+    try (var operator = admin(databaseUrl);
+        var statement =
+            operator.prepareStatement(
+                "update public.provider_credential_versions set "
+                    + column
+                    + "=?"
+                    + " where organization_id=? and connection_id=? and provider=?"
+                    + " and credential_revision=?")) {
+      statement.setString(1, value);
+      statement.setObject(2, scope.organizationId());
+      statement.setObject(3, scope.connectionId());
+      statement.setString(4, scope.provider());
+      statement.setLong(5, scope.revision());
+      assertThat(statement.executeUpdate()).isEqualTo(1);
+    }
+  }
+
+  @Test
   void realRegisteredClientsPublishHealthAndLinkedPreparationWithNoAutomaticSuccess()
       throws Exception {
     var scope = seed();
@@ -393,11 +585,11 @@ class ProviderPublicationPostgresIT {
     assertThat(denied.value()).isNull();
     assertThat(client("health").beginPreparationAssertion(scope).reason())
         .isEqualTo(ProviderPublicationClient.Reason.AUTHORITY);
-    var prepared = client("prepare").beginPreparationAssertion(scope);
+    var prepared = checkedCapture("prepare", scope, "PREPARE");
     assertThat(prepared.status()).isEqualTo(ProviderPublicationClient.Status.ACCEPTED);
     assertThat(client("prepare").assertPrepared(prepared.value().attemptId()).status())
         .isEqualTo(ProviderPublicationClient.Status.ACCEPTED);
-    var captured = client("health").beginHealth(scope);
+    var captured = checkedCapture("health", scope, "HEALTH");
     assertThat(captured.status()).isEqualTo(ProviderPublicationClient.Status.ACCEPTED);
     var published =
         client("health")
@@ -432,8 +624,8 @@ class ProviderPublicationPostgresIT {
   @Test
   void casLossInvalidPresenceAndTimeBeforeFailedPreserveEvidence() throws Exception {
     var scope = seed();
-    var first = client("health").beginHealth(scope).value();
-    var second = client("health").beginHealth(scope).value();
+    var first = checkedCapture("health", scope, "HEALTH").value();
+    var second = checkedCapture("health", scope, "HEALTH").value();
     assertThat(
             client("health")
                 .publishHealth(
@@ -451,7 +643,7 @@ class ProviderPublicationPostgresIT {
                 .reason())
         .isEqualTo(ProviderPublicationClient.Reason.CONFLICT);
     assertThat(fingerprint()).isEqualTo(beforeConflict);
-    var fresh = client("health").beginHealth(scope).value();
+    var fresh = checkedCapture("health", scope, "HEALTH").value();
     String beforePair = fingerprint();
     assertThat(
             client("health")
@@ -460,7 +652,7 @@ class ProviderPublicationPostgresIT {
                 .reason())
         .isEqualTo(ProviderPublicationClient.Reason.ATTEMPT);
     assertThat(fingerprint()).isEqualTo(beforePair);
-    var failure = client("health").beginIntegrityVerification(scope).value();
+    var failure = checkedCapture("health", scope, "INTEGRITY_FAILURE").value();
     assertThat(client("health").publishIntegrityFailure(failure.attemptId()).status())
         .isEqualTo(ProviderPublicationClient.Status.ACCEPTED);
     update(
@@ -483,8 +675,8 @@ class ProviderPublicationPostgresIT {
   @Test
   void delayedHistoricalFailureCannotMutateReplacementVersionOrItsHealth() throws Exception {
     var scope = seed();
-    var staleHealth = client("health").beginHealth(scope).value();
-    var delayedFailure = client("health").beginIntegrityVerification(scope).value();
+    var staleHealth = checkedCapture("health", scope, "HEALTH").value();
+    var delayedFailure = checkedCapture("health", scope, "INTEGRITY_FAILURE").value();
     try (var operator = admin(databaseUrl);
         var statement = operator.createStatement()) {
       operator.setAutoCommit(false);
@@ -512,7 +704,7 @@ class ProviderPublicationPostgresIT {
     var replacement =
         new ProviderPublicationClient.Scope(
             scope.organizationId(), scope.connectionId(), "OPENAI", 2);
-    var current = client("health").beginHealth(replacement).value();
+    var current = checkedCapture("health", replacement, "HEALTH").value();
     assertThat(
             client("health")
                 .publishHealth(
@@ -555,13 +747,13 @@ class ProviderPublicationPostgresIT {
   @Test
   void confirmedFailureDominatesNewPreparationAndIsHistoricalAfterRotation() throws Exception {
     var scope = seed();
-    var failure = client("health").beginIntegrityVerification(scope).value();
-    var prepared = client("prepare").beginPreparationAssertion(scope).value();
+    var failure = checkedCapture("health", scope, "INTEGRITY_FAILURE").value();
+    var prepared = checkedCapture("prepare", scope, "PREPARE").value();
     assertThat(client("prepare").assertPrepared(prepared.attemptId()).status())
         .isEqualTo(ProviderPublicationClient.Status.ACCEPTED);
     assertThat(client("health").publishIntegrityFailure(failure.attemptId()).status())
         .isEqualTo(ProviderPublicationClient.Status.ACCEPTED);
-    var again = client("health").beginIntegrityVerification(scope).value();
+    var again = checkedCapture("health", scope, "INTEGRITY_FAILURE").value();
     update(
         "update public.provider_credential_integrity set publication_revision=9223372036854775807");
     assertThat(client("health").publishIntegrityFailure(again.attemptId()).status())
@@ -572,7 +764,7 @@ class ProviderPublicationPostgresIT {
             + "external_locator,external_key_version,hmac_key_version,hmac_domain_version,verifier,created_at"
             + " from public.provider_credential_versions");
     update("update public.provider_connections set configuration_revision=2,credential_revision=2");
-    var historical = client("health").beginIntegrityVerification(scope);
+    var historical = checkedCapture("health", scope, "INTEGRITY_FAILURE");
     assertThat(historical.status()).isEqualTo(ProviderPublicationClient.Status.ACCEPTED);
     assertThat(client("health").beginHealth(scope).reason())
         .isEqualTo(ProviderPublicationClient.Reason.BINDING);
@@ -586,10 +778,13 @@ class ProviderPublicationPostgresIT {
   @Test
   void canonicalVerifierAndChangedFenceAreEnforcedByActualFunctions() throws Exception {
     var scope = seed();
-    var attempt = client("health").beginHealth(scope).value();
+    var attempt = checkedCapture("health", scope, "HEALTH").value();
     update(
-        "update public.provider_evidence_publishers set publisher_epoch=2,publisher_fence=?",
-        UUID.randomUUID());
+        "update public.provider_evidence_publishers set publisher_epoch=2,publisher_fence=?"
+            + " where publisher_id in (select publisher_id from"
+            + " agentos_evidence_private.publisher_principals where login_name=?)",
+        UUID.randomUUID(),
+        login("health"));
     assertThat(
             client("health")
                 .publishHealth(
@@ -609,7 +804,7 @@ class ProviderPublicationPostgresIT {
   void orgCapacitySerializesLastSlotAndOperatorCleanupPreservesPinnedHistory() throws Exception {
     var scope = seed();
     register("unregistered", scope.organizationId(), "HEALTH");
-    assertThat(client("health").beginHealth(scope).status())
+    assertThat(checkedCapture("health", scope, "HEALTH").status())
         .isEqualTo(ProviderPublicationClient.Status.ACCEPTED);
     update(
         "insert into agentos_evidence_private.publication_attempts select"
@@ -648,7 +843,7 @@ class ProviderPublicationPostgresIT {
                     + scope.organizationId()
                     + "',4096)"))
         .isEqualTo(4096);
-    var preparation = client("prepare").beginPreparationAssertion(scope).value();
+    var preparation = checkedCapture("prepare", scope, "PREPARE").value();
     assertThat(client("prepare").assertPrepared(preparation.attemptId()).status())
         .isEqualTo(ProviderPublicationClient.Status.ACCEPTED);
     update(
@@ -729,7 +924,7 @@ class ProviderPublicationPostgresIT {
   @Test
   void expiryDuringObservedOrganizationWaitUsesPostLockDatabaseClock() throws Exception {
     var scope = seed();
-    var capture = client("health").beginHealth(scope).value();
+    var capture = checkedCapture("health", scope, "HEALTH").value();
     // Controlled timestamp fixture leaves a short real deadline; no JVM clock supplies SQL truth.
     update(
         "update agentos_evidence_private.publication_attempts set"
@@ -932,7 +1127,7 @@ class ProviderPublicationPostgresIT {
   void recreatedLoginHasNewOidEvenWhenItsNameAndCapabilityAreReused() throws Exception {
     var scope = seed();
     register("recreated", scope.organizationId(), "HEALTH");
-    var captured = client("recreated").beginHealth(scope);
+    var captured = checkedCapture("recreated", scope, "HEALTH");
     assertThat(captured.status()).isEqualTo(ProviderPublicationClient.Status.ACCEPTED);
     long original = roleOid("recreated");
     try (var connection = admin(adminUrl);
