@@ -3,8 +3,8 @@
 Provider options policy candidate adds the first ADMIN-only public provider options read,
 empty durable policy storage, explicit operator provisioning/CAS and shared database
 read admission. C2 passed53 focused Java21 cases,11 CLI tests,1438 full backend tests, audit0
-and Docker/provider/session/browser regression. Additional C3 tests are pending
-their own CI; the verified counts refer to C2. No provider calls or FE
+and Docker/provider/session/browser regression. C3 test hardening passed57 focused Java21 cases and1442 full backend tests;
+its Docker rerun remains pending. The completed Docker counts refer to C2. No provider calls or FE
 changes are included. See [contract](docs/engineering/PROVIDER_OPTIONS_POLICY_CONTRACT.md),
 [operator runbook](backend/PROVIDER_POLICY_OPERATIONS.md) and
 [verification](docs/qc/PROVIDER_OPTIONS_POLICY_QC_REPORT.md).

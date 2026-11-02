@@ -116,3 +116,37 @@ counts are not silently assigned to the new candidate. No raw secrets, public
 writer, provider call, live network acknowledgement fault or universal log-privacy
 proof is introduced. Native locks and controlled commit faults have bounded
 assertion coverage; they do not cover every possible database/network failure.
+
+## C3 focused and full Quality checkpoint
+
+Test-hardening source `0d6970a4e34aa6dce6b102e22b4e23a8f9f44825`, tree
+`39796c92565ad7b861891cbc4977965c63820b3f`. Focused run41371335255,
+job125042246505 completed SUCCESS: H2 core13 + HTTP11 =24; mandatory native
+PostgreSQL core22 + HTTP11 =33; **57 Java21 tests,0 failures/errors/skips**.
+The separate CLI unittest invocation again passed11 methods. New storage-value,
+cascade, HTTP storage-outage and serialized nonhuman-session assertions executed;
+last-slot contention now executes only against mandatory native PostgreSQL.
+
+Quality run41371335279/job125042246858 completed SUCCESS: **1442 backend tests,
+0 failures/errors/skips**, BUILD SUCCESS; audit0 and frontend checks/build passed.
+These are overlapping regression suites, not1442+57 unique cases. Production
+Java/migration/scripts/workflows remain identical to C2; only tests/docs changed.
+Independent QC is corroborating these completed logs in its owned review.
+
+Docker run41371335229 is still in progress at this checkpoint. Formatting passed;
+compose build/start and later full provider/native/browser/restart results are
+not yet assigned to C3. The complete C2 Docker result above remains evidence for
+its exact tested source. Keep final C3 Docker closure pending, rather than
+reporting every current-head gate green. No merge/deploy/user provisioning or
+SonarQube result is claimed.
+
+Docker progress at final checkpoint: job125042246928 step inventory reports
+build/start, schema verification, isolated provider fixture and PostgreSQL
+provider operator/options probe completed SUCCESS. It has advanced to retained
+Task history regression. This is in-progress step evidence, not decoded final
+job logs or full Docker acceptance. Final browser/SMTP/restart closure remains
+pending for C3. QC checkpoints11/12 independently corroborate C3 focused/Quality.
+QC records a nonblocking nonhuman-cookie assertion limitation: the401 test alone
+cannot distinguish restored nonhuman authentication from an ignored cookie;
+production's explicit HumanIdentity gate is source-reviewed. Do not overstate
+that particular branch's session restoration evidence.
