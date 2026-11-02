@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -419,6 +420,16 @@ class ProviderPublicationPostgresIT {
   }
 
   private String fingerprint(Connection connection) throws Exception {
+    return fingerprint(connection, true);
+  }
+
+  private String fingerprintWithoutAttempts() throws Exception {
+    try (var connection = admin(databaseUrl)) {
+      return fingerprint(connection, false);
+    }
+  }
+
+  private String fingerprint(Connection connection, boolean includeAttempts) throws Exception {
     var digest = MessageDigest.getInstance("SHA-256");
     for (String table :
         List.of(
@@ -433,6 +444,8 @@ class ProviderPublicationPostgresIT {
             "agentos_evidence_private.publication_attempts",
             "agentos_evidence_private.integrity_assertions",
             "agentos_evidence_private.integrity_provenance")) {
+      if (!includeAttempts && table.equals("agentos_evidence_private.publication_attempts"))
+        continue;
       digest.update(table.getBytes(StandardCharsets.UTF_8));
       try (var statement = connection.createStatement();
           var rows =
@@ -689,6 +702,429 @@ class ProviderPublicationPostgresIT {
                       null)
               : client(actor).assertPrepared(fresh.attemptId());
       assertThat(accepted.status()).isEqualTo(ProviderPublicationClient.Status.ACCEPTED);
+    }
+  }
+
+  @Test
+  void integrityUpdateAndPostConsumptionFaultsRestoreVerifiedHistoryExactly() throws Exception {
+    for (var fault :
+        List.of(
+            new MutationFault("public.provider_credential_integrity", "update", false),
+            new MutationFault("agentos_evidence_private.integrity_assertions", "insert", false),
+            new MutationFault("agentos_evidence_private.integrity_provenance", "insert", false),
+            new MutationFault("agentos_evidence_private.publication_attempts", "update", true))) {
+      var scope = seed();
+      var prepared = checkedCapture("prepare", scope, "PREPARE").value();
+      assertThat(client("prepare").assertPrepared(prepared.attemptId()).status())
+          .isEqualTo(ProviderPublicationClient.Status.ACCEPTED);
+      var health = checkedCapture("health", scope, "HEALTH").value();
+      assertThat(
+              client("health")
+                  .publishHealth(
+                      health.attemptId(),
+                      ProviderPublicationClient.HealthOutcome.USABLE,
+                      false,
+                      null)
+                  .status())
+          .isEqualTo(ProviderPublicationClient.Status.ACCEPTED);
+      var failure = checkedCapture("health", scope, "INTEGRITY_FAILURE").value();
+      assertMutationRollback(
+          fault, () -> client("health").publishIntegrityFailure(failure.attemptId()));
+
+      var fresh = checkedCapture("health", scope, "INTEGRITY_FAILURE").value();
+      var accepted = client("health").publishIntegrityFailure(fresh.attemptId());
+      assertThat(accepted.status()).isEqualTo(ProviderPublicationClient.Status.ACCEPTED);
+      assertThat(accepted.value().state()).isEqualTo("FAILED");
+      assertThat(accepted.value().publicationRevision()).isEqualTo(2);
+      assertThat(
+              count(
+                  "select count(*) from public.provider_credential_health where organization_id='"
+                      + scope.organizationId()
+                      + "' and publication_revision=1 and state='USABLE'"))
+          .isEqualTo(1);
+    }
+  }
+
+  @Test
+  void healthUpdateAndPostConsumptionFaultsRestorePreviousObservationExactly() throws Exception {
+    for (var fault :
+        List.of(
+            new MutationFault("public.provider_credential_health", "update", false),
+            new MutationFault("agentos_evidence_private.publication_attempts", "update", true))) {
+      var scope = seed();
+      var first = checkedCapture("health", scope, "HEALTH").value();
+      assertThat(
+              client("health")
+                  .publishHealth(
+                      first.attemptId(),
+                      ProviderPublicationClient.HealthOutcome.UNAVAILABLE,
+                      false,
+                      null)
+                  .status())
+          .isEqualTo(ProviderPublicationClient.Status.ACCEPTED);
+      var next = checkedCapture("health", scope, "HEALTH").value();
+      assertMutationRollback(
+          fault,
+          () ->
+              client("health")
+                  .publishHealth(
+                      next.attemptId(),
+                      ProviderPublicationClient.HealthOutcome.USABLE,
+                      false,
+                      null));
+      var fresh = checkedCapture("health", scope, "HEALTH").value();
+      var accepted =
+          client("health")
+              .publishHealth(
+                  fresh.attemptId(), ProviderPublicationClient.HealthOutcome.USABLE, false, null);
+      assertThat(accepted.status()).isEqualTo(ProviderPublicationClient.Status.ACCEPTED);
+      assertThat(accepted.value().publicationRevision()).isEqualTo(2);
+      assertThat(accepted.value().state()).isEqualTo("USABLE");
+    }
+  }
+
+  private record MutationFault(String table, String operation, boolean consumptionOnly) {}
+
+  private void assertMutationRollback(
+      MutationFault fault,
+      Supplier<ProviderPublicationClient.Result<ProviderPublicationClient.Publication>> publication)
+      throws Exception {
+    try (var operator = admin(databaseUrl);
+        var statement = operator.createStatement()) {
+      statement.execute("create sequence agentos_evidence_private.fixture_fault_witness start 1");
+      try {
+        // This test-only sequence is nontransactional. A pulse proves the AFTER trigger actually
+        // ran at the requested phase, rather than an earlier guard merely rejecting the call.
+        // Only the existing definer gets USAGE; publisher LOGIN privileges are unchanged.
+        statement.execute(
+            "grant usage on sequence agentos_evidence_private.fixture_fault_witness to " + DEFINER);
+        statement.execute(
+            "create function agentos_evidence_private.fixture_mutation_fault() returns trigger"
+                + " language plpgsql as $fixture$ begin perform pg_catalog.nextval("
+                + "'agentos_evidence_private.fixture_fault_witness'::pg_catalog.regclass);"
+                + " raise exception using errcode='P0001',message='Controlled mutation fault';"
+                + " end; $fixture$");
+        statement.execute(
+            "create trigger fixture_mutation_fault after "
+                + fault.operation()
+                + " on "
+                + fault.table()
+                + " for each row "
+                + (fault.consumptionOnly() ? "when (new.consumed and not old.consumed) " : "")
+                + "execute function agentos_evidence_private.fixture_mutation_fault()");
+        String before = fingerprint();
+        var rejected = publication.get();
+        assertThat(rejected.status()).isEqualTo(ProviderPublicationClient.Status.FAILED);
+        assertThat(rejected.reason())
+            .isEqualTo(ProviderPublicationClient.Reason.DEPENDENCY_UNAVAILABLE);
+        assertThat(rejected.value()).isNull();
+        assertThat(
+                count(
+                    "select case when is_called then last_value else 0 end from"
+                        + " agentos_evidence_private.fixture_fault_witness"))
+            .isEqualTo(1);
+        assertThat(fingerprint()).isEqualTo(before);
+      } finally {
+        statement.execute("drop trigger if exists fixture_mutation_fault on " + fault.table());
+        statement.execute(
+            "drop function if exists agentos_evidence_private.fixture_mutation_fault()");
+        statement.execute("drop sequence agentos_evidence_private.fixture_fault_witness");
+      }
+    } catch (SQLException failure) {
+      throw safeSqlFailure("Mutation rollback fixture failed", failure);
+    }
+  }
+
+  @Test
+  void cleanupBoundsEligibleRowsAndPreservesBeforeGraceAndOtherOrganizationExactly()
+      throws Exception {
+    var scope = seed();
+    var other = seed();
+    var first = checkedCapture("health", scope, "HEALTH").value();
+    var second = checkedCapture("health", scope, "HEALTH").value();
+    var beforeGrace = checkedCapture("health", scope, "HEALTH").value();
+    var foreign = checkedCapture("health", other, "HEALTH").value();
+    update(
+        "update agentos_evidence_private.publication_attempts set"
+            + " observed_at=statement_timestamp()-interval '7 minutes',"
+            + " deadline=statement_timestamp()-interval '6 minutes'"
+            + " where attempt_id in (?,?,?)",
+        first.attemptId(),
+        second.attemptId(),
+        foreign.attemptId());
+    update(
+        "update agentos_evidence_private.publication_attempts set"
+            + " observed_at=statement_timestamp()-interval '4 minutes',"
+            + " deadline=statement_timestamp()-interval '3 minutes' where attempt_id=?",
+        beforeGrace.attemptId());
+    String beforeGraceRows = attemptFingerprint(beforeGrace.attemptId());
+    String foreignRows = attemptFingerprint(foreign.attemptId());
+    String durableRows = fingerprintWithoutAttempts();
+    try (var operator = admin(databaseUrl)) {
+      assertThat(cleanupAttempts(operator, scope.organizationId(), 1)).isEqualTo(1);
+      assertThat(count("select count(*) from agentos_evidence_private.publication_attempts"))
+          .isEqualTo(3);
+      assertThat(
+              count(
+                  "select count(*) from agentos_evidence_private.publication_attempts where"
+                      + " attempt_id in ('"
+                      + first.attemptId()
+                      + "','"
+                      + second.attemptId()
+                      + "')"))
+          .isEqualTo(1);
+      assertThat(attemptFingerprint(beforeGrace.attemptId())).isEqualTo(beforeGraceRows);
+      assertThat(attemptFingerprint(foreign.attemptId())).isEqualTo(foreignRows);
+      assertThat(fingerprintWithoutAttempts()).isEqualTo(durableRows);
+      assertThat(cleanupAttempts(operator, scope.organizationId(), 4096)).isEqualTo(1);
+      assertThat(count("select count(*) from agentos_evidence_private.publication_attempts"))
+          .isEqualTo(2);
+      assertThat(attemptFingerprint(beforeGrace.attemptId())).isEqualTo(beforeGraceRows);
+      assertThat(attemptFingerprint(foreign.attemptId())).isEqualTo(foreignRows);
+      assertThat(fingerprintWithoutAttempts()).isEqualTo(durableRows);
+    }
+  }
+
+  @Test
+  void cleanupSamplesGraceAfterObservedOrganizationLockWait() throws Exception {
+    var scope = seed();
+    var capture = checkedCapture("health", scope, "HEALTH").value();
+    var executor = Executors.newSingleThreadExecutor();
+    try (var operator = admin(databaseUrl);
+        var cleaner = admin(databaseUrl)) {
+      int blocker = backendPid(operator);
+      int waiter = backendPid(cleaner);
+      operator.setAutoCommit(false);
+      try (var statement =
+          operator.prepareStatement("select id from public.organizations where id=? for update")) {
+        statement.setObject(1, scope.organizationId());
+        try (var rows = statement.executeQuery()) {
+          assertThat(rows.next()).isTrue();
+        }
+      }
+      var cleanup = executor.submit(() -> cleanupAttempts(cleaner, scope.organizationId(), 10));
+      awaitBackendBlockedBy(waiter, blocker);
+      // Set a near grace boundary only after the actual wait is established. A clock captured
+      // before the wait cannot observe eligibility, while the post-lock clock must observe it.
+      try (var statement =
+          operator.prepareStatement(
+              "update agentos_evidence_private.publication_attempts set"
+                  + " observed_at=statement_timestamp()-interval '6 minutes'+interval '1 second',"
+                  + " deadline=statement_timestamp()-interval '5 minutes'+interval '1 second'"
+                  + " where attempt_id=?")) {
+        statement.setObject(1, capture.attemptId());
+        assertThat(statement.executeUpdate()).isEqualTo(1);
+      }
+      long timeout = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+      boolean eligible = false;
+      while (!eligible && System.nanoTime() < timeout) {
+        try (var statement =
+            operator.prepareStatement(
+                "select clock_timestamp()>=deadline+interval '5 minutes' from"
+                    + " agentos_evidence_private.publication_attempts where attempt_id=?")) {
+          statement.setObject(1, capture.attemptId());
+          try (var rows = statement.executeQuery()) {
+            assertThat(rows.next()).isTrue();
+            eligible = rows.getBoolean(1);
+          }
+        }
+        if (!eligible) Thread.sleep(10);
+      }
+      assertThat(eligible).isTrue();
+      String expectedDurableRows = fingerprint(operator, false);
+      operator.commit();
+      assertThat(cleanup.get(10, TimeUnit.SECONDS)).isEqualTo(1);
+      assertThat(count("select count(*) from agentos_evidence_private.publication_attempts"))
+          .isZero();
+      assertThat(fingerprintWithoutAttempts()).isEqualTo(expectedDurableRows);
+    } finally {
+      executor.shutdownNow();
+    }
+  }
+
+  @Test
+  void cleanupWaitsForPublishingFailureAndRetainsBothPinnedTransitions() throws Exception {
+    var scope = seed();
+    var prepared = checkedCapture("prepare", scope, "PREPARE").value();
+    assertThat(client("prepare").assertPrepared(prepared.attemptId()).status())
+        .isEqualTo(ProviderPublicationClient.Status.ACCEPTED);
+    assertThat(currentIntegrityPinCount(prepared.attemptId(), "VERIFIED_AT_WRITE", 1)).isEqualTo(1);
+    var operational = checkedCapture("health", scope, "HEALTH").value();
+    // Controlled temporal fixtures model old committed history without a six-minute test sleep.
+    // Keep the assertion's capture/acceptance and public recording clocks aligned with that age.
+    update(
+        "update agentos_evidence_private.publication_attempts set"
+            + " observed_at=observed_at-interval '7 minutes',deadline=deadline-interval '7 minutes'"
+            + " where attempt_id in (?,?)",
+        prepared.attemptId(),
+        operational.attemptId());
+    update(
+        "update agentos_evidence_private.integrity_assertions set captured_at=captured_at-interval"
+            + " '7 minutes',accepted_at=accepted_at-interval '7 minutes' where attempt_id=?",
+        prepared.attemptId());
+    update(
+        "update public.provider_credential_integrity set recorded_at=recorded_at-interval '7"
+            + " minutes' where organization_id=? and connection_id=?",
+        scope.organizationId(),
+        scope.connectionId());
+    String originalPin = pinnedFingerprint(prepared.attemptId());
+    var failure = checkedCapture("health", scope, "INTEGRITY_FAILURE").value();
+    var executor = Executors.newSingleThreadExecutor();
+    try (var worker = actor("health");
+        var cleaner = admin(databaseUrl)) {
+      int blocker = backendPid(worker);
+      int waiter = backendPid(cleaner);
+      worker.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
+      worker.setAutoCommit(false);
+      try (var statement =
+          worker.prepareStatement(
+              "select * from agentos_evidence_private.publish_integrity_failure(?::uuid)")) {
+        statement.setObject(1, failure.attemptId());
+        try (var rows = statement.executeQuery()) {
+          assertThat(rows.next()).isTrue();
+          assertThat(rows.getString("status")).isEqualTo("ACCEPTED");
+          assertThat(rows.getString("reason")).isEqualTo("NONE");
+          assertThat(rows.getLong("publication_revision")).isEqualTo(2);
+          assertThat(rows.getString("state")).isEqualTo("FAILED");
+          assertThat(rows.next()).isFalse();
+        }
+      }
+      // The SQL result is provisional. Retain the real publisher's organization mutex until
+      // cleanup is observed blocked by that exact backend, then acknowledge the worker commit.
+      var cleanup = executor.submit(() -> cleanupAttempts(cleaner, scope.organizationId(), 4096));
+      awaitBackendBlockedBy(waiter, blocker);
+      assertThat(cleanup.isDone()).isFalse();
+      worker.commit();
+      assertThat(cleanup.get(10, TimeUnit.SECONDS)).isEqualTo(1);
+      assertThat(pinnedFingerprint(prepared.attemptId())).isEqualTo(originalPin);
+      assertThat(pinnedFingerprint(failure.attemptId())).isNotEmpty();
+      assertThat(count("select count(*) from agentos_evidence_private.publication_attempts"))
+          .isEqualTo(2);
+      assertThat(count("select count(*) from agentos_evidence_private.integrity_assertions"))
+          .isEqualTo(2);
+      assertThat(count("select count(*) from agentos_evidence_private.integrity_provenance"))
+          .isEqualTo(2);
+      assertThat(
+              count(
+                  "select count(*) from public.provider_credential_integrity where"
+                      + " state='FAILED' and publication_revision=2"))
+          .isEqualTo(1);
+      assertThat(currentIntegrityPinCount(failure.attemptId(), "FAILED", 2)).isEqualTo(1);
+    } catch (SQLException failureException) {
+      throw safeSqlFailure("Cleanup pin serialization fixture failed", failureException);
+    } finally {
+      executor.shutdownNow();
+    }
+  }
+
+  private long cleanupAttempts(Connection connection, UUID organization, int batch)
+      throws Exception {
+    try (var statement =
+        connection.prepareStatement(
+            "select agentos_evidence_private.cleanup_attempts(?::uuid,?::integer)")) {
+      statement.setQueryTimeout(15);
+      statement.setObject(1, organization);
+      statement.setInt(2, batch);
+      try (var rows = statement.executeQuery()) {
+        assertThat(rows.next()).isTrue();
+        long removed = rows.getLong(1);
+        assertThat(rows.wasNull()).isFalse();
+        assertThat(rows.next()).isFalse();
+        return removed;
+      }
+    } catch (SQLException failure) {
+      throw safeSqlFailure("Cleanup fixture execution failed", failure);
+    }
+  }
+
+  private int backendPid(Connection connection) throws Exception {
+    try (var statement = connection.createStatement();
+        var rows = statement.executeQuery("select pg_backend_pid()")) {
+      assertThat(rows.next()).isTrue();
+      return rows.getInt(1);
+    }
+  }
+
+  private void awaitBackendBlockedBy(int waiter, int blocker) throws Exception {
+    long timeout = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+    while (System.nanoTime() < timeout) {
+      try (var connection = admin(databaseUrl);
+          var statement =
+              connection.prepareStatement(
+                  "select count(*) from pg_catalog.pg_stat_activity where pid=? and"
+                      + " wait_event_type='Lock' and ?=any(pg_catalog.pg_blocking_pids(pid))")) {
+        statement.setInt(1, waiter);
+        statement.setInt(2, blocker);
+        try (var rows = statement.executeQuery()) {
+          assertThat(rows.next()).isTrue();
+          if (rows.getLong(1) == 1) return;
+        }
+      }
+      Thread.sleep(10);
+    }
+    throw new AssertionError("Expected cleanup blocked by the exact fixture backend");
+  }
+
+  private String attemptFingerprint(UUID attempt) throws Exception {
+    return projectionFingerprint(
+        "select pg_catalog.row_to_json(a)::text from"
+            + " agentos_evidence_private.publication_attempts a where a.attempt_id=?",
+        attempt);
+  }
+
+  private long currentIntegrityPinCount(UUID attempt, String state, long revision)
+      throws Exception {
+    try (var operator = admin(databaseUrl);
+        var statement =
+            operator.prepareStatement(
+                "select count(*) from public.provider_credential_integrity i join"
+                    + " agentos_evidence_private.integrity_provenance q using"
+                    + " (organization_id,connection_id,provider,credential_revision,publication_revision)"
+                    + " join agentos_evidence_private.integrity_assertions s on"
+                    + " s.assertion_id=q.assertion_id where s.attempt_id=? and i.state=? and"
+                    + " i.publication_revision=?")) {
+      statement.setObject(1, attempt);
+      statement.setString(2, state);
+      statement.setLong(3, revision);
+      try (var rows = statement.executeQuery()) {
+        assertThat(rows.next()).isTrue();
+        return rows.getLong(1);
+      }
+    }
+  }
+
+  private String pinnedFingerprint(UUID attempt) throws Exception {
+    return projectionFingerprint(
+        "select pg_catalog.row_to_json(t)::text from (select a,s,q from"
+            + " agentos_evidence_private.publication_attempts a join"
+            + " agentos_evidence_private.integrity_assertions s on s.attempt_id=a.attempt_id join"
+            + " agentos_evidence_private.integrity_provenance q on q.assertion_id=s.assertion_id"
+            + " where a.attempt_id=? and a.consumed and a.kind=s.kind and s.protocol_version=1 and"
+            + " row(q.organization_id,q.connection_id,q.provider,q.credential_revision)="
+            + " row(s.organization_id,s.connection_id,s.provider,s.credential_revision) and"
+            + " row(s.organization_id,s.connection_id,s.provider,s.credential_revision,"
+            + " s.external_locator,s.external_key_version,s.hmac_key_version,s.hmac_domain_version,"
+            + " s.publisher_id,s.publisher_epoch,s.publisher_fence,s.login_name,s.login_oid,s.captured_at)="
+            + " row(a.organization_id,a.connection_id,a.provider,a.credential_revision,"
+            + " a.external_locator,a.external_key_version,a.hmac_key_version,a.hmac_domain_version,"
+            + " a.publisher_id,a.publisher_epoch,a.publisher_fence,a.login_name,a.login_oid,a.observed_at))"
+            + " t",
+        attempt);
+  }
+
+  private String projectionFingerprint(String sql, UUID attempt) throws Exception {
+    try (var operator = admin(databaseUrl);
+        var statement = operator.prepareStatement(sql)) {
+      statement.setObject(1, attempt);
+      try (var rows = statement.executeQuery()) {
+        assertThat(rows.next()).isTrue();
+        var digest = MessageDigest.getInstance("SHA-256");
+        digest.update(rows.getString(1).getBytes(StandardCharsets.UTF_8));
+        assertThat(rows.next()).isFalse();
+        return java.util.HexFormat.of().formatHex(digest.digest());
+      }
+    } catch (SQLException failure) {
+      throw safeSqlFailure("Private fixture projection failed", failure);
     }
   }
 
