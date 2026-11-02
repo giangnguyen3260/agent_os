@@ -40,3 +40,42 @@ A test-only follow-up adds denied UPDATE/DELETE/TRUNCATE/ALTER assertions on the
 publisher registry; it changes no migration, grant or runtime behavior and needs
 its own completed test result. No future publication, protected rollout or public
 list claim is inferred from9 passing storage tests.
+
+## C1 full Quality; C2 role assertion hardening
+
+Completed Quality run41382948324/job125077493040 records1451 backend tests,
+0 failures/errors/skips, BUILD SUCCESS, configured dependency audit0 and successful
+frontend checks/build on C1. These overlap the dedicated tests, not extra unique
+coverage. Docker formatting/build/start and early schema/provider probes passed;
+full Docker regression remains pending at this checkpoint.
+
+C2e7651d6b65eb4e7c61e9c7663c8491324e0b7f97,
+treea00df1a1d48d1a7c4eae4a785982f8d926765111, changes only four additional denied
+publisher-registry mutation assertions and this report. Dedicated run41383374160,
+job125078794188 completed SUCCESS:3 H2 tests and6 native PostgreSQL tests, all
+0 failures/errors/skips. Both Maven invocations BUILD SUCCESS. C2 full Quality
+and Docker results are not inferred from C1. Production DDL/grants are unchanged.
+
+## C2 full-suite resource failure and bounded-cache correction
+
+Completed Quality job125078794324 did NOT pass:1446 reported cases,0 failures,
+1 initialization error. ProviderEvidencePostgresIT failed its first administrative
+connection with PostgreSQL SQLSTATE/diagnostic `too many clients already`, before
+six native methods could execute. This result is separate from C2's dedicated9/0.
+
+The full suite retains many Spring contexts and their Hikari pools. A cache-pressure
+explanation is consistent with the full-only failure and source inventory, but no
+complete pg_stat_activity snapshot was captured at the failing instant. The new
+fixture's DriverManager connections use try-with-resources; cleanup does not kill
+unrelated databases or connections.
+
+Quality now sets the JVM property `spring.test.context.cache.maxSize=4`: evicted
+contexts close rather than retaining all their pools. All test selections, assertions,
+per-context pool capacities, retries and production configuration remain unchanged.
+This bounds fixture resource lifetime instead of increasing PostgreSQL capacity or
+accepting unavailable results. Official Spring context-cache documentation describes
+LRU close/eviction and this property:
+https://docs.spring.io/spring-framework/reference/testing/testcontext-framework/ctx-management/caching.html
+
+The correction still requires a fresh full-suite result; previous C1 success is not
+a substitute. Publication of the change alone does not close this failure.
