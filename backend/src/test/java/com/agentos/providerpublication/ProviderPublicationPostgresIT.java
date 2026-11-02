@@ -776,6 +776,274 @@ class ProviderPublicationPostgresIT {
   }
 
   @Test
+  void verifiedAtMaxRejectsConfirmedMismatchAsExhaustedWithoutAnyWrites() throws Exception {
+    var scope = seed();
+    var prepared = checkedCapture("prepare", scope, "PREPARE").value();
+    assertThat(client("prepare").assertPrepared(prepared.attemptId()).status())
+        .isEqualTo(ProviderPublicationClient.Status.ACCEPTED);
+    update(
+        "update public.provider_credential_integrity set publication_revision=9223372036854775807");
+    // Keep exact current provenance consistent with the synthetic MAX evidence revision.
+    update(
+        "update agentos_evidence_private.integrity_provenance"
+            + " set publication_revision=9223372036854775807 where organization_id=?"
+            + " and connection_id=? and provider=? and credential_revision=?",
+        scope.organizationId(),
+        scope.connectionId(),
+        scope.provider(),
+        scope.revision());
+    assertThat(
+            count(
+                "select count(*) from agentos_evidence_private.integrity_provenance q join"
+                    + " public.provider_credential_integrity i using"
+                    + " (organization_id,connection_id,provider,credential_revision,publication_revision)"
+                    + " where i.state='VERIFIED_AT_WRITE' and"
+                    + " i.publication_revision=9223372036854775807"))
+        .isEqualTo(1);
+    var failure = checkedCapture("health", scope, "INTEGRITY_FAILURE").value();
+    String before = fingerprint();
+    var rejected = client("health").publishIntegrityFailure(failure.attemptId());
+    assertThat(rejected.status()).isEqualTo(ProviderPublicationClient.Status.REJECTED);
+    assertThat(rejected.reason()).isEqualTo(ProviderPublicationClient.Reason.EXHAUSTED);
+    assertThat(rejected.value()).isNull();
+    assertThat(fingerprint()).isEqualTo(before);
+    assertThat(
+            count(
+                "select count(*) from public.provider_credential_integrity where"
+                    + " state='VERIFIED_AT_WRITE' and publication_revision=9223372036854775807"))
+        .isEqualTo(1);
+  }
+
+  @Test
+  void healthAtMaxWithMatchingCaptureRejectsAsExhaustedWithoutAnyWrites() throws Exception {
+    var scope = seed();
+    var first = checkedCapture("health", scope, "HEALTH").value();
+    assertThat(
+            client("health")
+                .publishHealth(
+                    first.attemptId(),
+                    ProviderPublicationClient.HealthOutcome.UNAVAILABLE,
+                    false,
+                    null)
+                .status())
+        .isEqualTo(ProviderPublicationClient.Status.ACCEPTED);
+    update("update public.provider_credential_health set publication_revision=9223372036854775807");
+    // Capture after the operator fixture change, so CAS matches and cannot mask MAX.
+    var fresh = checkedCapture("health", scope, "HEALTH").value();
+    for (var outcome : ProviderPublicationClient.HealthOutcome.values()) {
+      String before = fingerprint();
+      var rejected = client("health").publishHealth(fresh.attemptId(), outcome, false, null);
+      assertThat(rejected.status()).isEqualTo(ProviderPublicationClient.Status.REJECTED);
+      assertThat(rejected.reason()).isEqualTo(ProviderPublicationClient.Reason.EXHAUSTED);
+      assertThat(rejected.value()).isNull();
+      assertThat(fingerprint()).isEqualTo(before);
+    }
+  }
+
+  @Test
+  void confirmedFailureBeforeCapturedPreparationRemainsStickyWithoutAnyWrites() throws Exception {
+    var scope = seed();
+    var prepared = checkedCapture("prepare", scope, "PREPARE").value();
+    var failure = checkedCapture("health", scope, "INTEGRITY_FAILURE").value();
+    var failed = client("health").publishIntegrityFailure(failure.attemptId());
+    assertThat(failed.status()).isEqualTo(ProviderPublicationClient.Status.ACCEPTED);
+    assertThat(failed.value().state()).isEqualTo("FAILED");
+    var afterFailure = checkedCapture("prepare", scope, "PREPARE").value();
+    for (var attempt : List.of(prepared, afterFailure)) {
+      String before = fingerprint();
+      var rejected = client("prepare").assertPrepared(attempt.attemptId());
+      assertThat(rejected.status()).isEqualTo(ProviderPublicationClient.Status.REJECTED);
+      assertThat(rejected.reason()).isEqualTo(ProviderPublicationClient.Reason.INTEGRITY_FAILED);
+      assertThat(rejected.value()).isNull();
+      assertThat(fingerprint()).isEqualTo(before);
+    }
+    assertThat(
+            count(
+                "select count(*) from agentos_evidence_private.integrity_assertions"
+                    + " where kind='PREPARE'"))
+        .isZero();
+  }
+
+  @Test
+  void healthAdvancementDoesNotVetoCapturedConfirmedMismatch() throws Exception {
+    var scope = seed();
+    var prepared = checkedCapture("prepare", scope, "PREPARE").value();
+    assertThat(client("prepare").assertPrepared(prepared.attemptId()).status())
+        .isEqualTo(ProviderPublicationClient.Status.ACCEPTED);
+    var failure = checkedCapture("health", scope, "INTEGRITY_FAILURE").value();
+    var health = checkedCapture("health", scope, "HEALTH").value();
+    var published =
+        client("health")
+            .publishHealth(
+                health.attemptId(), ProviderPublicationClient.HealthOutcome.USABLE, false, null);
+    assertThat(published.status()).isEqualTo(ProviderPublicationClient.Status.ACCEPTED);
+    var failed = client("health").publishIntegrityFailure(failure.attemptId());
+    assertThat(failed.status()).isEqualTo(ProviderPublicationClient.Status.ACCEPTED);
+    assertThat(failed.value().state()).isEqualTo("FAILED");
+    assertThat(failed.value().publicationRevision()).isEqualTo(2);
+    assertThat(
+            count(
+                "select count(*) from public.provider_credential_health"
+                    + " where publication_revision=1 and state='USABLE'"))
+        .isEqualTo(1);
+    assertThat(count("select count(*) from agentos_evidence_private.integrity_assertions"))
+        .isEqualTo(2);
+    assertThat(count("select count(*) from agentos_evidence_private.integrity_provenance"))
+        .isEqualTo(2);
+  }
+
+  @Test
+  void fullOrganizationRejectsCaptureWithoutWritesButAllowsPublicationAndOtherOrganization()
+      throws Exception {
+    var full = seed();
+    var other = seed();
+    var existing = checkedCapture("health", full, "HEALTH").value();
+    // Consumed attempts still occupy capacity; clone only the intended source attempt.
+    update(
+        "insert into agentos_evidence_private.publication_attempts select"
+            + " gen_random_uuid(),kind,login_name,login_oid,publisher_id,publisher_epoch,publisher_fence,"
+            + "organization_id,connection_id,provider,credential_revision,external_locator,external_key_version,"
+            + "hmac_key_version,hmac_domain_version,verifier,integrity_present,integrity_revision,health_present,health_revision,observed_at,deadline,capture_xid,true"
+            + " from agentos_evidence_private.publication_attempts cross join"
+            + " generate_series(1,4095) where attempt_id=?",
+        existing.attemptId());
+    String before = fingerprint();
+    var rejected = client("health").beginHealth(full);
+    assertThat(rejected.status()).isEqualTo(ProviderPublicationClient.Status.REJECTED);
+    assertThat(rejected.reason()).isEqualTo(ProviderPublicationClient.Reason.CAPACITY);
+    assertThat(rejected.value()).isNull();
+    assertThat(fingerprint()).isEqualTo(before);
+    assertThat(
+            client("health")
+                .publishHealth(
+                    existing.attemptId(),
+                    ProviderPublicationClient.HealthOutcome.UNAVAILABLE,
+                    false,
+                    null)
+                .status())
+        .isEqualTo(ProviderPublicationClient.Status.ACCEPTED);
+    var independent = checkedCapture("health", other, "HEALTH").value();
+    assertThat(
+            client("health")
+                .publishHealth(
+                    independent.attemptId(),
+                    ProviderPublicationClient.HealthOutcome.UNAVAILABLE,
+                    false,
+                    null)
+                .status())
+        .isEqualTo(ProviderPublicationClient.Status.ACCEPTED);
+    assertThat(
+            count(
+                "select count(*) from agentos_evidence_private.publication_attempts"
+                    + " where organization_id='"
+                    + full.organizationId()
+                    + "'"))
+        .isEqualTo(4096);
+    assertThat(
+            count(
+                "select count(*) from agentos_evidence_private.publication_attempts"
+                    + " where organization_id='"
+                    + other.organizationId()
+                    + "'"))
+        .isEqualTo(1);
+  }
+
+  @Test
+  void realLoginRawDeadlineArgumentsRejectNullPresenceAndInvalidPairsWithoutAnyWrites()
+      throws Exception {
+    var scope = seed();
+    var capture = checkedCapture("health", scope, "HEALTH").value();
+    String finite = capture.deadline().minusSeconds(10).toString();
+    for (Boolean present : new Boolean[] {null, false, true}) {
+      for (String deadline : new String[] {null, finite, "infinity", "-infinity"}) {
+        if (Boolean.FALSE.equals(present) && deadline == null
+            || Boolean.TRUE.equals(present) && finite.equals(deadline)) {
+          continue; // The two valid pairs are exercised separately through real LOGIN SQL below.
+        }
+        assertRawHealthDeadlineRejected(capture, present, deadline, "ATTEMPT");
+      }
+    }
+    assertRawHealthDeadlineRejected(
+        capture, true, capture.observedAt().minusSeconds(1).toString(), "TIME");
+  }
+
+  private void assertRawHealthDeadlineRejected(
+      ProviderPublicationClient.Capture capture, Boolean present, String deadline, String reason)
+      throws Exception {
+    String before = fingerprint();
+    try (var worker = actor("health");
+        var statement =
+            worker.prepareStatement(
+                "select * from agentos_evidence_private.publish_health(?::uuid,'USABLE',"
+                    + "?::boolean,?::timestamptz)")) {
+      statement.setObject(1, capture.attemptId());
+      statement.setObject(2, present);
+      statement.setString(3, deadline);
+      try (var rows = statement.executeQuery()) {
+        assertThat(rows.next()).isTrue();
+        assertThat(rows.getString("status")).isEqualTo("REJECTED");
+        assertThat(rows.getString("reason")).isEqualTo(reason);
+        for (int column = 3; column <= rows.getMetaData().getColumnCount(); column++) {
+          assertThat(rows.getObject(column) == null)
+              .as("Rejected descriptor column %s must be null", column)
+              .isTrue();
+        }
+        assertThat(rows.next()).isFalse();
+      }
+    } catch (SQLException failure) {
+      throw safeSqlFailure("Raw deadline rejection fixture failed", failure);
+    }
+    assertThat(fingerprint()).isEqualTo(before);
+  }
+
+  @Test
+  void realLoginRawValidDeadlinePairsShortenButNeverExtendCaptureDeadline() throws Exception {
+    for (String mode : List.of("ABSENT", "SHORTER", "LATER")) {
+      var scope = seed();
+      var capture = checkedCapture("health", scope, "HEALTH").value();
+      var componentDeadline =
+          mode.equals("SHORTER")
+              ? capture.deadline().minusSeconds(20)
+              : capture.deadline().plusSeconds(60);
+      var expectedDeadline = mode.equals("SHORTER") ? componentDeadline : capture.deadline();
+      try (var worker = actor("health");
+          var statement =
+              worker.prepareStatement(
+                  "select * from agentos_evidence_private.publish_health(?::uuid,'USABLE',"
+                      + "?::boolean,?::timestamptz)")) {
+        statement.setObject(1, capture.attemptId());
+        statement.setBoolean(2, !mode.equals("ABSENT"));
+        statement.setString(3, mode.equals("ABSENT") ? null : componentDeadline.toString());
+        try (var rows = statement.executeQuery()) {
+          assertThat(rows.next()).isTrue();
+          assertThat(rows.getString("status")).as("%s deadline", mode).isEqualTo("ACCEPTED");
+          assertThat(rows.getString("reason")).isEqualTo("NONE");
+          assertThat(rows.getObject("observed_at", java.time.OffsetDateTime.class))
+              .isEqualTo(capture.observedAt());
+          assertThat(rows.getObject("valid_until", java.time.OffsetDateTime.class))
+              .isEqualTo(expectedDeadline);
+          assertThat(rows.next()).isFalse();
+        }
+      } catch (SQLException failure) {
+        throw safeSqlFailure("Raw valid deadline fixture failed", failure);
+      }
+      try (var operator = admin(databaseUrl);
+          var statement =
+              operator.prepareStatement(
+                  "select valid_until from public.provider_credential_health"
+                      + " where organization_id=? and connection_id=?")) {
+        statement.setObject(1, scope.organizationId());
+        statement.setObject(2, scope.connectionId());
+        try (var rows = statement.executeQuery()) {
+          assertThat(rows.next()).isTrue();
+          assertThat(rows.getObject(1, java.time.OffsetDateTime.class)).isEqualTo(expectedDeadline);
+          assertThat(rows.next()).isFalse();
+        }
+      }
+    }
+  }
+
+  @Test
   void canonicalVerifierAndChangedFenceAreEnforcedByActualFunctions() throws Exception {
     var scope = seed();
     var attempt = checkedCapture("health", scope, "HEALTH").value();
