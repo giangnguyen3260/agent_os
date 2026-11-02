@@ -226,55 +226,6 @@ abstract class ProviderPolicyFixture {
   }
 
   @Test
-  void concurrentLastSlotIsShared() throws Exception {
-    for (int i = 0; i < 119; i++) admission.acquire(human, org);
-    var executor = Executors.newFixedThreadPool(2);
-    var start = new CountDownLatch(1);
-    Callable<String> attempt =
-        () -> {
-          start.await();
-          try {
-            admission.acquire(human, org);
-            return "WIN";
-          } catch (PolicyFailure failure) {
-            return failure.code();
-          }
-        };
-    try {
-      var first = executor.submit(attempt);
-      var secondInstance =
-          new org.springframework.aop.framework.ProxyFactory(
-              new AdmissionService(new PolicyJdbc(jdbc), new PolicyAuthority(jdbc)));
-      secondInstance.addAdvice(
-          new org.springframework.transaction.interceptor.TransactionInterceptor(
-              manager,
-              new org.springframework.transaction.annotation
-                  .AnnotationTransactionAttributeSource()));
-      var independent = (AdmissionService) secondInstance.getProxy();
-      var second =
-          executor.submit(
-              () -> {
-                start.await();
-                try {
-                  independent.acquire(human, org);
-                  return "WIN";
-                } catch (PolicyFailure failure) {
-                  return failure.code();
-                }
-              });
-      start.countDown();
-      assertThat(List.of(first.get(15, TimeUnit.SECONDS), second.get(15, TimeUnit.SECONDS)))
-          .containsExactlyInAnyOrder("WIN", "RATE_LIMITED");
-      assertThat(
-              AdmissionService.parse(
-                  (String) quotaRows().get(0).get("recent_requests"), Long.MAX_VALUE))
-          .hasSize(120);
-    } finally {
-      executor.shutdownNow();
-    }
-  }
-
-  @Test
   void tableColumnAndNullabilityAllowlistsAndNoDefaults() {
     assertThat(
             jdbc.queryForList(
@@ -434,6 +385,7 @@ abstract class ProviderPolicyFixture {
             "application/json,",
             "application/json, , */*",
             "application/json;profile=a;PROFILE=b",
+            "application/json;charset=UTF-8;CHARSET=UTF-8",
             "application/json;profile=\"unclosed")) {
       var request = new org.springframework.mock.web.MockHttpServletRequest();
       request.addHeader("Accept", accept);

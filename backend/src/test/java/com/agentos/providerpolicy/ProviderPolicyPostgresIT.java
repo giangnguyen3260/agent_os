@@ -1,6 +1,7 @@
 package com.agentos.providerpolicy;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.agentos.providercredentials.CredentialBoundary.Provider;
 import java.sql.Connection;
@@ -292,5 +293,131 @@ public class ProviderPolicyPostgresIT extends ProviderPolicyFixture {
                     + " conrelid='provider_read_admission'::regclass and contype='f'",
                 String.class))
         .containsExactlyInAnyOrder("c", "c");
+  }
+
+  @Test
+  void nativeStorageRejectsInvalidValuesAndCascadesOnlySecurityRows() {
+    for (String values :
+        List.of(
+            "2,1,true,false,false,current_timestamp,current_timestamp",
+            "1,0,true,false,false,current_timestamp,current_timestamp",
+            "1,9223372036854775808,true,false,false,current_timestamp,current_timestamp",
+            "1,1,false,false,false,current_timestamp,current_timestamp",
+            "1,1,null,false,false,current_timestamp,current_timestamp",
+            "1,1,true,false,false,null,current_timestamp",
+            "1,1,true,false,false,current_timestamp,null",
+            "1,1,true,false,false,current_timestamp+interval '1 hour',current_timestamp")) {
+      assertThatThrownBy(
+              () ->
+                  jdbc.update(
+                      "insert into"
+                          + " provider_deployment_policy(id,revision,openai_enabled,anthropic_enabled,gemini_enabled,created_at,updated_at)"
+                          + " values ("
+                          + values
+                          + ")"))
+          .isInstanceOf(org.springframework.dao.DataAccessException.class);
+      assertThat(policyRows()).isEmpty();
+    }
+    policies.provision(Set.of(Provider.OPENAI));
+    var policy = policyRows();
+    for (Object[] row :
+        List.of(
+            new Object[] {java.util.UUID.randomUUID(), actor, "[]", java.time.OffsetDateTime.now()},
+            new Object[] {org, java.util.UUID.randomUUID(), "[]", java.time.OffsetDateTime.now()},
+            new Object[] {org, actor, null, java.time.OffsetDateTime.now()},
+            new Object[] {org, actor, "[]", null},
+            new Object[] {org, actor, "0".repeat(4097), java.time.OffsetDateTime.now()})) {
+      assertThatThrownBy(
+              () ->
+                  jdbc.update(
+                      "insert into"
+                          + " provider_read_admission(organization_id,actor_id,recent_requests,updated_at)"
+                          + " values (?,?,?,?)",
+                      row))
+          .isInstanceOf(org.springframework.dao.DataAccessException.class);
+      assertThat(quotaRows()).isEmpty();
+    }
+    admission.acquire(human, org);
+    jdbc.update(
+        "delete from organization_memberships where account_id=? and organization_id=?",
+        actor,
+        org);
+    assertThat(quotaRows()).hasSize(1);
+    jdbc.update("delete from human_accounts where id=?", actor);
+    assertThat(quotaRows()).isEmpty();
+    assertThat(policyRows()).isEqualTo(policy);
+    java.util.UUID otherOrg = java.util.UUID.randomUUID();
+    java.util.UUID otherActor = java.util.UUID.randomUUID();
+    jdbc.update(
+        "insert into organizations(id,name,slug,status,created_at,updated_at) values"
+            + " (?,'Cascade',?,'ACTIVE',current_timestamp,current_timestamp)",
+        otherOrg,
+        otherOrg.toString());
+    jdbc.update(
+        "insert into human_accounts(id,email,display_name,password_hash) values"
+            + " (?,?,'Cascade','unused')",
+        otherActor,
+        otherActor + "@example.test");
+    jdbc.update(
+        "insert into provider_read_admission(organization_id,actor_id,recent_requests,updated_at)"
+            + " values (?,?,'[]',current_timestamp)",
+        otherOrg,
+        otherActor);
+    jdbc.update("delete from organizations where id=?", otherOrg);
+    assertThat(quotaRows()).isEmpty();
+    assertThat(policyRows()).isEqualTo(policy);
+    assertThat(
+            jdbc.queryForObject(
+                "select count(*) from human_accounts where id=?", Integer.class, otherActor))
+        .isEqualTo(1);
+  }
+
+  @Test
+  void concurrentLastSlotIsShared() throws Exception {
+    for (int i = 0; i < 119; i++) admission.acquire(human, org);
+    var executor = Executors.newFixedThreadPool(2);
+    var start = new CountDownLatch(1);
+    Callable<String> attempt =
+        () -> {
+          start.await();
+          try {
+            admission.acquire(human, org);
+            return "WIN";
+          } catch (PolicyFailure failure) {
+            return failure.code();
+          }
+        };
+    try {
+      var first = executor.submit(attempt);
+      var secondInstance =
+          new org.springframework.aop.framework.ProxyFactory(
+              new AdmissionService(new PolicyJdbc(jdbc), new PolicyAuthority(jdbc)));
+      secondInstance.addAdvice(
+          new org.springframework.transaction.interceptor.TransactionInterceptor(
+              manager,
+              new org.springframework.transaction.annotation
+                  .AnnotationTransactionAttributeSource()));
+      var independent = (AdmissionService) secondInstance.getProxy();
+      var second =
+          executor.submit(
+              () -> {
+                start.await();
+                try {
+                  independent.acquire(human, org);
+                  return "WIN";
+                } catch (PolicyFailure failure) {
+                  return failure.code();
+                }
+              });
+      start.countDown();
+      assertThat(List.of(first.get(15, TimeUnit.SECONDS), second.get(15, TimeUnit.SECONDS)))
+          .containsExactlyInAnyOrder("WIN", "RATE_LIMITED");
+      assertThat(
+              AdmissionService.parse(
+                  (String) quotaRows().get(0).get("recent_requests"), Long.MAX_VALUE))
+          .hasSize(120);
+    } finally {
+      executor.shutdownNow();
+    }
   }
 }

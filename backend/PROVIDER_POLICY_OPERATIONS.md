@@ -40,7 +40,12 @@ then decide explicitly.** A second provision attempt never becomes an update.
 Raw database diagnostics are not printed. Investigate server/operator logs using
 the deployment's access controls when necessary.
 
-Append `--sql-only` to inspect nonsecret SQL without accessing Docker. Arguments
+Append `--sql-only` to inspect the nonsecret psql script without accessing Docker.
+Replacement uses psql `\gset`/`\if` around a materialized locking query whose
+EXISTS result always has exactly one row. The later clock/decision statement runs
+only when the singleton was actually locked; absence returns UNAVAILABLE even
+if another operator provisions before the next statement. Run emitted scripts
+with psql, rather than a generic SQL-only client. Arguments
 are validated before any subprocess launch; provider names and positive BIGINT
 revisions become validated literals, never interpolated shell commands. The CLI
 uses the PostgreSQL container's existing environment for psql credentials.

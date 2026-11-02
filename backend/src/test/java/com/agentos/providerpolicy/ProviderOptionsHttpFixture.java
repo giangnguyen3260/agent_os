@@ -23,6 +23,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 abstract class ProviderOptionsHttpFixture {
@@ -257,11 +258,12 @@ abstract class ProviderOptionsHttpFixture {
             "application/json;q=0;q=1",
             "application/json;q=1e0",
             "application/json;profile=a;PROFILE=b",
+            "application/json;charset=UTF-8;CHARSET=UTF-8",
             "application/json;q=0.0001",
             "application/json;q=+1",
             "",
             " ")) error(request(client, "GET", path(), null, accept), 400, "BAD_REQUEST");
-    assertThat(slots()).isEqualTo(17);
+    assertThat(slots()).isEqualTo(18);
     for (String accept :
         List.of(
             "application/json",
@@ -418,5 +420,92 @@ abstract class ProviderOptionsHttpFixture {
     public HttpClient.Version version() {
       return HttpClient.Version.HTTP_1_1;
     }
+  }
+
+  @Test
+  void securityAndPolicyStorageOutagesAreSafeAndHeadSuppressesErrors() throws Exception {
+    login();
+    policies.provision(Set.of(Provider.OPENAI));
+    var policy = jdbc.queryForList("select * from provider_deployment_policy");
+    jdbc.execute(
+        "alter table provider_deployment_policy rename to provider_policy_temporarily_unavailable");
+    try {
+      error(request(client, "GET", path(), null, null), 503, "PROVIDER_CONNECTION_UNAVAILABLE");
+    } finally {
+      jdbc.execute(
+          "alter table provider_policy_temporarily_unavailable rename to"
+              + " provider_deployment_policy");
+    }
+    assertThat(jdbc.queryForList("select * from provider_deployment_policy")).isEqualTo(policy);
+    assertThat(slots()).isEqualTo(1);
+    var quota = jdbc.queryForList("select * from provider_read_admission");
+    jdbc.execute(
+        "alter table provider_read_admission rename to provider_admission_temporarily_unavailable");
+    try {
+      error(request(client, "GET", path(), null, null), 503, "PROVIDER_CONNECTION_UNAVAILABLE");
+    } finally {
+      jdbc.execute(
+          "alter table provider_admission_temporarily_unavailable rename to"
+              + " provider_read_admission");
+    }
+    assertThat(jdbc.queryForList("select * from provider_read_admission")).isEqualTo(quota);
+    jdbc.execute("alter table human_accounts rename to provider_accounts_temporarily_unavailable");
+    try {
+      var head = request(client, "HEAD", path(), null, null);
+      assertThat(head.statusCode()).isEqualTo(503);
+      assertThat(head.body()).isEmpty();
+      assertThat(head.headers().firstValue("Cache-Control")).contains("no-store");
+    } finally {
+      jdbc.execute(
+          "alter table provider_accounts_temporarily_unavailable rename to human_accounts");
+    }
+  }
+
+  @Test
+  void nonhumanSessionIsDeniedAndNeighborRoutesKeepExistingBehavior() throws Exception {
+    login();
+    jdbc.update(
+        "update organization_memberships set role='MEMBER' where account_id=? and"
+            + " organization_id=?",
+        actor,
+        org);
+    assertThat(request(client, "GET", "/api/v1/auth/session", null, null).statusCode())
+        .isEqualTo(200);
+    var head = request(client, "HEAD", path(), null, null);
+    assertThat(head.statusCode()).isEqualTo(403);
+    assertThat(head.body()).isEmpty();
+    error(request(client, "GET", path(), null, null), 403, "FORBIDDEN");
+    assertThat(request(client, "GET", path() + "/", null, null).statusCode()).isNotEqualTo(200);
+    installNonhumanSession();
+    error(request(client, "GET", path(), null, null), 401, "UNAUTHORIZED");
+    assertThat(slots()).isZero();
+  }
+
+  @Autowired
+  org.springframework.session.FindByIndexNameSessionRepository<
+          ? extends org.springframework.session.Session>
+      sessions;
+
+  @SuppressWarnings({"rawtypes", "unchecked"})
+  private void installNonhumanSession() {
+    var repository = (org.springframework.session.FindByIndexNameSessionRepository) sessions;
+    var session = (org.springframework.session.Session) repository.createSession();
+    var context = SecurityContextHolder.createEmptyContext();
+    context.setAuthentication(
+        new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+            "service-principal", "unused", List.of()));
+    session.setAttribute("SPRING_SECURITY_CONTEXT", context);
+    repository.save(session);
+    var cookie =
+        new java.net.HttpCookie(
+            "SESSION",
+            java.util.Base64.getEncoder()
+                .encodeToString(session.getId().getBytes(StandardCharsets.UTF_8)));
+    cookie.setPath("/");
+    cookie.setVersion(0);
+    client = newClient();
+    ((CookieManager) client.cookieHandler().orElseThrow())
+        .getCookieStore()
+        .add(URI.create("http://localhost:" + port), cookie);
   }
 }

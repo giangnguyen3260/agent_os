@@ -63,3 +63,56 @@ QC-authored Docker-free operator tests passed11/0 locally. A later isolated
 Java17 core-only build passed12/0 on in-progress corrective source; this is
 structural H2 evidence, not the C1 source, full Java21 application or native
 acceptance. Updated source must be published and tested before closure.
+
+## C2 Java21 focused execution
+
+Corrected source `da94917297e91a35115097bf5f2d9aaf4786952e`, tree
+`ef9f321a6507eae9d70cfc2b9f10a39a70372bb0`. Dedicated run41338037393,
+job124941933369 completed successfully. Actual logs record:
+
+| Suite | Executed | Failures/errors/skips |
+| --- | ---: | --- |
+| Core H2 | 14 | 0/0/0 |
+| Actual-session HTTP H2 | 9 | 0/0/0 |
+| Core native PostgreSQL | 21 | 0/0/0 |
+| Actual-session HTTP native PostgreSQL | 9 | 0/0/0 |
+| Total Java21 focused | 53 | 0/0/0 |
+| Docker-free CLI unittest methods | 11 | 0 |
+
+The native log includes observed lock waits, post-wait authorization/clock,
+RR snapshot and storage constraint assertions; this is not an inferred pass
+from H2. Full Quality and actual Docker operator/probe/browser gates remain
+pending for C2. C1 full Quality separately ran1418 with2 failures/1 error
+(both bare-query assertions and an untyped test timestamp cast); C1 Docker
+ran916 with1 failure and stopped during build. Those failed runs are not
+promoted to accepted regression results. C2 native tests use typed JDBC timestamp
+queries instead of assuming queryForList timestamp representation.
+
+A repeated local H2 contention run later produced safe unavailable because H2's
+transaction-start clock can precede a row written while a caller waits. Production
+future-state rejection remains unchanged. C3 moves the shared final-slot contention
+assertion to mandatory PostgreSQL and retains H2 as structural coverage. New C3
+storage-value/cascade and HTTP outage/nonhuman-session tests still require actual
+Java21 execution. In-progress local isolated H2 core passed13/0 after that move.
+
+## C2 full regression closure; C3 test hardening candidate
+
+Main inspected completed Quality run41338037343/job124941932901 and Docker
+run41338037350/job124941933406, both SUCCESS, on C2. Quality executed1438 backend
+tests with0 failures/errors/skips; frontend checks/build and audit0 passed.
+Docker executed925 regular backend tests with0 failures/errors/skips; all1101
+retained disjoint browser invocations and3 focused repeats passed. Native provider
+operator/cookie-session options probe and emitted-SQL CLI3 absent-lock protocol
+passed at18:47:05 UTC on1 November2026. The latter executes the CLI-emitted psql
+script with an observed test barrier, not a racing invocation of CLI replace.
+Exact existing-session restart and logout rejection passed at19:21:18 UTC.
+Retained native/SMTP gates also completed. No new UI screenshots are claimed.
+
+C2's configured gates are closed. C3 adds tests and documentation only: native-only
+last-slot contention, invalid storage values/cascades, safe storage outages,
+nonhuman sessions and quoted/duplicate Accept parameters. Production Java and V024
+are byte-identical to C2. C3 requires its own focused/full regression result; C2's
+counts are not silently assigned to the new candidate. No raw secrets, public
+writer, provider call, live network acknowledgement fault or universal log-privacy
+proof is introduced. Native locks and controlled commit faults have bounded
+assertion coverage; they do not cover every possible database/network failure.
