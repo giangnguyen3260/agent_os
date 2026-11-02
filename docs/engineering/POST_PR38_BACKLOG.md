@@ -14,6 +14,17 @@ Latest storage instruction: [provider storage amendment](PROVIDER_CREDENTIAL_STO
 
 BA-03 checkpoint,2 November2026: PR46 delivers the public ADMIN-only provider options read, explicit durable deployment policy and shared PostgreSQL read admission. Tested checkpoint5018b0b completed57 focused Java21 cases plus11 CLI methods, Quality1442/0, Docker926 regular cases and1101 browser invocations plus3 repeats; independent QC accepted the bounded slice. Final c48414a changes evidence Markdown only. This does not deliver connection list/create/rotate/check/model APIs or the provider UI. Next is the collection read and durable health/integrity evidence, governed by [implementation preparation](PROVIDER_CONNECTION_LIST_IMPLEMENTATION_PLAN.md). Existing internal persistence must not be exposed as a public credential DTO; absent trusted health evidence cannot become a fabricated PRESENT state.
 
+BA-03 publication checkpoint,2 November2026: PR47 storage foundation has completed
+verification. Draft PR48 adds guarded provider evidence publication and a worker
+JDBC client. Corrected checkpoint f926b260 passed32 focused Java21 cases (12 client
+units,20 native real-LOGIN cases) after the recorded C1 failure. C2 full Quality passed1483 backend tests and frontend gates.
+C3 ed651915 passed39 focused cases and1490 full backend tests plus frontend gates,
+adding seven MAX, expiry and capacity methods.
+Independent full guarded-protocol acceptance and remaining protocol gaps stay open. Q3 deployment separation and the actual trusted
+external observer remain prerequisites before connection-list PRESENT projection.
+No provider connection UI, runtime activation or live execution is delivered by
+this SQL/client slice. See [publication QC](../qc/PROVIDER_EVIDENCE_PUBLICATION_QC_REPORT.md).
+
 ## Current boundary
 
 Authentication/recovery/workspace, persisted Team/Agent/Mission/Task configuration, draft input/owner/dependency editing and histories, member/invitation/grant management, bounded approvals, navigation and recorded-activity Trace have delivery evidence in their individual contracts and QC reports. PR38 automated gates passed; subsequent independent review found no blocker in its bounded scope as recorded above. Draft PRs are not a merged or deployed product. Configuration ownership is not runtime assignment; saved status and activity are not execution telemetry. Existing activation review is preflight, not a working activation command.

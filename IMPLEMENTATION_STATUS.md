@@ -1,3 +1,15 @@
+# Guarded provider evidence publication candidate — 2 November 2026
+
+Draft PR48 adds six scoped real-LOGIN capture/publication functions and an explicit
+non-Spring worker JDBC client. No Flyway migration, external observer, public list
+route or user deployment. C1 failed focused/native and full Quality checks; C2
+corrects invalid PostgreSQL metadata regex bounds, publisher SELECT preflight and
+a unique-fence fixture. C3 passed39 focused cases (12 client,27 native) and full Quality
+passed1490 backend tests plus frontend gates. Remaining protocol gaps still prevent
+full independent QC acceptance. Q3 protected deployment and Q4 guarded-protocol acceptance remain open.
+See `docs/qc/PROVIDER_EVIDENCE_PUBLICATION_QC_REPORT.md` and
+`docs/qc/PROVIDER_EVIDENCE_PUBLICATION_REVIEW.md`.
+
 # Provider evidence storage candidate — 2 November 2026
 
 PR47 adds empty V025 evidence storage and restricted capability-role scaffolding.
