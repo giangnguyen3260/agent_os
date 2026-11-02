@@ -1,11 +1,13 @@
 # AgentOS
 
-Provider options policy candidate adds the first ADMIN-only public provider options read,
-empty durable policy storage, explicit operator provisioning/CAS and shared database
-read admission. C2 passed53 focused Java21 cases,11 CLI tests,1438 full backend tests, audit0
-and Docker/provider/session/browser regression. C3 test hardening passed57 focused Java21 cases and1442 full backend tests;
-its Docker rerun remains pending. The completed Docker counts refer to C2. No provider calls or FE
-changes are included. See [contract](docs/engineering/PROVIDER_OPTIONS_POLICY_CONTRACT.md),
+Provider options policy candidate provides the first ADMIN-only public provider options
+read, empty durable policy storage, explicit operator provisioning/CAS and shared
+PostgreSQL read admission. C3 passed57 focused Java21 cases,11 CLI unittest methods,
+1442 full backend tests, audit0 and frontend gates. Docker passed926 regular backend
+tests,1101 disjoint browser invocations plus3 focused repeats, actual provider
+operator/cookie-session probes, retained native/SMTP and exact-session restart/logout.
+No automatic provider defaults, provider calls or FE changes. See
+[contract](docs/engineering/PROVIDER_OPTIONS_POLICY_CONTRACT.md),
 [operator runbook](backend/PROVIDER_POLICY_OPERATIONS.md) and
 [verification](docs/qc/PROVIDER_OPTIONS_POLICY_QC_REPORT.md).
 

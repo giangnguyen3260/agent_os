@@ -150,3 +150,56 @@ QC records a nonblocking nonhuman-cookie assertion limitation: the401 test alone
 cannot distinguish restored nonhuman authentication from an ignored cookie;
 production's explicit HumanIdentity gate is source-reviewed. Do not overstate
 that particular branch's session restoration evidence.
+
+## C3 completed Docker closure — 2 November 2026
+
+This checkpoint supersedes earlier C3 Docker-pending statements. Main inspected
+completed Docker run41371335229/job125042246928: SUCCESS, with format-review
+job125042246689 also SUCCESS. Tested source remains0d6970a4e34aa6dce6b102e22b4e23a8f9f44825,
+tree39796c92565ad7b861891cbc4977965c63820b3f, synthetic merge786cf384116fb2522a3c059d9c47a07d8ffc5237.
+
+Actual decoded logs record926 regular Java tests,0 failures/errors/skips. Disjoint
+browser summaries33+75+42+81+90+780 total1101 invocations; the separate invitation
+repeat group passed3. The retained780 group completed at02:09:44 UTC (25.9 minutes).
+No failed browser case was retried: workflow remains one worker, zero retries,
+max-failures1 and all retained selections unchanged.
+
+The actual provider CLI/cookie-session probe and emitted-SQL native absent-lock
+protocol passed at01:18:09 UTC. Retained PostgreSQL/SMTP probes passed. The
+account-first concurrent login/reset and stale-session probe passed at02:10:09 UTC;
+the exact existing session survived backend restart and logout rejected replay
+at02:10:21 UTC. This is completed evidence, not inference from an in-progress step.
+
+Together with independently corroborated focused57 Java21 cases plus11 CLI methods,
+Quality1442/0/0/0, audit0 and frontend gates, C3's configured acceptance gates are
+complete. These overlapping suite totals are not added as unique cases. Existing
+limits remain: controlled emitted-script protocol rather than an unmodified CLI
+replace subprocess race; injected post-commit fault rather than live TCP-drop;
+nonhuman-cookie401 restoration assertion limit; no universal logging privacy.
+No provider-network/key adapter, public writer, FE design change, new screenshot
+acceptance, Sonar gate, merge, deployment or user provisioning is claimed.
+
+## Final checkpoint HEAD verification — 2 November 2026
+
+The Markdown checkpoint5018b0b9be63e62c187214027bce242df1bf1a81 also completed all
+configured gates: focused run41371869052, Quality41371869059/job125043853563 and
+Docker41371869066/job125043853690 (format-review125043853914), all SUCCESS.
+Focused again recorded57 Java21 cases and11 CLI unittest methods; Quality again
+recorded1442 tests with0 failures/errors/skips, audit0 and frontend checks/build.
+These repeat runs are corroboration, not additional unique-case totals.
+
+Main independently inspected completed Docker logs:926 regular tests with0
+failures/errors/skips; disjoint browser groups33+75+42+81+90+780 =1101, plus3
+separate focused repeats. Actual provider CLI/emitted-script protocol/cookie
+probe passed at01:23:54 UTC. Retained native/SMTP passed; concurrent login/reset
+barrier passed at02:15:59 UTC. Exact existing session survived backend restart,
+and logout rejected replay at02:16:10 UTC. All previously pending C3 and
+checkpoint Docker gates are now closed for their actual tested checkouts.
+
+Independent QC corroborates completed logs in the owned review. Final evidence
+publication changes Markdown only; production Java, tests, V024, scripts and
+workflows remain exactly as verified above. No new runtime pass is inferred for
+that later documentation-only commit. Existing controlled-fault/protocol,
+nonhuman-cookie assertion and logging-privacy limits remain explicitly retained.
+PR46 stays draft/unmerged/undeployed; this closes the options/policy/read-admission
+slice, not the future provider connection/credential/check/runtime features.

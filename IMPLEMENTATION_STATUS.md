@@ -1,13 +1,15 @@
-# Provider completion boundary candidate — 1 November 2026
+# Provider options policy candidate — 2 November 2026
 
-Provider options policy candidate (`feature/provider-options-policy`): authored ADMIN-only
+Provider options policy candidate (`feature/provider-options-policy`): ADMIN-only
 options API, V024 empty policy/security admission tables, trusted operator CLI and actual
-Docker cookie-session probe. No automatic provider defaults, provider/key calls, public
-writes or FE change. C2 Java21/native/Quality/Docker verification passed (53 focused,1438 full
-backend; provider CLI/session probe and retained browser/restart gates). C3
-adds test hardening only:57 focused/1442 full backend tests passed; its Docker
-rerun and final independent acceptance remain pending. See `docs/qc/PROVIDER_OPTIONS_POLICY_QC_REPORT.md` and
-`backend/PROVIDER_POLICY_OPERATIONS.md`. Prior PR45 gates are closed separately.
+Docker cookie-session probe. C3 completed57 focused Java21 cases plus11 CLI methods,
+1442 full backend tests, audit0/frontend gates and Docker926 regular tests with1101
+retained disjoint browser invocations plus3 focused repeats. Provider operator/native,
+SMTP and exact-session restart/logout gates passed. No automatic provider defaults,
+provider/key calls, public writes, FE change, merge or deployment. See
+`docs/qc/PROVIDER_OPTIONS_POLICY_QC_REPORT.md` and `backend/PROVIDER_POLICY_OPERATIONS.md`.
+
+# Provider completion boundary candidate — 1 November 2026
 
 Explicit prepared-write and own-receipt lookup boundaries now own their transaction completion, refuse ambient context and distinguish confirmed success/rejection from uncertain completion without exposing provisional data. No retry, automatic lookup, key/vault work or compensation. Java21 focused177/0 passed, including61 H2 and62 native PostgreSQL completion cases; full Quality passed1385 backend tests, audit0/frontend gates; Completion Docker passed902 regular backend tests,1101 retained browser invocations plus3 focused repeats, native PostgreSQL/SMTP and exact-session restart/logout; independent source/test review found no publication blocker. This is not a public HTTP route, universal framework-log privacy or actual TCP-partition acceptance. See [QC](docs/qc/PROVIDER_COMPLETION_BOUNDARY_QC_REPORT.md). No migration, merge/deploy; Sonar paused.
 
