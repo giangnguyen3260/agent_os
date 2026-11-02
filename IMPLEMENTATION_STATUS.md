@@ -1,3 +1,14 @@
+# Provider evidence storage candidate — 2 November 2026
+
+PR47 adds empty V025 evidence storage and restricted capability-role scaffolding.
+C3 verified9 focused cases,1451 full backend tests, audit0/frontend gates and
+Docker929 regular tests plus1101 disjoint browser invocations and3 repeats.
+The full-suite connection-exhaustion failure is recorded; the bounded test-context
+cache correction passed the fresh full workload. No working publisher, public list
+API or secured current deployment is claimed. See
+`docs/qc/PROVIDER_EVIDENCE_STORAGE_QC_REPORT.md` and
+`backend/PROVIDER_EVIDENCE_OPERATIONS.md`. No merge/deploy; Sonar paused.
+
 # Provider options policy candidate — 2 November 2026
 
 Provider options policy candidate (`feature/provider-options-policy`): ADMIN-only

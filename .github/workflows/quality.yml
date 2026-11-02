@@ -50,8 +50,11 @@ jobs:
           TASK_EDIT_TEST_JDBC_URL: jdbc:postgresql://127.0.0.1:15432/agentos_test
           TASK_EDIT_TEST_DB_USER: agentos
           TASK_EDIT_TEST_DB_PASSWORD: agentos_ci_only
+          PROVIDER_EVIDENCE_ALLOW_ROLE_TESTS: 'true'
         # Default tests plus the explicit real-PostgreSQL suite, no silent skips.
-        run: mvn --batch-mode --no-transfer-progress -f backend/pom.xml '-Dtest=*Test,TeamSettingsPostgresIT,TaskDraftEditPostgresIT,MissionIntakePostgresIT,MissionIntakeHistoryPostgresIT,TaskOwnerPostgresIT,TaskOwnerHistoryPostgresIT,TaskDependenciesPostgresIT,TaskDependencyHistoryPostgresIT,ProviderConnectionPostgresIT,ProviderReceiptPostgresIT,ProviderCompletionPostgresIT,ProviderPolicyPostgresIT,ProviderOptionsPostgresIT' verify
+        # Bound retained contexts so evicted Hikari pools close before native suites.
+        # Per-context pool capacity and all test selections remain unchanged.
+        run: mvn --batch-mode --no-transfer-progress -f backend/pom.xml -Dspring.test.context.cache.maxSize=4 '-Dtest=*Test,TeamSettingsPostgresIT,TaskDraftEditPostgresIT,MissionIntakePostgresIT,MissionIntakeHistoryPostgresIT,TaskOwnerPostgresIT,TaskOwnerHistoryPostgresIT,TaskDependenciesPostgresIT,TaskDependencyHistoryPostgresIT,ProviderConnectionPostgresIT,ProviderReceiptPostgresIT,ProviderCompletionPostgresIT,ProviderPolicyPostgresIT,ProviderOptionsPostgresIT,ProviderEvidencePostgresIT' verify
       - name: Frontend dependencies
         working-directory: frontend
         run: npm ci

@@ -1,5 +1,13 @@
 # AgentOS
 
+Provider evidence storage candidate adds V025 empty integrity/health/publisher-fence
+records and a SELECT-only reader capability; publisher remains ungranted. Verified
+9 focused H2/PostgreSQL tests,1451 full backend tests, audit0/frontend gates and
+Docker929 regular tests with1101 browser invocations plus3 repeats. This is storage
+foundation, not a trusted producer, public list API or protected Compose rollout.
+See [QC](docs/qc/PROVIDER_EVIDENCE_STORAGE_QC_REPORT.md) and
+[operations](backend/PROVIDER_EVIDENCE_OPERATIONS.md).
+
 Provider options policy candidate provides the first ADMIN-only public provider options
 read, empty durable policy storage, explicit operator provisioning/CAS and shared
 PostgreSQL read admission. C3 passed57 focused Java21 cases,11 CLI unittest methods,
