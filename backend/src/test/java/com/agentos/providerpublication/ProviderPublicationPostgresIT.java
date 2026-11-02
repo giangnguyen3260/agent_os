@@ -2,6 +2,8 @@ package com.agentos.providerpublication;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Proxy;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -866,6 +868,116 @@ class ProviderPublicationPostgresIT {
                     + " and i.provider=q.provider and i.credential_revision=q.credential_revision"
                     + " where i.publication_revision=q.publication_revision"))
         .isEqualTo(1);
+  }
+
+  @Test
+  void postCommitAcknowledgementLossStaysUnknownAfterFreshHealthReplacement() throws Exception {
+    var scope = seed();
+    // Normal client capture is acknowledged and committed before the faulted publication begins.
+    var captured = checkedCapture("health", scope, "HEALTH").value();
+
+    // Controlled post-commit JDBC wrapper, not an actual TCP partition, native wire fault,
+    // or server-log privacy proof. Never expose underlying driver diagnostics.
+    class LostAcknowledgementDataSource extends DriverManagerDataSource {
+      int borrows;
+      int statements;
+      int commits;
+      int rollbacks;
+
+      LostAcknowledgementDataSource() {
+        super(databaseUrl, login("health"), password("health"));
+      }
+
+      @Override
+      public Connection getConnection() throws SQLException {
+        borrows++;
+        Connection actualConnection = super.getConnection();
+        return (Connection)
+            Proxy.newProxyInstance(
+                Connection.class.getClassLoader(),
+                new Class<?>[] {Connection.class},
+                (proxy, method, args) -> {
+                  switch (method.getName()) {
+                    case "commit":
+                      commits++;
+                      actualConnection.commit();
+                      throw new SQLException(
+                          "Controlled post-commit acknowledgement loss", "08006");
+                    case "prepareStatement":
+                    case "createStatement":
+                    case "prepareCall":
+                      statements++;
+                      break;
+                    case "rollback":
+                      rollbacks++;
+                      break;
+                    default:
+                      break;
+                  }
+                  try {
+                    return method.invoke(actualConnection, args);
+                  } catch (InvocationTargetException failure) {
+                    throw failure.getCause();
+                  }
+                });
+      }
+    }
+
+    var faultedDataSource = new LostAcknowledgementDataSource();
+    var original =
+        new ProviderPublicationClient(faultedDataSource)
+            .publishHealth(
+                captured.attemptId(),
+                ProviderPublicationClient.HealthOutcome.UNAVAILABLE,
+                false,
+                null);
+    assertThat(original.status()).isEqualTo(ProviderPublicationClient.Status.UNKNOWN);
+    assertThat(original.reason()).isEqualTo(ProviderPublicationClient.Reason.COMPLETION_UNKNOWN);
+    assertThat(original.value()).isNull();
+    assertThat(faultedDataSource.borrows).isEqualTo(1);
+    assertThat(faultedDataSource.statements).isEqualTo(1);
+    assertThat(faultedDataSource.commits).isEqualTo(1);
+    assertThat(faultedDataSource.rollbacks).isZero();
+
+    // Independent operator reads prove durable effects, without client readback or retry.
+    assertThat(count("select count(*) from public.provider_credential_health")).isEqualTo(1);
+    assertThat(
+            count(
+                "select count(*) from public.provider_credential_health"
+                    + " where publication_revision=1 and state='UNAVAILABLE'"))
+        .isEqualTo(1);
+    assertThat(
+            count(
+                "select count(*) from agentos_evidence_private.publication_attempts"
+                    + " where attempt_id='"
+                    + captured.attemptId()
+                    + "' and consumed"))
+        .isEqualTo(1);
+
+    var fresh = checkedCapture("health", scope, "HEALTH").value();
+    assertThat(fresh.attemptId()).isNotEqualTo(captured.attemptId());
+    var replacement =
+        client("health")
+            .publishHealth(
+                fresh.attemptId(), ProviderPublicationClient.HealthOutcome.USABLE, false, null);
+    assertThat(replacement.status()).isEqualTo(ProviderPublicationClient.Status.ACCEPTED);
+    assertThat(replacement.value().publicationRevision()).isEqualTo(2);
+    assertThat(replacement.value().state()).isEqualTo("USABLE");
+    assertThat(count("select count(*) from public.provider_credential_health")).isEqualTo(1);
+    assertThat(
+            count(
+                "select count(*) from public.provider_credential_health"
+                    + " where publication_revision=2 and state='USABLE'"))
+        .isEqualTo(1);
+
+    // A later successful replacement cannot resolve the historical client's unknown completion.
+    assertThat(original.status()).isEqualTo(ProviderPublicationClient.Status.UNKNOWN);
+    assertThat(original.reason()).isEqualTo(ProviderPublicationClient.Reason.COMPLETION_UNKNOWN);
+    assertThat(original.value()).isNull();
+    assertThat(faultedDataSource.borrows).isEqualTo(1);
+    assertThat(faultedDataSource.statements).isEqualTo(1);
+    assertThat(faultedDataSource.commits).isEqualTo(1);
+    assertThat(faultedDataSource.rollbacks).isZero();
   }
 
   @Test
