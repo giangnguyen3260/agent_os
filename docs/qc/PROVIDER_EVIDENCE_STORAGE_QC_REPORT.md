@@ -79,3 +79,37 @@ https://docs.spring.io/spring-framework/reference/testing/testcontext-framework/
 
 The correction still requires a fresh full-suite result; previous C1 success is not
 a substitute. Publication of the change alone does not close this failure.
+
+
+## C3 full regression closure — 2 November 2026
+
+This checkpoint supersedes the pending C3 statements above. Tested source is
+f1f05030791a9e494d26326d73084f08308c19a1, tree
+eeb355e684b1c6cf6bb3a40ef80058c65862bcb5, tested merge
+86283c54e41d6d2ab1d8f940dd6ba7be560eb5a2.
+
+Quality run41384029263/job125080790013 completed SUCCESS:1451 backend tests,
+0 failures/errors/skips, BUILD SUCCESS at03:39:58 UTC; audit0 and frontend
+checks/build passed. This is a fresh completed full-workload result after bounding
+the test-context cache, not a reassigned C1 pass. C2's failed1446/0/1 remains
+recorded above. No test selector, assertion, pool size or retry was weakened.
+
+Dedicated C3 run41384029230/job125080790024 independently recorded3 H2 and6 native
+PostgreSQL cases, all0 failures/errors/skips. Full Quality overlaps these cases;
+counts are not added as unique tests.
+
+Docker run41384029113/job125080789880 and format125080789757 completed SUCCESS.
+Actual logs:929 regular backend tests with0 failures/errors/skips; disjoint browser
+33+75+42+81+90+780=1101 passed, plus3 separate focused repeats. Native provider
+CLI/emitted-SQL protocol/cookie probe passed03:41:09 UTC. Retained PostgreSQL and
+SMTP probes passed. Exact existing session survived backend restart and logout
+rejected replay at04:21:27 UTC. No new UI or screenshot acceptance is inferred.
+
+This closes runtime acceptance of the empty storage/restricted-role foundation.
+It does not close Q3/Q4: current Compose still uses its bootstrap administrator;
+no protected deployment, trusted provenance/epoch/CAS/sticky-failure publication,
+working observer, PRESENT projection or public list route is delivered. Publisher
+remains deliberately ungranted. Operator SQL was executed only in disposable CI.
+No user DB operation, provider/key call, merge/deploy or Sonar gate is claimed.
+Final evidence publication changes Markdown only; all execution attribution stays
+with the exact source/merge above, not an inferred pass for a later docs commit.
