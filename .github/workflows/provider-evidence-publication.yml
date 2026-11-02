@@ -1,0 +1,64 @@
+name: Provider evidence guarded publication
+on:
+  pull_request:
+    paths:
+      - 'backend/**'
+      - 'docs/engineering/PROVIDER_PUBLICATION_SQL_API.md'
+      - '.github/workflows/provider-evidence-publication.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  provider-publication:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Generate masked disposable credentials only in CI
+        shell: bash
+        run: |
+          set +x
+          python3 - <<'PY'
+          import os
+          import secrets
+          with open(os.environ['GITHUB_ENV'], 'a') as destination:
+              for actor in ('ADMIN', 'HEALTH', 'PREPARE', 'UNREGISTERED', 'WEB', 'READER', 'RECREATED'):
+                  password = secrets.token_urlsafe(48)
+                  print('::add-mask::' + password)
+                  destination.write('PROVIDER_PUBLICATION_' + actor + '_PASSWORD=' + password + '\n')
+          PY
+      - name: Start isolated PostgreSQL with password authentication and private logging
+        shell: bash
+        run: |
+          set +x
+          export POSTGRES_PASSWORD="$PROVIDER_PUBLICATION_ADMIN_PASSWORD"
+          docker run --detach --name publication-postgres \
+            -p 127.0.0.1:15433:5432 \
+            -e POSTGRES_PASSWORD -e POSTGRES_USER=publication_operator \
+            -e POSTGRES_DB=publication_test -e POSTGRES_HOST_AUTH_METHOD=scram-sha-256 \
+            postgres:16-alpine \
+            -c log_statement=none -c log_min_error_statement=panic \
+            -c log_error_verbosity=terse -c log_parameter_max_length=0 \
+            -c log_parameter_max_length_on_error=0
+          for attempt in {1..60}; do
+            if docker exec publication-postgres pg_isready -h 127.0.0.1 -U publication_operator -d publication_test >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo 'Disposable PostgreSQL readiness failed'
+          exit 1
+      - name: Native guarded-publication fixtures (not observer validity)
+        env:
+          PROVIDER_PUBLICATION_ALLOW_ROLE_TESTS: 'true'
+          PROVIDER_PUBLICATION_ADMIN_JDBC_URL: jdbc:postgresql://127.0.0.1:15433/publication_test
+          PROVIDER_PUBLICATION_ADMIN_USER: publication_operator
+        run: mvn --batch-mode --no-transfer-progress -f backend/pom.xml -Dtest=ProviderPublicationClientTest,ProviderPublicationPostgresIT test
+      - name: Destroy disposable database service
+        if: always()
+        run: docker rm --force publication-postgres >/dev/null 2>&1 || true
