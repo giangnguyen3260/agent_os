@@ -981,6 +981,130 @@ class ProviderPublicationPostgresIT {
   }
 
   @Test
+  void loopbackCommitAckDropStaysUnknownAfterFreshHealthReplacement() throws Exception {
+    var scope = seed();
+    // Direct normal capture is committed before any proxy connection exists.
+    var captured = checkedCapture("health", scope, "HEALTH").value();
+    // Controlled real loopback transport loss, not an internet partition, exhaustive uncertainty
+    // coverage, or server-log privacy proof. The proxy never inspects frontend SQL or SCRAM data.
+    try (var proxy = new PostgresCommitAckProxy(databaseUrl)) {
+      class WorkerDataSource extends DriverManagerDataSource {
+        int borrows;
+        int statements;
+        int commits;
+        int rollbacks;
+        boolean commitConnectionFailure;
+
+        WorkerDataSource() {
+          super(proxy.jdbcUrl(), login("health"), password("health"));
+        }
+
+        @Override
+        public Connection getConnection() throws SQLException {
+          borrows++;
+          Connection actualConnection = super.getConnection();
+          // Counting only: the actual TCP proxy, not this JDBC wrapper, injects the loss.
+          return (Connection)
+              Proxy.newProxyInstance(
+                  Connection.class.getClassLoader(),
+                  new Class<?>[] {Connection.class},
+                  (connection, method, args) -> {
+                    switch (method.getName()) {
+                      case "prepareStatement":
+                      case "createStatement":
+                      case "prepareCall":
+                        statements++;
+                        break;
+                      case "commit":
+                        commits++;
+                        break;
+                      case "rollback":
+                        rollbacks++;
+                        break;
+                      default:
+                        break;
+                    }
+                    try {
+                      return method.invoke(actualConnection, args);
+                    } catch (InvocationTargetException failure) {
+                      if (method.getName().equals("commit")
+                          && failure.getCause() instanceof SQLException sql
+                          && sql.getSQLState() != null
+                          && sql.getSQLState().startsWith("08")) {
+                        commitConnectionFailure = true;
+                      }
+                      throw failure.getCause();
+                    }
+                  });
+        }
+      }
+
+      var workerDataSource = new WorkerDataSource();
+      var original =
+          new ProviderPublicationClient(workerDataSource)
+              .publishHealth(
+                  captured.attemptId(),
+                  ProviderPublicationClient.HealthOutcome.UNAVAILABLE,
+                  false,
+                  null);
+      assertThat(proxy.awaitCommittedDrop())
+          .as(
+              "Actual backend COMMIT completion and idle ReadyForQuery withheld before socket"
+                  + " close")
+          .isTrue();
+      assertThat(original.status()).isEqualTo(ProviderPublicationClient.Status.UNKNOWN);
+      assertThat(workerDataSource.commitConnectionFailure).isTrue();
+      assertThat(original.reason()).isEqualTo(ProviderPublicationClient.Reason.COMPLETION_UNKNOWN);
+      assertThat(original.value()).isNull();
+      assertThat(workerDataSource.borrows).isEqualTo(1);
+      assertThat(workerDataSource.statements).isEqualTo(1);
+      assertThat(workerDataSource.commits).isEqualTo(1);
+      assertThat(workerDataSource.rollbacks).isZero();
+      assertThat(proxy.acceptedConnections()).isEqualTo(1);
+
+      // Independent private fixture reads prove the commit survived the dropped acknowledgement.
+      assertThat(count("select count(*) from public.provider_credential_health")).isEqualTo(1);
+      assertThat(
+              count(
+                  "select count(*) from public.provider_credential_health"
+                      + " where publication_revision=1 and state='UNAVAILABLE'"))
+          .isEqualTo(1);
+      assertThat(
+              count(
+                  "select count(*) from agentos_evidence_private.publication_attempts"
+                      + " where attempt_id='"
+                      + captured.attemptId()
+                      + "' and consumed"))
+          .isEqualTo(1);
+
+      var fresh = checkedCapture("health", scope, "HEALTH").value();
+      assertThat(fresh.attemptId()).isNotEqualTo(captured.attemptId());
+      var replacement =
+          client("health")
+              .publishHealth(
+                  fresh.attemptId(), ProviderPublicationClient.HealthOutcome.USABLE, false, null);
+      assertThat(replacement.status()).isEqualTo(ProviderPublicationClient.Status.ACCEPTED);
+      assertThat(replacement.value().publicationRevision()).isEqualTo(2);
+      assertThat(replacement.value().state()).isEqualTo("USABLE");
+      assertThat(count("select count(*) from public.provider_credential_health")).isEqualTo(1);
+      assertThat(
+              count(
+                  "select count(*) from public.provider_credential_health"
+                      + " where publication_revision=2 and state='USABLE'"))
+          .isEqualTo(1);
+      assertThat(original.status()).isEqualTo(ProviderPublicationClient.Status.UNKNOWN);
+      assertThat(original.reason()).isEqualTo(ProviderPublicationClient.Reason.COMPLETION_UNKNOWN);
+      assertThat(original.value()).isNull();
+      assertThat(workerDataSource.borrows).isEqualTo(1);
+      assertThat(workerDataSource.statements).isEqualTo(1);
+      assertThat(workerDataSource.commits).isEqualTo(1);
+      assertThat(workerDataSource.rollbacks).isZero();
+      assertThat(workerDataSource.commitConnectionFailure).isTrue();
+      assertThat(proxy.acceptedConnections()).isEqualTo(1);
+    }
+  }
+
+  @Test
   void casLossInvalidPresenceAndTimeBeforeFailedPreserveEvidence() throws Exception {
     var scope = seed();
     var first = checkedCapture("health", scope, "HEALTH").value();
