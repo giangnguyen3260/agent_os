@@ -411,6 +411,12 @@ class ProviderPublicationPostgresIT {
   }
 
   private String fingerprint() throws Exception {
+    try (var connection = admin(databaseUrl)) {
+      return fingerprint(connection);
+    }
+  }
+
+  private String fingerprint(Connection connection) throws Exception {
     var digest = MessageDigest.getInstance("SHA-256");
     for (String table :
         List.of(
@@ -426,8 +432,7 @@ class ProviderPublicationPostgresIT {
             "agentos_evidence_private.integrity_assertions",
             "agentos_evidence_private.integrity_provenance")) {
       digest.update(table.getBytes(StandardCharsets.UTF_8));
-      try (var connection = admin(databaseUrl);
-          var statement = connection.createStatement();
+      try (var statement = connection.createStatement();
           var rows =
               statement.executeQuery(
                   "select pg_catalog.row_to_json(t)::text from "
@@ -441,6 +446,248 @@ class ProviderPublicationPostgresIT {
     }
     // Only a digest is included in assertion failures; never print private captured row contents.
     return java.util.HexFormat.of().formatHex(digest.digest());
+  }
+
+  @Test
+  void authorityAndForeignConnectionScopeDenialsPreserveAllRows() throws Exception {
+    var scope = seed();
+    var other = seed();
+    var foreignConnection =
+        new ProviderPublicationClient.Scope(
+            other.organizationId(), scope.connectionId(), "OPENAI", 1);
+    var missingOrganization =
+        new ProviderPublicationClient.Scope(UUID.randomUUID(), scope.connectionId(), "OPENAI", 1);
+    var wrongProvider =
+        new ProviderPublicationClient.Scope(
+            scope.organizationId(), scope.connectionId(), "ANTHROPIC", 1);
+    for (var request : List.of(foreignConnection, missingOrganization, wrongProvider)) {
+      String before = fingerprint();
+      var result = client("health").beginHealth(request);
+      assertThat(result.status()).isEqualTo(ProviderPublicationClient.Status.REJECTED);
+      assertThat(result.reason())
+          .isEqualTo(
+              request.equals(foreignConnection)
+                  ? ProviderPublicationClient.Reason.BINDING
+                  : ProviderPublicationClient.Reason.AUTHORITY);
+      assertThat(result.value()).isNull();
+      assertThat(fingerprint()).isEqualTo(before);
+    }
+  }
+
+  @Test
+  void disablingRegistrationOrRemovingPermissionInvalidatesCommittedCaptures() throws Exception {
+    for (String mode : List.of("DISABLE", "REMOVE_PERMISSION")) {
+      var scope = seed();
+      var capture = checkedCapture("health", scope, "HEALTH").value();
+      if (mode.equals("DISABLE")) {
+        update(
+            "update agentos_evidence_private.publisher_principals set enabled=false"
+                + " where organization_id=? and login_name=?",
+            scope.organizationId(),
+            login("health"));
+      } else {
+        update(
+            "delete from agentos_evidence_private.publisher_permissions where kind='HEALTH'"
+                + " and publisher_id in (select publisher_id from"
+                + " agentos_evidence_private.publisher_principals"
+                + " where organization_id=? and login_name=?)",
+            scope.organizationId(),
+            login("health"));
+      }
+      String before = fingerprint();
+      var rejectedCapture = client("health").beginHealth(scope);
+      assertThat(rejectedCapture.status()).isEqualTo(ProviderPublicationClient.Status.REJECTED);
+      assertThat(rejectedCapture.reason()).isEqualTo(ProviderPublicationClient.Reason.AUTHORITY);
+      assertThat(rejectedCapture.value()).isNull();
+      var rejectedPublication =
+          client("health")
+              .publishHealth(
+                  capture.attemptId(),
+                  ProviderPublicationClient.HealthOutcome.UNAVAILABLE,
+                  false,
+                  null);
+      assertThat(rejectedPublication.status()).isEqualTo(ProviderPublicationClient.Status.REJECTED);
+      assertThat(rejectedPublication.reason())
+          .isEqualTo(ProviderPublicationClient.Reason.AUTHORITY);
+      assertThat(rejectedPublication.value()).isNull();
+      assertThat(fingerprint()).isEqualTo(before);
+    }
+  }
+
+  @Test
+  void eachMetadataAndVerifierSubstitutionInvalidatesCapturedPublicationWithoutWrites()
+      throws Exception {
+    for (String field :
+        List.of("external_locator", "external_key_version", "hmac_key_version", "verifier")) {
+      var scope = seed();
+      var capture = checkedCapture("health", scope, "HEALTH").value();
+      if (field.equals("verifier")) {
+        byte[] replacement = new byte[32];
+        java.util.Arrays.fill(replacement, (byte) 1);
+        update(
+            "update public.provider_credential_versions set verifier=?"
+                + " where organization_id=? and connection_id=?",
+            java.util.Base64.getEncoder().encodeToString(replacement),
+            scope.organizationId(),
+            scope.connectionId());
+      } else {
+        replaceBindingMetadata(scope, field, "substituted-v2");
+      }
+      // Privileged corruption is a controlled fixture, not an allowed worker mutation path.
+      String before = fingerprint();
+      var result =
+          client("health")
+              .publishHealth(
+                  capture.attemptId(), ProviderPublicationClient.HealthOutcome.USABLE, false, null);
+      assertThat(result.status()).isEqualTo(ProviderPublicationClient.Status.REJECTED);
+      assertThat(result.reason()).isEqualTo(ProviderPublicationClient.Reason.BINDING);
+      assertThat(result.value()).isNull();
+      assertThat(fingerprint()).isEqualTo(before);
+    }
+  }
+
+  @Test
+  void registryFenceChangeDuringObservedPublicationWaitRejectsWithoutAnyPublicationWrites()
+      throws Exception {
+    var scope = seed();
+    var capture = checkedCapture("health", scope, "HEALTH").value();
+    var executor = Executors.newSingleThreadExecutor();
+    try (var operator = admin(databaseUrl)) {
+      operator.setAutoCommit(false);
+      int blocker;
+      try (var statement = operator.createStatement();
+          var rows = statement.executeQuery("select pg_backend_pid()")) {
+        assertThat(rows.next()).isTrue();
+        blocker = rows.getInt(1);
+      }
+      try (var statement =
+          operator.prepareStatement(
+              "select publisher_id from public.provider_evidence_publishers"
+                  + " where publisher_id in (select publisher_id from"
+                  + " agentos_evidence_private.publisher_principals"
+                  + " where organization_id=? and login_name=?) for update")) {
+        statement.setObject(1, scope.organizationId());
+        statement.setString(2, login("health"));
+        try (var rows = statement.executeQuery()) {
+          assertThat(rows.next()).isTrue();
+          assertThat(rows.next()).isFalse();
+        }
+      }
+      var publication =
+          executor.submit(
+              () ->
+                  client("health")
+                      .publishHealth(
+                          capture.attemptId(),
+                          ProviderPublicationClient.HealthOutcome.UNAVAILABLE,
+                          false,
+                          null));
+      awaitWorkerBlockedBy("health", blocker);
+      try (var statement =
+          operator.prepareStatement(
+              "update public.provider_evidence_publishers set publisher_epoch=publisher_epoch+1,"
+                  + " publisher_fence=gen_random_uuid() where publisher_id in"
+                  + " (select publisher_id from agentos_evidence_private.publisher_principals"
+                  + " where organization_id=? and login_name=?)")) {
+        statement.setObject(1, scope.organizationId());
+        statement.setString(2, login("health"));
+        assertThat(statement.executeUpdate()).isEqualTo(1);
+      }
+      // See our intended fence update while the worker is provably blocked. A baseline taken
+      // only after releasing the lock could accidentally include a forbidden worker write.
+      String expected = fingerprint(operator);
+      operator.commit();
+      var result = publication.get(10, TimeUnit.SECONDS);
+      assertThat(result.status()).isEqualTo(ProviderPublicationClient.Status.REJECTED);
+      assertThat(result.reason()).isEqualTo(ProviderPublicationClient.Reason.AUTHORITY);
+      assertThat(result.value()).isNull();
+      assertThat(fingerprint()).isEqualTo(expected);
+    } finally {
+      executor.shutdownNow();
+    }
+  }
+
+  private void awaitWorkerBlockedBy(String name, int blocker) throws Exception {
+    long timeout = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+    while (System.nanoTime() < timeout) {
+      try (var connection = admin(databaseUrl);
+          var statement =
+              connection.prepareStatement(
+                  "select count(*) from pg_catalog.pg_stat_activity where usename=? and"
+                      + " wait_event_type='Lock' and ?=any(pg_catalog.pg_blocking_pids(pid))")) {
+        statement.setString(1, login(name));
+        statement.setInt(2, blocker);
+        try (var rows = statement.executeQuery()) {
+          assertThat(rows.next()).isTrue();
+          if (rows.getLong(1) == 1) return;
+        }
+      }
+      Thread.sleep(10);
+    }
+    throw new AssertionError("Expected a worker lock wait blocked by the fixture operator");
+  }
+
+  @Test
+  void injectedEvidenceAssertionAndProvenanceFailuresRollBackAllPublicationRows() throws Exception {
+    for (String table :
+        List.of(
+            "public.provider_credential_integrity",
+            "public.provider_credential_health",
+            "agentos_evidence_private.integrity_assertions",
+            "agentos_evidence_private.integrity_provenance")) {
+      var scope = seed();
+      boolean health = table.equals("public.provider_credential_health");
+      String actor = health ? "health" : "prepare";
+      String kind = health ? "HEALTH" : "PREPARE";
+      var capture = checkedCapture(actor, scope, kind).value();
+      try (var operator = admin(databaseUrl);
+          var statement = operator.createStatement()) {
+        statement.execute(
+            "create function agentos_evidence_private.reject_publication_fixture()"
+                + " returns trigger language plpgsql as $fixture$ begin"
+                + " raise exception using errcode='P0001',"
+                + " message='Controlled publication fixture rejection'; end; $fixture$");
+        try {
+          statement.execute(
+              "create trigger reject_publication_fixture before insert on "
+                  + table
+                  + " for each row execute function"
+                  + " agentos_evidence_private.reject_publication_fixture()");
+          String before = fingerprint();
+          var rejected =
+              health
+                  ? client(actor)
+                      .publishHealth(
+                          capture.attemptId(),
+                          ProviderPublicationClient.HealthOutcome.UNAVAILABLE,
+                          false,
+                          null)
+                  : client(actor).assertPrepared(capture.attemptId());
+          assertThat(rejected.status()).isEqualTo(ProviderPublicationClient.Status.FAILED);
+          assertThat(rejected.reason())
+              .isEqualTo(ProviderPublicationClient.Reason.DEPENDENCY_UNAVAILABLE);
+          assertThat(rejected.value()).isNull();
+          assertThat(fingerprint()).isEqualTo(before);
+        } finally {
+          statement.execute("drop trigger if exists reject_publication_fixture on " + table);
+          statement.execute("drop function agentos_evidence_private.reject_publication_fixture()");
+        }
+      } catch (SQLException failure) {
+        throw safeSqlFailure("Atomic rollback fixture failed", failure);
+      }
+      // A new independent controlled observation succeeds after removing the injected fault.
+      var fresh = checkedCapture(actor, scope, kind).value();
+      var accepted =
+          health
+              ? client(actor)
+                  .publishHealth(
+                      fresh.attemptId(),
+                      ProviderPublicationClient.HealthOutcome.UNAVAILABLE,
+                      false,
+                      null)
+              : client(actor).assertPrepared(fresh.attemptId());
+      assertThat(accepted.status()).isEqualTo(ProviderPublicationClient.Status.ACCEPTED);
+    }
   }
 
   @Test
