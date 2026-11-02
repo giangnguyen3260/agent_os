@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterAll;
@@ -780,6 +781,49 @@ class ProviderPublicationPostgresIT {
       assertThat(accepted.status()).isEqualTo(ProviderPublicationClient.Status.ACCEPTED);
       assertThat(accepted.value().publicationRevision()).isEqualTo(2);
       assertThat(accepted.value().state()).isEqualTo("USABLE");
+    }
+  }
+
+  @Test
+  void firstEvidencePostConsumptionFaultsRestoreAbsenceForEveryPublicationKind() throws Exception {
+    var fault = new MutationFault("agentos_evidence_private.publication_attempts", "update", true);
+    for (String kind : List.of("PREPARE", "HEALTH", "INTEGRITY_FAILURE")) {
+      var scope = seed();
+      String actor = kind.equals("PREPARE") ? "prepare" : "health";
+      Function<UUID, ProviderPublicationClient.Result<ProviderPublicationClient.Publication>>
+          publish =
+              attempt ->
+                  switch (kind) {
+                    case "PREPARE" -> client(actor).assertPrepared(attempt);
+                    case "HEALTH" ->
+                        client(actor)
+                            .publishHealth(
+                                attempt,
+                                ProviderPublicationClient.HealthOutcome.USABLE,
+                                false,
+                                null);
+                    case "INTEGRITY_FAILURE" -> client(actor).publishIntegrityFailure(attempt);
+                    default ->
+                        throw new IllegalArgumentException("Unknown fixture publication kind");
+                  };
+      var captured = checkedCapture(actor, scope, kind).value();
+      assertMutationRollback(fault, () -> publish.apply(captured.attemptId()));
+      var fresh = checkedCapture(actor, scope, kind).value();
+      var accepted = publish.apply(fresh.attemptId());
+      String expectedState =
+          switch (kind) {
+            case "PREPARE" -> "VERIFIED_AT_WRITE";
+            case "HEALTH" -> "USABLE";
+            case "INTEGRITY_FAILURE" -> "FAILED";
+            default -> throw new IllegalArgumentException("Unknown fixture publication kind");
+          };
+      assertThat(accepted.status()).isEqualTo(ProviderPublicationClient.Status.ACCEPTED);
+      assertThat(accepted.value().publicationRevision()).isEqualTo(1);
+      assertThat(accepted.value().state()).isEqualTo(expectedState);
+      if (!kind.equals("HEALTH")) {
+        assertThat(currentIntegrityPinCount(fresh.attemptId(), expectedState, 1)).isEqualTo(1);
+        assertThat(pinnedFingerprint(fresh.attemptId())).isNotEmpty();
+      }
     }
   }
 
