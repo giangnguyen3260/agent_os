@@ -276,6 +276,10 @@ class ProviderEvidencePostgresIT {
             }
           } else denied(connection, "select * from " + table);
         }
+        denied(connection, "update provider_evidence_publishers set publisher_epoch=2");
+        denied(connection, "delete from provider_evidence_publishers");
+        denied(connection, "truncate provider_evidence_publishers");
+        denied(connection, "alter table provider_evidence_publishers add column bypass integer");
         // Valid statements: an unrelated constraint/syntax failure cannot count as denial.
         denied(connection, EvidenceAssertions.integrity());
         denied(connection, EvidenceAssertions.health());
