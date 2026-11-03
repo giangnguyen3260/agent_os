@@ -2,6 +2,8 @@ package com.agentos.providerpublication;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Proxy;
 import java.nio.charset.StandardCharsets;
@@ -845,9 +847,10 @@ class ProviderPublicationPostgresIT {
         statement.execute(
             "create function agentos_evidence_private.fixture_mutation_fault() returns trigger"
                 + " language plpgsql as $fixture$ begin perform pg_catalog.nextval("
-                + "'agentos_evidence_private.fixture_fault_witness'::pg_catalog.regclass);"
-                + " raise exception using errcode='P0001',message='Controlled mutation fault';"
-                + " end; $fixture$");
+                + "'agentos_evidence_private.fixture_fault_witness'::pg_catalog.regclass); raise"
+                + " exception using"
+                + " errcode='P0001',message='PRIVATE_NATIVE_PUBLICATION_FAULT_SENTINEL'; end;"
+                + " $fixture$");
         statement.execute(
             "create trigger fixture_mutation_fault after "
                 + fault.operation()
@@ -857,7 +860,25 @@ class ProviderPublicationPostgresIT {
                 + (fault.consumptionOnly() ? "when (new.consumed and not old.consumed) " : "")
                 + "execute function agentos_evidence_private.fixture_mutation_fault()");
         String before = fingerprint();
-        var rejected = publication.get();
+        var output = new ByteArrayOutputStream();
+        var originalOut = System.out;
+        var originalErr = System.err;
+        ProviderPublicationClient.Result<ProviderPublicationClient.Publication> rejected;
+        try (var captured = new PrintStream(output, true, StandardCharsets.UTF_8)) {
+          System.setOut(captured);
+          System.setErr(captured);
+          rejected = publication.get();
+        } finally {
+          System.setOut(originalOut);
+          System.setErr(originalErr);
+        }
+        assertThat(
+                output
+                    .toString(StandardCharsets.UTF_8)
+                    .contains("PRIVATE_NATIVE_PUBLICATION_FAULT_SENTINEL"))
+            .isFalse();
+        assertThat(rejected.toString().contains("PRIVATE_NATIVE_PUBLICATION_FAULT_SENTINEL"))
+            .isFalse();
         assertThat(rejected.status()).isEqualTo(ProviderPublicationClient.Status.FAILED);
         assertThat(rejected.reason())
             .isEqualTo(ProviderPublicationClient.Reason.DEPENDENCY_UNAVAILABLE);

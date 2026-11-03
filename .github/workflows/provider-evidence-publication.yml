@@ -59,6 +59,23 @@ jobs:
           PROVIDER_PUBLICATION_ADMIN_JDBC_URL: jdbc:postgresql://127.0.0.1:15433/publication_test
           PROVIDER_PUBLICATION_ADMIN_USER: publication_operator
         run: mvn --batch-mode --no-transfer-progress -f backend/pom.xml -Dtest=ProviderPublicationClientTest,ProviderPublicationPostgresIT test
+      - name: Check PostgreSQL logs for the controlled publication fault
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import subprocess
+          import sys
+          result = subprocess.run(
+              ["docker", "logs", "publication-postgres"], capture_output=True, check=False
+          )
+          logs = result.stdout + result.stderr
+          if result.returncode or b"ready to accept connections" not in logs:
+              sys.exit("Could not verify disposable PostgreSQL logs")
+          if b"PRIVATE_NATIVE_PUBLICATION_FAULT_SENTINEL" in logs:
+              sys.exit("Controlled publication fault appeared in PostgreSQL logs")
+          print("Controlled publication fault absent from PostgreSQL logs")
+          PY
       - name: Destroy disposable database service
         if: always()
         run: docker rm --force publication-postgres >/dev/null 2>&1 || true
