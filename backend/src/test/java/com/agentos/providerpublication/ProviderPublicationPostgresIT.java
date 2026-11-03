@@ -1173,6 +1173,49 @@ class ProviderPublicationPostgresIT {
   }
 
   @Test
+  void publisherTemporaryTablesCannotShadowAuthorityOrPublicationRows() throws Exception {
+    var scope = seed();
+    try (var worker = actor("health");
+        var setup = worker.createStatement()) {
+      setup.execute("create temp table publisher_principals (publisher_id uuid)");
+      setup.execute("create temp table organizations (id uuid)");
+      setup.execute("create temp table publication_attempts (attempt_id uuid)");
+      setup.execute("set search_path to pg_temp, public, pg_catalog");
+      UUID attempt;
+      try (var capture =
+          worker.prepareStatement(
+              "select status,attempt_id from agentos_evidence_private.begin_health(?,?,?,?)")) {
+        capture.setObject(1, scope.organizationId());
+        capture.setObject(2, scope.connectionId());
+        capture.setString(3, "OPENAI");
+        capture.setLong(4, 1);
+        try (var rows = capture.executeQuery()) {
+          assertThat(rows.next()).isTrue();
+          assertThat(rows.getString(1)).isEqualTo("ACCEPTED");
+          attempt = rows.getObject(2, UUID.class);
+        }
+      }
+      try (var publish =
+          worker.prepareStatement(
+              "select status from"
+                  + " agentos_evidence_private.publish_health(?,'USABLE',false,null)")) {
+        publish.setObject(1, attempt);
+        try (var rows = publish.executeQuery()) {
+          assertThat(rows.next()).isTrue();
+          assertThat(rows.getString(1)).isEqualTo("ACCEPTED");
+        }
+      }
+      try (var rows = setup.executeQuery("select count(*) from pg_temp.publication_attempts")) {
+        assertThat(rows.next()).isTrue();
+        assertThat(rows.getLong(1)).isZero();
+      }
+    } catch (SQLException failure) {
+      throw safeSqlFailure("Temporary shadow fixture failed", failure);
+    }
+    assertThat(count("select count(*) from public.provider_credential_health")).isEqualTo(1);
+  }
+
+  @Test
   void futureDefinerFunctionDoesNotInheritPublicOrPublisherExecute() throws Exception {
     try (var operator = admin(databaseUrl);
         var statement = operator.createStatement()) {
