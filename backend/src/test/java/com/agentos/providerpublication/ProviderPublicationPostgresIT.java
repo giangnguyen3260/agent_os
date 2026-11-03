@@ -1437,6 +1437,54 @@ class ProviderPublicationPostgresIT {
   }
 
   @Test
+  void listEvidenceRequiresPreparedProvenanceFreshHealthAndCurrentFence() throws Exception {
+    var scope = seed();
+    var health = checkedCapture("health", scope, "HEALTH").value();
+    var publication =
+        client("health")
+            .publishHealth(
+                health.attemptId(), ProviderPublicationClient.HealthOutcome.USABLE, false, null);
+    assertThat(publication.status()).isEqualTo(ProviderPublicationClient.Status.ACCEPTED);
+    assertThat(listEvidence(scope, publication.value().publishedAt())).isFalse();
+
+    var preparation = checkedCapture("prepare", scope, "PREPARE").value();
+    var prepared = client("prepare").assertPrepared(preparation.attemptId());
+    assertThat(prepared.status()).isEqualTo(ProviderPublicationClient.Status.ACCEPTED);
+    assertThat(listEvidence(scope, prepared.value().recordedAt())).isTrue();
+    assertThat(listEvidence(scope, publication.value().validUntil())).isFalse();
+
+    update(
+        "update public.provider_evidence_publishers set publisher_epoch=publisher_epoch+1"
+            + " where publisher_id=?",
+        publication.value().publisherId());
+    assertThat(listEvidence(scope, prepared.value().recordedAt())).isFalse();
+  }
+
+  private boolean listEvidence(
+      ProviderPublicationClient.Scope scope, java.time.OffsetDateTime pageClock) throws Exception {
+    String sql;
+    try (var resource =
+        getClass().getResourceAsStream("/sql/provider-list-credential-evidence.sql")) {
+      if (resource == null) throw new IllegalStateException("Missing list evidence query");
+      sql = new String(resource.readAllBytes(), StandardCharsets.UTF_8);
+    }
+    try (var operator = admin(databaseUrl);
+        var statement = operator.prepareStatement(sql)) {
+      statement.setObject(1, scope.organizationId());
+      statement.setObject(2, scope.connectionId());
+      statement.setObject(3, pageClock);
+      try (var rows = statement.executeQuery()) {
+        assertThat(rows.next()).isTrue();
+        boolean available = rows.getBoolean(1);
+        assertThat(rows.next()).isFalse();
+        return available;
+      }
+    } catch (SQLException failure) {
+      throw safeSqlFailure("List evidence fixture failed", failure);
+    }
+  }
+
+  @Test
   void realRegisteredClientsPublishHealthAndLinkedPreparationWithNoAutomaticSuccess()
       throws Exception {
     var scope = seed();
