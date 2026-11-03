@@ -11,7 +11,7 @@ import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-/** Internal configuration read. Credential evidence must be evaluated before exposing an API. */
+/** Internal list snapshot; HTTP wiring requires the separately provisioned read capability. */
 @Service
 class ProviderListSnapshot {
   static final int PAGE_SIZE = 20;
@@ -36,7 +36,8 @@ class ProviderListSnapshot {
       long revision,
       long credentialRevision,
       OffsetDateTime createdAt,
-      OffsetDateTime updatedAt) {}
+      OffsetDateTime updatedAt,
+      boolean credentialAvailable) {}
 
   @JsonIgnoreType
   record Page(long total, int page, List<Row> rows) {
@@ -50,6 +51,18 @@ class ProviderListSnapshot {
       isolation = Isolation.REPEATABLE_READ,
       propagation = Propagation.REQUIRES_NEW)
   public Page read(HumanIdentity actor, UUID organization, int page) {
+    return readPage(actor, organization, page, false);
+  }
+
+  @Transactional(
+      readOnly = true,
+      isolation = Isolation.REPEATABLE_READ,
+      propagation = Propagation.REQUIRES_NEW)
+  public Page readWithEvidence(HumanIdentity actor, UUID organization, int page) {
+    return readPage(actor, organization, page, true);
+  }
+
+  private Page readPage(HumanIdentity actor, UUID organization, int page, boolean evidence) {
     try {
       authority.require(actor, organization);
       if (page < 0 || page > 100_000) throw OptionsWire.bad();
@@ -59,14 +72,27 @@ class ProviderListSnapshot {
               Long.class,
               organization);
       if (total == null || total < 0 || total > MAX_SAFE_TOTAL) throw PolicyFailure.unavailable();
+      String pageQuery =
+          """
+          select organization_id,id,provider,mode,name,workspace,state,
+                 configuration_revision,credential_revision,created_at,updated_at
+          from public.provider_connections where organization_id=?
+          order by created_at desc,id desc limit 20 offset ?
+          """;
+      String query =
+          evidence
+              ? "with selected as materialized ("
+                  + pageQuery
+                  + ")"
+                  + " select selected.*, agentos_list_read.credential_available(organization_id,id)"
+                  + " from selected order by created_at desc,id desc"
+              : "select selected.*, false from ("
+                  + pageQuery
+                  + ") selected"
+                  + " order by created_at desc,id desc";
       List<Row> rows =
           jdbc.query(
-              """
-              select organization_id,id,provider,mode,name,workspace,state,
-                     configuration_revision,credential_revision,created_at,updated_at
-              from public.provider_connections where organization_id=?
-              order by created_at desc,id desc limit 20 offset ?
-              """,
+              query,
               (rs, index) ->
                   new Row(
                       rs.getObject(1, UUID.class),
@@ -79,7 +105,8 @@ class ProviderListSnapshot {
                       rs.getLong(8),
                       rs.getLong(9),
                       rs.getObject(10, OffsetDateTime.class),
-                      rs.getObject(11, OffsetDateTime.class)),
+                      rs.getObject(11, OffsetDateTime.class),
+                      rs.getBoolean(12)),
               organization,
               page * PAGE_SIZE);
       return new Page(total, page, rows);

@@ -34,17 +34,16 @@ record ProviderListResponse(
   @JsonInclude(JsonInclude.Include.ALWAYS)
   record WorkspaceOptions(String workspaceId) {}
 
-  // This projection is internal until the reviewed evidence join is wired into the same snapshot.
-  static ProviderListResponse withoutEvidence(UUID organization, ProviderListSnapshot.Page page) {
+  static ProviderListResponse fromSnapshot(UUID organization, ProviderListSnapshot.Page page) {
     return new ProviderListResponse(
         organization,
         page.page(),
         ProviderListSnapshot.PAGE_SIZE,
         page.total(),
-        page.rows().stream().map(row -> unavailableItem(organization, row)).toList());
+        page.rows().stream().map(row -> item(organization, row)).toList());
   }
 
-  private static Item unavailableItem(UUID organization, ProviderListSnapshot.Row row) {
+  private static Item item(UUID organization, ProviderListSnapshot.Row row) {
     if (!canonical(organization)
         || !organization.equals(row.organization())
         || !canonical(row.id())
@@ -78,8 +77,8 @@ record ProviderListResponse(
         row.state(),
         Long.toString(row.revision()),
         Long.toString(row.credentialRevision()),
-        "UNAVAILABLE",
-        null,
+        row.credentialAvailable() ? "PRESENT" : "UNAVAILABLE",
+        row.credentialAvailable() ? "••••••••" : null,
         time(row.createdAt()),
         time(row.updatedAt()));
   }

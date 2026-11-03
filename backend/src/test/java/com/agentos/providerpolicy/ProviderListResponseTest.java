@@ -16,9 +16,9 @@ class ProviderListResponseTest {
 
   @Test
   void serializesOnlyTheAllowlistedFieldsAndExplicitNulls() throws Exception {
-    var page = new ProviderListSnapshot.Page(1, 0, List.of(row("Connection")));
+    var page = new ProviderListSnapshot.Page(1, 0, List.of(row("Connection", false)));
     var json =
-        new ObjectMapper().valueToTree(ProviderListResponse.withoutEvidence(organization, page));
+        new ObjectMapper().valueToTree(ProviderListResponse.fromSnapshot(organization, page));
     assertThat(fields(json))
         .containsExactlyInAnyOrder("organizationId", "page", "pageSize", "total", "items");
     var item = json.get("items").get(0);
@@ -46,10 +46,19 @@ class ProviderListResponseTest {
 
   @Test
   void rejectsTheWholeProjectionWhenSelectedConfigurationIsMalformed() {
-    var page = new ProviderListSnapshot.Page(1, 0, List.of(row("Invalid\nname")));
-    assertThatThrownBy(() -> ProviderListResponse.withoutEvidence(organization, page))
+    var page = new ProviderListSnapshot.Page(1, 0, List.of(row("Invalid\nname", false)));
+    assertThatThrownBy(() -> ProviderListResponse.fromSnapshot(organization, page))
         .isInstanceOfSatisfying(
             PolicyFailure.class, error -> assertThat(error.status()).isEqualTo(503));
+  }
+
+  @Test
+  void usesOnlyTheFixedMaskWhenSnapshotHasEvidence() {
+    var page = new ProviderListSnapshot.Page(1, 0, List.of(row("Connection", true)));
+    var item = ProviderListResponse.fromSnapshot(organization, page).items().getFirst();
+    assertThat(item.credentialState()).isEqualTo("PRESENT");
+    assertThat(item.credentialMask()).isEqualTo("••••••••");
+    assertThat(item.state()).isEqualTo("DISABLED");
   }
 
   private static List<String> fields(JsonNode node) {
@@ -58,7 +67,7 @@ class ProviderListResponseTest {
     return names;
   }
 
-  private ProviderListSnapshot.Row row(String name) {
+  private ProviderListSnapshot.Row row(String name, boolean available) {
     var time = OffsetDateTime.parse("2026-11-03T07:00:00+07:00");
     return new ProviderListSnapshot.Row(
         organization,
@@ -71,6 +80,7 @@ class ProviderListResponseTest {
         2,
         1,
         time,
-        time);
+        time,
+        available);
   }
 }
