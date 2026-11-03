@@ -1173,6 +1173,42 @@ class ProviderPublicationPostgresIT {
   }
 
   @Test
+  void futureDefinerFunctionDoesNotInheritPublicOrPublisherExecute() throws Exception {
+    try (var operator = admin(databaseUrl);
+        var statement = operator.createStatement()) {
+      operator.setAutoCommit(false);
+      try {
+        statement.execute("set local role " + DEFINER);
+        statement.execute(
+            "create function agentos_evidence_private.fixture_default_acl()"
+                + " returns integer language sql as 'select 1'");
+        try (var rows =
+            statement.executeQuery(
+                "select count(*) from pg_catalog.pg_proc p"
+                    + " cross join lateral pg_catalog.aclexplode(coalesce(p.proacl,"
+                    + " pg_catalog.acldefault('f',p.proowner))) a"
+                    + " where p.oid='agentos_evidence_private.fixture_default_acl()'::regprocedure"
+                    + " and a.grantee=0 and a.privilege_type='EXECUTE'")) {
+          assertThat(rows.next()).isTrue();
+          assertThat(rows.getLong(1)).isZero();
+        }
+        try (var rows =
+            statement.executeQuery(
+                "select pg_catalog.has_function_privilege('"
+                    + PUBLISHER
+                    + "','agentos_evidence_private.fixture_default_acl()','EXECUTE')")) {
+          assertThat(rows.next()).isTrue();
+          assertThat(rows.getBoolean(1)).isFalse();
+        }
+      } finally {
+        operator.rollback();
+      }
+    } catch (SQLException failure) {
+      throw safeSqlFailure("Default function ACL fixture failed", failure);
+    }
+  }
+
+  @Test
   void actualInstallerExposesSixFunctionsAndDefinerHasSelectOnlyVersions() throws Exception {
     var publisherFunctions = new ArrayList<String>();
     var internalFunctions = new ArrayList<String>();
