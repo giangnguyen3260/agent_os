@@ -15,7 +15,13 @@ import org.springframework.transaction.annotation.EnableTransactionManagement;
 
 @TestConfiguration
 @EnableTransactionManagement
-@Import({PolicyJdbc.class, PolicyAuthority.class, PolicyService.class, AdmissionService.class})
+@Import({
+  PolicyJdbc.class,
+  PolicyAuthority.class,
+  PolicyService.class,
+  AdmissionService.class,
+  ProviderListSnapshot.class
+})
 public class PolicyCoreConfiguration {
   @Bean
   DataSource dataSource(Environment environment) {
@@ -31,6 +37,7 @@ public class PolicyCoreConfiguration {
             "V001__create_core_tables.sql",
             "V002__human_authentication.sql",
             "V003__password_recovery.sql",
+            "V022__provider_connection_persistence.sql",
             "V024__provider_options_policy.sql"
           }) populator.addScript(new ClassPathResource("db/migration/" + name));
       populator.execute(source);
