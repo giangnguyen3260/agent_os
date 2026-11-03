@@ -50,6 +50,9 @@ record ProviderListResponse(
         || row.credentialRevision() < 1
         || row.revision() < row.credentialRevision()
         || !("ENABLED".equals(row.state()) || "DISABLED".equals(row.state()))
+        || row.createdAt() == null
+        || row.updatedAt() == null
+        || row.updatedAt().isBefore(row.createdAt())
         || !validName(row.name())
         || row.provider() == null) {
       throw PolicyFailure.unavailable();

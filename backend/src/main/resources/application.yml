@@ -37,6 +37,8 @@ server:
         secure: ${AGENTOS_SESSION_COOKIE_SECURE:true}
 
 agentos:
+  provider-list:
+    enabled: ${AGENTOS_PROVIDER_LIST_ENABLED:false}
   invitations:
     enabled: ${AGENTOS_INVITATIONS_ENABLED:false}
     frontend-base-url: ${AGENTOS_INVITATIONS_FRONTEND_BASE_URL:}

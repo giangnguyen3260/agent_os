@@ -76,3 +76,36 @@ behavior must be tested directly; sanitizing a test helper is not equivalent.
 Main owns this runbook and Quality integration; SA owns the reviewed contract;
 QC owns its independent review. Final SQL implementation follows corrected source
 freeze and exact-signature review, not a guessed protocol.
+
+## Provider Connections read-only screen
+
+The Angular route is `/workspace/{organizationId}/provider-connections`. Its
+collection endpoint shares the options route's session, current ADMIN and
+read-admission checks. The endpoint is off by default. Enable it only after
+provisioning and reviewing a restricted application LOGIN:
+
+1. Run Flyway with a separate migration identity. Install
+   `operations/provider-evidence-roles.sql`, then
+   `operations/provider-evidence-publication.sql`, then
+   `operations/provider-list-evidence-reader.sql` as the operator.
+2. Grant the reviewed runtime LOGIN membership in
+   `agentos_provider_list_evidence` with inheritance and without admin option.
+   Its existing application grants must cover session, current account and
+   organization membership checks, provider read admission, and SELECT on
+   `public.provider_connections`. Do not grant it direct access to credential
+   versions, integrity/health/registry tables, or the private evidence schema.
+   Do not grant publisher, evidence reader, definer or migration membership.
+3. Configure the application to use that LOGIN and disable in-process Flyway
+   (`SPRING_FLYWAY_ENABLED=false`) after external migrations. Set
+   `AGENTOS_PROVIDER_LIST_ENABLED=true`. The current administrator-backed Compose
+   configuration is not suitable. The endpoint checks its transaction and
+   effective privilege boundary and fails with a fixed 503 if checks fail.
+4. Verify with an ADMIN session, then a MEMBER session. Without current trusted
+   evidence, existing connections show unavailable storage evidence and no mask.
+   Only a configured trusted producer can supply real positive evidence. This
+   read-only slice does not create, rotate, check providers, or enable connections.
+
+Runtime checks supplement operator review of role inheritance, object ownership,
+callable functions, and immutability; they are not a whole-database audit. The
+native integration fixture uses a disposable PostgreSQL instance and controlled
+publication assertions. No user database or deployment is changed by CI.

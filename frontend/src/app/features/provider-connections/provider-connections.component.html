@@ -1,0 +1,141 @@
+<ng-template #navigation>
+  <nav aria-label="Điều hướng workspace">
+    <a [routerLink]="['/workspace', organization(), 'dashboard']">Overview</a>
+    <a [routerLink]="['/workspace', organization(), 'organization-map']"
+      >Organization map</a
+    >
+    <a [routerLink]="['/workspace', organization(), 'teams']">Teams</a>
+    <a [routerLink]="['/workspace', organization(), 'agents']">Agents</a>
+    <a [routerLink]="['/workspace', organization(), 'missions']">Missions</a>
+    <a [routerLink]="['/workspace', organization(), 'approvals']">Approvals</a>
+    <a [routerLink]="['/workspace', organization(), 'trace']">Trace</a>
+    <span class="selected" aria-current="page">Models</span>
+  </nav>
+</ng-template>
+<div class="forest-shell">
+  <aside class="desktop-sidebar">
+    <div class="brand">agentos</div>
+    <ng-container *ngTemplateOutlet="navigation" />
+  </aside>
+  <header class="compact-header">
+    <span class="brand">agentos</span>
+    <button
+      class="button secondary"
+      type="button"
+      aria-haspopup="dialog"
+      (click)="menu.showModal()"
+    >
+      Menu
+    </button>
+  </header>
+  <dialog #menu class="auth-dialog" aria-label="Menu workspace">
+    <button class="button secondary" type="button" (click)="menu.close()">
+      Đóng menu
+    </button>
+    <ng-container *ngTemplateOutlet="navigation" />
+  </dialog>
+  <main [attr.aria-busy]="loading()">
+    <p class="breadcrumb">Models / Kết nối provider</p>
+    <h1>Kết nối model</h1>
+    <p>Xem từng kết nối và trạng thái lưu trữ khóa truy cập.</p>
+    @if (loading()) {
+      <p role="status">Đang tải kết nối…</p>
+    } @else if (error()) {
+      <p role="alert">{{ error() }}</p>
+      <button class="button secondary" type="button" (click)="reload()">
+        Thử lại
+      </button>
+    } @else if (data(); as page) {
+      <p role="status">{{ page.total }} kết nối · Trang {{ page.page + 1 }}</p>
+      <section class="provider-panel" aria-label="Danh sách kết nối">
+        @if (!page.items.length) {
+          <p>
+            {{
+              page.total
+                ? 'Trang này không có kết nối.'
+                : 'Chưa có kết nối provider.'
+            }}
+          </p>
+        }
+        @for (connection of page.items; track connection.id) {
+          <article class="provider-record">
+            <h2>{{ connection.name }}</h2>
+            <p>{{ providers[connection.provider] }}</p>
+            <p>
+              {{
+                connection.state === 'ENABLED' ? 'Đang bật' : 'Đã vô hiệu hóa'
+              }}
+            </p>
+            <p>
+              {{
+                connection.credentialState === 'PRESENT'
+                  ? 'Đã có bằng chứng lưu trữ khóa'
+                  : 'Chưa có bằng chứng lưu trữ khóa hợp lệ'
+              }}
+              @if (connection.credentialMask) {
+                <span>{{ connection.credentialMask }}</span>
+              }
+            </p>
+            @if (expanded() === connection.id) {
+              <div [id]="'provider-details-' + connection.id">
+                @if (connection.options.workspaceId) {
+                  <p>Workspace: {{ connection.options.workspaceId }}</p>
+                }
+                <p>Phiên bản cấu hình: {{ connection.revision }}</p>
+                <p>
+                  Cập nhật:
+                  <time [attr.datetime]="connection.updatedAt">{{
+                    connection.updatedAt
+                  }}</time>
+                </p>
+              </div>
+            }
+          </article>
+          <button
+            class="button secondary"
+            type="button"
+            [attr.aria-expanded]="expanded() === connection.id"
+            [attr.aria-controls]="
+              expanded() === connection.id
+                ? 'provider-details-' + connection.id
+                : null
+            "
+            (click)="toggle(connection.id)"
+          >
+            {{
+              expanded() === connection.id
+                ? 'Ẩn chi tiết'
+                : 'Xem kết nối ' + connection.name
+            }}
+          </button>
+        }
+        @if (page.page > 0) {
+          <a
+            class="button secondary"
+            [routerLink]="[]"
+            [queryParams]="{page: page.page - 1}"
+            >Trang trước</a
+          >
+        } @else {
+          <button class="button secondary" type="button" disabled>
+            Trang trước
+          </button>
+        }
+        @if (
+          (page.page + 1) * page.pageSize < page.total && page.page < 100000
+        ) {
+          <a
+            class="button secondary"
+            [routerLink]="[]"
+            [queryParams]="{page: page.page + 1}"
+            >Trang sau</a
+          >
+        } @else {
+          <button class="button secondary" type="button" disabled>
+            Trang sau
+          </button>
+        }
+      </section>
+    }
+  </main>
+</div>

@@ -9,6 +9,11 @@
     <a [routerLink]="['/workspace', context()?.id, 'agents']">Agents</a>
     <a [routerLink]="['/workspace', context()?.id, 'missions']">Missions</a>
     <a [routerLink]="['/workspace', context()?.id, 'trace']">Trace</a>
+    @if (context()?.role === 'ADMIN') {
+      <a [routerLink]="['/workspace', context()?.id, 'provider-connections']"
+        >Models</a
+      >
+    }
     <a routerLink="/workspace">Đổi workspace</a>
     <a [routerLink]="['/workspace', context()?.id, 'approvals']">Approvals</a>
   </nav>

@@ -1,0 +1,29 @@
+main {
+  gap: 16px;
+}
+.breadcrumb {
+  color: var(--primary);
+}
+.provider-panel,
+.provider-record {
+  display: grid;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.provider-panel {
+  grid-template-columns: minmax(0, 1fr);
+}
+.provider-record {
+  gap: 8px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.provider-panel .button {
+  min-height: 48px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: center;
+}

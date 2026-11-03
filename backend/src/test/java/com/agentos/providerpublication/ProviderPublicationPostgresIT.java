@@ -2,10 +2,19 @@ package com.agentos.providerpublication;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.agentos.AgentOsApplication;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Proxy;
+import java.net.CookieManager;
+import java.net.CookiePolicy;
+import java.net.URI;
+import java.net.URLEncoder;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -13,6 +22,7 @@ import java.security.MessageDigest;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -26,7 +36,10 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
+import org.springframework.boot.builder.SpringApplicationBuilder;
+import org.springframework.boot.web.servlet.context.ServletWebServerApplicationContext;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
 /**
  * Native guarded-protocol fixtures, not observer validity. Requires a fresh disposable PostgreSQL
@@ -1437,6 +1450,150 @@ class ProviderPublicationPostgresIT {
       statement.setLong(5, scope.revision());
       assertThat(statement.executeUpdate()).isEqualTo(1);
     }
+  }
+
+  @Test
+  void providerListHttpReadsRealRowsThroughRestrictedRuntimeLogin() throws Exception {
+    var scope = seed();
+    UUID account = UUID.randomUUID();
+    String email = account + "@example.test";
+    String humanPassword = UUID.randomUUID().toString();
+    update(
+        "insert into public.human_accounts(id,email,display_name,password_hash)"
+            + " values (?,?,'List fixture',?)",
+        account,
+        email,
+        new BCryptPasswordEncoder(12).encode(humanPassword));
+    update(
+        "insert into public.organization_memberships(account_id,organization_id,role)"
+            + " values (?,?,'ADMIN')",
+        account,
+        scope.organizationId());
+    String role = login("web");
+    try (var operator = admin(databaseUrl);
+        var statement = operator.createStatement()) {
+      statement.execute(
+          "grant select on public.organizations,public.organization_memberships,"
+              + "public.provider_connections,public.human_accounts to "
+              + role);
+      statement.execute("grant update(id) on public.human_accounts to " + role);
+      statement.execute(
+          "grant select,insert,update on public.authentication_attempts,"
+              + "public.provider_read_admission to "
+              + role);
+      statement.execute("grant insert on public.authentication_audit to " + role);
+      statement.execute(
+          "grant select,insert,update,delete on public.spring_session,"
+              + "public.spring_session_attributes to "
+              + role);
+    }
+    try (var application =
+        new SpringApplicationBuilder(AgentOsApplication.class)
+            .logStartupInfo(false)
+            .run(
+                "--server.address=127.0.0.1",
+                "--server.port=0",
+                "--server.servlet.session.cookie.secure=false",
+                "--spring.main.banner-mode=off",
+                "--spring.flyway.enabled=false",
+                "--spring.jpa.hibernate.ddl-auto=none",
+                "--spring.datasource.url=" + databaseUrl,
+                "--spring.datasource.username=" + role,
+                "--spring.datasource.password=" + password("web"),
+                "--spring.datasource.hikari.maximum-pool-size=4",
+                "--agentos.provider-list.enabled=true")) {
+      int port = ((ServletWebServerApplicationContext) application).getWebServer().getPort();
+      String root = "http://127.0.0.1:" + port;
+      String path = "/api/v1/organizations/" + scope.organizationId() + "/provider-connections";
+      var http =
+          HttpClient.newBuilder()
+              .cookieHandler(new CookieManager(null, CookiePolicy.ACCEPT_ALL))
+              .connectTimeout(Duration.ofSeconds(10))
+              .build();
+      var json = new ObjectMapper();
+      assertThat(listHttp(http, root + path + "?page=00", "GET").statusCode()).isEqualTo(401);
+      var csrf = listHttp(http, root + "/api/v1/auth/csrf", "GET");
+      assertThat(csrf.statusCode()).isEqualTo(200);
+      var token = json.readTree(csrf.body()).path("data");
+      var signIn =
+          HttpRequest.newBuilder(URI.create(root + "/api/v1/auth/login"))
+              .timeout(Duration.ofSeconds(20))
+              .header(token.path("headerName").asText(), token.path("token").asText())
+              .header("Content-Type", "application/x-www-form-urlencoded")
+              .POST(
+                  HttpRequest.BodyPublishers.ofString(
+                      "username="
+                          + URLEncoder.encode(email, StandardCharsets.UTF_8)
+                          + "&password="
+                          + humanPassword))
+              .build();
+      var loginResponse = http.send(signIn, HttpResponse.BodyHandlers.discarding());
+      assertThat(loginResponse.statusCode()).isEqualTo(200);
+      assertThat(listHttp(http, root + path + "?page=00", "GET").statusCode()).isEqualTo(400);
+      assertThat(listHttp(http, root + path, "HEAD").statusCode()).isEqualTo(405);
+      var initial = listHttp(http, root + path, "GET");
+      assertThat(initial.statusCode()).isEqualTo(200);
+      assertThat(initial.headers().firstValue("Cache-Control")).contains("no-store");
+      var missing = json.readTree(initial.body()).at("/data/items/0");
+      assertThat(missing.path("credentialState").asText()).isEqualTo("UNAVAILABLE");
+      assertThat(missing.path("credentialMask").isNull()).isTrue();
+
+      var preparation = checkedCapture("prepare", scope, "PREPARE").value();
+      assertThat(client("prepare").assertPrepared(preparation.attemptId()).status())
+          .isEqualTo(ProviderPublicationClient.Status.ACCEPTED);
+      var health = checkedCapture("health", scope, "HEALTH").value();
+      var published =
+          client("health")
+              .publishHealth(
+                  health.attemptId(), ProviderPublicationClient.HealthOutcome.USABLE, false, null);
+      assertThat(published.status()).isEqualTo(ProviderPublicationClient.Status.ACCEPTED);
+      String before = fingerprint();
+      var result = listHttp(http, root + path + "?page=0", "GET");
+      assertThat(result.statusCode()).isEqualTo(200);
+      var item = json.readTree(result.body()).at("/data/items/0");
+      assertThat(item.path("credentialState").asText()).isEqualTo("PRESENT");
+      assertThat(item.path("credentialMask").asText()).isEqualTo("••••••••");
+      assertThat(item.size()).isEqualTo(13);
+      assertThat(fingerprint()).isEqualTo(before);
+
+      update(
+          "update public.provider_evidence_publishers set publisher_epoch=publisher_epoch+1"
+              + " where publisher_id=?",
+          published.value().publisherId());
+      var fenced = listHttp(http, root + path, "GET");
+      assertThat(fenced.statusCode()).isEqualTo(200);
+      assertThat(json.readTree(fenced.body()).at("/data/items/0/credentialState").asText())
+          .isEqualTo("UNAVAILABLE");
+
+      try (var operator = admin(databaseUrl);
+          var statement = operator.createStatement()) {
+        statement.execute(
+            "grant select(verifier) on public.provider_credential_versions to " + role);
+        try {
+          assertThat(listHttp(http, root + path, "GET").statusCode()).isEqualTo(503);
+        } finally {
+          statement.execute(
+              "revoke select(verifier) on public.provider_credential_versions from " + role);
+        }
+      }
+
+      update(
+          "update public.organization_memberships set role='MEMBER'"
+              + " where account_id=? and organization_id=?",
+          account,
+          scope.organizationId());
+      assertThat(listHttp(http, root + path + "?page=00", "GET").statusCode()).isEqualTo(403);
+    }
+  }
+
+  private static HttpResponse<String> listHttp(HttpClient http, String url, String method)
+      throws Exception {
+    return http.send(
+        HttpRequest.newBuilder(URI.create(url))
+            .timeout(Duration.ofSeconds(20))
+            .method(method, HttpRequest.BodyPublishers.noBody())
+            .build(),
+        HttpResponse.BodyHandlers.ofString());
   }
 
   @Test
