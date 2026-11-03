@@ -1174,14 +1174,46 @@ class ProviderPublicationPostgresIT {
 
   @Test
   void actualInstallerExposesSixFunctionsAndDefinerHasSelectOnlyVersions() throws Exception {
-    assertThat(
-            count(
-                "select count(*) from pg_catalog.pg_proc p join pg_catalog.pg_namespace n"
-                    + " on n.oid=p.pronamespace where n.nspname='agentos_evidence_private' and"
-                    + " has_function_privilege('"
-                    + PUBLISHER
-                    + "',p.oid,'EXECUTE')"))
-        .isEqualTo(6);
+    var publisherFunctions = new ArrayList<String>();
+    var internalFunctions = new ArrayList<String>();
+    try (var operator = admin(databaseUrl);
+        var statement =
+            operator.prepareStatement(
+                "select p.proname || '(' || pg_catalog.oidvectortypes(p.proargtypes) || ')',"
+                    + " pg_catalog.has_function_privilege(?::name,p.oid,'EXECUTE'),"
+                    + " pg_catalog.pg_get_userbyid(p.proowner), p.prosecdef,"
+                    + " exists(select 1 from pg_catalog.aclexplode(coalesce(p.proacl,"
+                    + " pg_catalog.acldefault('f',p.proowner))) a where a.grantee=0)"
+                    + " from pg_catalog.pg_proc p join pg_catalog.pg_namespace n"
+                    + " on n.oid=p.pronamespace where n.nspname='agentos_evidence_private'")) {
+      statement.setString(1, PUBLISHER);
+      try (var rows = statement.executeQuery()) {
+        while (rows.next()) {
+          String signature = rows.getString(1);
+          assertThat(rows.getString(3)).as("Owner of %s", signature).isEqualTo(DEFINER);
+          assertThat(rows.getBoolean(4))
+              .as("Security definer flag of %s", signature)
+              .isEqualTo(!signature.startsWith("valid_binding("));
+          assertThat(rows.getBoolean(5)).as("PUBLIC ACL of %s", signature).isFalse();
+          (rows.getBoolean(2) ? publisherFunctions : internalFunctions).add(signature);
+        }
+      }
+    }
+    assertThat(publisherFunctions)
+        .containsExactlyInAnyOrder(
+            "begin_health(uuid, uuid, text, bigint)",
+            "begin_preparation_assertion(uuid, uuid, text, bigint)",
+            "begin_integrity_verification(uuid, uuid, text, bigint)",
+            "publish_health(uuid, text, boolean, timestamp with time zone)",
+            "assert_prepared(uuid)",
+            "publish_integrity_failure(uuid)");
+    assertThat(internalFunctions)
+        .containsExactlyInAnyOrder(
+            "authority(uuid, text, text)",
+            "valid_binding(text, text, text, text, text)",
+            "capture_attempt(text, uuid, uuid, text, bigint)",
+            "publish_attempt(text, uuid, text, boolean, timestamp with time zone)",
+            "cleanup_attempts(uuid, integer)");
     assertThat(
             count(
                 "select count(*) from pg_catalog.pg_roles where rolname='"
