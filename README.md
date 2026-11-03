@@ -2,12 +2,13 @@
 
 Guarded provider evidence publication is under verification in draft
 [PR48](https://github.com/giangnguyen3260/agent_os/pull/48). It adds an explicit
-operator-installed PostgreSQL boundary and worker JDBC client. C6 passed46 focused
-cases (34 native PostgreSQL,12 client units) and1497 full backend tests with frontend
-gates/audit0. Covered regressions include authority/fence denial, atomic INSERT
-rollback and real loopback commit-acknowledgement loss with retained UNKNOWN after
-latest replacement. C3 Docker completed941 regular backend tests and1101 disjoint
-browser invocations plus3 repeats; later native additions have separate CI evidence.
+operator-installed PostgreSQL boundary and worker JDBC client. C8 passed 52 focused
+cases (40 native PostgreSQL, 12 client units) and 1,503 full backend tests with
+frontend gates/audit 0. C7/C8 cover witnessed UPDATE and post-consumption rollback,
+first-evidence absence restoration, bounded organization cleanup, post-lock grace
+crossing and retained two-pin history. Earlier real loopback commit-ack loss
+coverage remains retained. C6 Docker completed 941 regular backend tests and 1,101
+disjoint browser invocations plus 3 repeats; newer reruns retain separate status.
 Full protocol QC acceptance, protected deployment and a real external observer
 remain open. See [verification](docs/qc/PROVIDER_EVIDENCE_PUBLICATION_QC_REPORT.md),
 [independent review](docs/qc/PROVIDER_EVIDENCE_PUBLICATION_REVIEW.md) and

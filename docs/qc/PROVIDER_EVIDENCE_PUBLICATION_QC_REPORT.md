@@ -304,3 +304,121 @@ complete catalog/effective-privilege checks and application/server-log sentinel
 privacy. One controlled real loopback loss does not establish every network/crash
 recovery path. Q3 deployment separation, the real trusted observer and public
 PRESENT/list projection remain separate. No merge, deployment or user DB action.
+
+## C7 UPDATE rollback and cleanup checkpoint — 3 November 2026
+
+Source `819fdeebf769c5ad464ab7b506d352a8f58d75a4`, tree
+`b8b61d4001ee72e99ca42230497337d0bc30dbb8`, adds five native methods
+(39 authored native methods) without production SQL/client/workflow changes.
+Native source SHA-256 is e911676b90cd4837b2db8ca227862d1cd720859957f83966a9e980eecfda7696.
+Google formatting/import and whitespace checks passed; independent QC gave final
+bounded source PASS. Actual focused/full execution is pending.
+
+Four VERIFIED→FAILED phase faults and two health-UPDATE faults use AFTER row
+triggers, including false→true consumption after the final write. A test-only
+nontransactional sequence pulse must equal1, proving the requested phase ran;
+the client returns FAILED/NULL, the complete eleven-business-table fingerprint
+must match, and a fresh observation succeeds after removing the fault objects.
+Only the definer gets temporary fixture-sequence USAGE; publisher grants remain
+unchanged. Sequence/function/trigger are removed by finally. The witness itself
+is intentionally outside business-row rollback assertions.
+
+Cleanup cases check batch1/max4096 selection, complete attempt hashes for expired
+but before-grace and foreign-organization rows, and all ten non-attempt tables.
+An observed exact-PID organization wait crosses a DB-clock grace gate assigned
+only after the wait, discriminating post-lock time sampling. A second exact-PID
+wait stages a valid failure publication, commits it, then removes the old eligible
+operational attempt while preserving both original preparation and new failure
+pins, the old complete a/s/q hash and current integrity/provenance revision link.
+
+Old history uses coherent controlled timestamp aging. Exact internal clock equality
+and same-attempt simultaneous valid-publication/expired-cleanup eligibility are
+not asserted. All other Q4 gaps retain their independent dispositions; no merge,
+deployment, real external observation or user database action was performed.
+
+### C7 focused execution completed
+
+Run41494831111/job125446920159 completed BUILD SUCCESS on merge
+`80e01ce`, merging819fdeeb into base643357e7. Actual result:12 client units
+plus39 native PostgreSQL methods, total51,0 failures,0 errors,0 skips. This
+executes all five new methods, including six sequence-witnessed fault cases and
+three cleanup cases, with the original source-review limits. Loop cases are not
+extra discovered JUnit tests. Full Quality is recorded separately when completed.
+
+### Completed C6 Docker evidence
+
+Run41489056619 completed SUCCESS: compose125426924062 and formatting
+125426923147. Checkout was merge `15e1947` for C6 04efc15b/base643357e7.
+Build ran941 regular backend tests,0 failures/errors/skips; browser groups
+33+75+42+81+90+780 total1101 disjoint invocations plus3 focused repeats all
+passed. The log confirms exact-session survival across backend restart and logout
+rejecting replay. This supersedes the earlier pending C6 Docker status, retaining
+its original source attribution. C7 native-only additions are separately tested;
+C7/newer Docker reruns are not assumed successful.
+
+### C7 Full Quality completed
+
+Run41494831130/job125446920907 completed SUCCESS on merge `80e01ce`
+(head819fdeeb, base643357e7). Actual backend result:1502 tests,0 failures,
+0 errors,0 skips, BUILD SUCCESS. Frontend style/type/build gates passed and
+dependency audit found0 vulnerabilities. This is C7, not the later first-evidence
+post-consumption follow-up.
+
+## C8 first-evidence post-consumption follow-up
+
+Source `4a62613491a83020bf43384acc73b17fc59335a8`, tree
+`da3ebf77c70c29a447687f765970b2e80102f9f3`, adds one method (40 authored
+native methods), closing the previously recorded missing preparation branch and
+the absent-row paths. PREPARE, first HEALTH and first INTEGRITY_FAILURE each
+require the AFTER-consumption witness1 and exact eleven-business-table rollback
+to absence. A fresh independent capture must then publish revision1 with the
+expected state; integrity branches also require a current revision1 provenance
+join and valid full pin projection. Existing C7 update cases remain unchanged.
+
+Formatting/import and whitespace checks passed; independent QC gave bounded
+source PASS. Actual C8 focused/full results remain pending. No production SQL,
+client, schema, grants or workflows were changed. Temporary witness objects remain
+confined to disposable native fixtures. Q4's other limits and open gates remain.
+
+Witness/AFTER semantics reference: PostgreSQL16 primary documentation
+https://www.postgresql.org/docs/16/functions-sequence.html and
+https://www.postgresql.org/docs/16/trigger-definition.html. Sequence advancement
+survives transaction abort for this live-instance witness; no sequence crash-
+durability or gap-free production identifier claim is made.
+
+### C8 focused execution completed
+
+Run41496312574/job125452092883 completed BUILD SUCCESS on merge
+`7b84bb5`, merging4a626134 into base643357e7. Actual result:12 client units
+plus40 native PostgreSQL methods, total52,0 failures,0 errors,0 skips.
+The first-evidence follow-up executes its three branches within one method; these
+are not extra JUnit test counts. Together C7/C8 exercise nine AFTER-trigger fault
+cases, requiring witness1, exact business-row rollback and fresh independent
+positive controls. Q4's other recorded limits remain open. Full C8 Quality is
+recorded separately when completed.
+
+### C8 Full Quality completed and continuation checkpoint
+
+Run41496312608/job125452093486 completed SUCCESS on merge `7b84bb5`
+(head4a626134, base643357e7). Actual result:1503 backend tests,0 failures,
+0 errors,0 skips, BUILD SUCCESS. Publication summaries are12 client and40 native
+methods; frontend style/type/build gates passed and dependency audit found0
+vulnerabilities. Sonar remains paused.
+
+C7/C8 add six methods with nine controlled AFTER-row fault cases and three cleanup
+cases. The covered UPDATE/post-consumption rollback and cleanup portions have
+attributable focused/full evidence and bounded independent dispositions. Production
+SQL/client/workflows remain unchanged. The final evidence-only Markdown closure
+leaves tested source C8 unchanged and creates no new execution result. C6 Docker
+941 regular /1101 main browser /3 repeats keeps its original attribution; newer
+Docker reruns remain separate.
+
+Full implementation/Q4 stays HOLD for already recorded combined clock/precedence,
+authority/restore and concurrent-publication matrices, exact clock equality and
+unexecuted cleanup civil/arithmetic/ordering boundaries, complete catalog/default-
+ACL/helper/owner/shadow-object/effective-capability inventory and approved worker/
+application/server-log sentinel privacy. The covered first-evidence/preparation
+post-consumption gap is closed within these cases; no universal fault matrix is
+claimed. Q3 protected runtime separation, actual trusted external producers and
+public PRESENT/list projection remain separate gates. No merge, deployment or
+user database action was performed.

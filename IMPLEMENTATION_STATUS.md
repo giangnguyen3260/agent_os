@@ -1,20 +1,22 @@
-# Guarded provider evidence publication candidate — 2 November 2026
+# Guarded provider evidence publication candidate — 3 November 2026
 
 Draft PR48 adds six scoped real-LOGIN capture/publication functions and an explicit
-non-Spring worker JDBC client. Corrected C6 04efc15b passed46 focused cases
-(12 client,34 native) and1497 full backend tests; frontend gates and audit0 passed.
-New C4–C6 coverage includes observed fence/revocation/binding rejection, atomic
-INSERT rollback and both Java-wrapper and actual loopback commit-ack loss with
-latest replacement retaining UNKNOWN. C3 Docker completed941 regular backend
-tests,1101 disjoint browser invocations and3 repeats, with exact-session restart/
-logout. Evidence retains each source identity; no later Docker pass is inferred.
+non-Spring worker JDBC client. C8 4a626134 passed 52 focused cases (12 client,
+40 native) and 1,503 full backend tests; frontend gates and audit 0 passed. C7/C8
+add six methods covering nine witnessed AFTER-row rollback cases and three cleanup
+cases: UPDATE/post-consumption restoration, first-evidence absence for every kind,
+bounded organization deletion, post-lock DB grace crossing and two-pin preservation.
+Earlier actual loopback commit-ack loss retains its own executed scope. C6 Docker
+completed 941 regular backend tests, 1,101 disjoint browser invocations and 3 repeats
+with exact-session restart/logout. Later Docker reruns are not inferred successful.
 
-Independent QC accepts the bounded corrections/cases. Full implementation/Q4 stays
-HOLD for the recorded remaining protocol/privacy/catalog/cleanup gaps. Q3 protected
-deployment and real observer/PRESENT prerequisites remain open. No Flyway migration,
-public list route, real external observer, merge, deployment or user DB action.
-Sonar remains paused. See `docs/qc/PROVIDER_EVIDENCE_PUBLICATION_QC_REPORT.md`
-and `docs/qc/PROVIDER_EVIDENCE_PUBLICATION_REVIEW.md`.
+Independent QC accepts the bounded covered cases. Full implementation/Q4 remains
+HOLD for the recorded time/concurrency/authority, catalog/effective-privilege and
+log-privacy matrices and remaining cleanup edge boundaries. Q3 protected deployment
+and actual observer/PRESENT prerequisites stay open. No production SQL/client/
+workflow changes in C7/C8, merge, deployment or user DB action. Sonar remains paused.
+See `docs/qc/PROVIDER_EVIDENCE_PUBLICATION_QC_REPORT.md` and
+`docs/qc/PROVIDER_EVIDENCE_PUBLICATION_REVIEW.md`.
 
 # Provider evidence storage candidate — 2 November 2026
 

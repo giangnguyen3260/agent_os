@@ -41,6 +41,25 @@ loopback acknowledgement-loss case is covered; broader network recovery is not
 implied. Complete independent Q4 disposition and Q3 runtime/migration/publisher
 separation before wiring the real trusted observer and public PRESENT projection.
 
+BA-03 rollback/cleanup checkpoint,3 November2026: C7 819fdeeb adds five
+native methods for witnessed UPDATE/post-consumption rollback and cleanup. C8
+4a626134 adds first-evidence AFTER-consumption coverage for all three publication
+kinds, including PREPARE. C8 focused52/0/0/0 passed (12 client,40 native); C8 Full Quality1503/0/0/0 and frontend gates passed. Nine controlled AFTER
+phase cases now require exact business-row rollback and independent fresh positives.
+Three cleanup cases prove bounded organization deletion, exact before-grace/foreign
+row retention, post-lock DB-clock grace crossing and two-pin preservation with
+current provenance linkage. C6 Docker completed941 regular tests plus1101 browser
+invocations and3 repeats. Keep all evidence at its recorded source identity.
+
+This supersedes earlier next-work entries only for the covered UPDATE/consumption
+and cleanup portions. Remaining Q4 priorities are full catalog/default-ACL/helper/
+owner/shadow-object and effective-capability refusal inventory; approved worker/
+application/server-log sentinel privacy; and the already recorded combined clock/
+precedence, authority/restore and concurrent-publication matrices. Exact clock
+equality and full cleanup civil/arithmetic/ordering boundaries remain unexecuted.
+Q3 runtime separation and the real observer/public PRESENT gate are still separate.
+No production schema/client/workflow changes or deployment are included here.
+
 ## Current boundary
 
 Authentication/recovery/workspace, persisted Team/Agent/Mission/Task configuration, draft input/owner/dependency editing and histories, member/invitation/grant management, bounded approvals, navigation and recorded-activity Trace have delivery evidence in their individual contracts and QC reports. PR38 automated gates passed; subsequent independent review found no blocker in its bounded scope as recorded above. Draft PRs are not a merged or deployed product. Configuration ownership is not runtime assignment; saved status and activity are not execution telemetry. Existing activation review is preflight, not a working activation command.
