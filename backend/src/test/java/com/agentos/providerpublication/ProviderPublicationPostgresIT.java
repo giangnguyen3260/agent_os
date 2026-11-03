@@ -190,6 +190,9 @@ class ProviderPublicationPostgresIT {
       proveUnsafeCapabilityRefusedWithoutRepair(connection, PUBLISHER, "SELECT", "state");
       proveUnsafeCapabilityRefusedWithoutRepair(connection, READER, "UPDATE", "state");
       installActualPublicationScript(connection);
+      statement.execute(Files.readString(operation("provider-list-evidence-reader.sql")));
+      createdRoles.add("agentos_provider_list_evidence");
+      statement.execute("grant agentos_provider_list_evidence to " + login("web"));
     } catch (SQLException failure) {
       throw new IllegalStateException("Publication base capability installation failed");
     }
@@ -1445,34 +1448,53 @@ class ProviderPublicationPostgresIT {
             .publishHealth(
                 health.attemptId(), ProviderPublicationClient.HealthOutcome.USABLE, false, null);
     assertThat(publication.status()).isEqualTo(ProviderPublicationClient.Status.ACCEPTED);
-    assertThat(listEvidence(scope, publication.value().publishedAt())).isFalse();
+    assertThat(listEvidence(scope)).isFalse();
 
     var preparation = checkedCapture("prepare", scope, "PREPARE").value();
     var prepared = client("prepare").assertPrepared(preparation.attemptId());
     assertThat(prepared.status()).isEqualTo(ProviderPublicationClient.Status.ACCEPTED);
-    assertThat(listEvidence(scope, prepared.value().recordedAt())).isTrue();
-    assertThat(listEvidence(scope, publication.value().validUntil())).isFalse();
+    assertThat(listEvidence(scope)).isTrue();
+    assertThat(
+            listEvidence(
+                new ProviderPublicationClient.Scope(
+                    UUID.randomUUID(), scope.connectionId(), scope.provider(), scope.revision())))
+        .isFalse();
+    update(
+        "update public.provider_credential_health set observed_at=observed_at-interval '2 minutes',"
+            + " published_at=published_at-interval '2 minutes',"
+            + " valid_until=valid_until-interval '2 minutes' where connection_id=?",
+        scope.connectionId());
+    assertThat(listEvidence(scope)).isFalse();
+    update(
+        "update public.provider_credential_health set observed_at=?,published_at=?,valid_until=?"
+            + " where connection_id=?",
+        publication.value().observedAt(),
+        publication.value().publishedAt(),
+        publication.value().validUntil(),
+        scope.connectionId());
+    assertThat(listEvidence(scope)).isTrue();
+    try (var reader = actor("web")) {
+      denied(reader, "select * from agentos_evidence_private.integrity_assertions");
+      denied(reader, "select verifier from public.provider_credential_versions");
+    }
+    try (var publisher = actor("health")) {
+      denied(publisher, "select agentos_list_read.credential_available(null,null)");
+    }
 
     update(
         "update public.provider_evidence_publishers set publisher_epoch=publisher_epoch+1"
             + " where publisher_id=?",
         publication.value().publisherId());
-    assertThat(listEvidence(scope, prepared.value().recordedAt())).isFalse();
+    assertThat(listEvidence(scope)).isFalse();
   }
 
-  private boolean listEvidence(
-      ProviderPublicationClient.Scope scope, java.time.OffsetDateTime pageClock) throws Exception {
-    String sql;
-    try (var resource =
-        getClass().getResourceAsStream("/sql/provider-list-credential-evidence.sql")) {
-      if (resource == null) throw new IllegalStateException("Missing list evidence query");
-      sql = new String(resource.readAllBytes(), StandardCharsets.UTF_8);
-    }
-    try (var operator = admin(databaseUrl);
-        var statement = operator.prepareStatement(sql)) {
+  private boolean listEvidence(ProviderPublicationClient.Scope scope) throws Exception {
+    try (var reader = actor("web");
+        var statement =
+            reader.prepareStatement(
+                "select agentos_list_read.credential_available(?::uuid,?::uuid)")) {
       statement.setObject(1, scope.organizationId());
       statement.setObject(2, scope.connectionId());
-      statement.setObject(3, pageClock);
       try (var rows = statement.executeQuery()) {
         assertThat(rows.next()).isTrue();
         boolean available = rows.getBoolean(1);
