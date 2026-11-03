@@ -1,3 +1,23 @@
+# Guarded provider evidence publication candidate — 3 November 2026
+
+Draft PR48 adds six scoped real-LOGIN capture/publication functions and an explicit
+non-Spring worker JDBC client. C8 4a626134 passed 52 focused cases (12 client,
+40 native) and 1,503 full backend tests; frontend gates and audit 0 passed. C7/C8
+add six methods covering nine witnessed AFTER-row rollback cases and three cleanup
+cases: UPDATE/post-consumption restoration, first-evidence absence for every kind,
+bounded organization deletion, post-lock DB grace crossing and two-pin preservation.
+Earlier actual loopback commit-ack loss retains its own executed scope. C6 Docker
+completed 941 regular backend tests, 1,101 disjoint browser invocations and 3 repeats
+with exact-session restart/logout. Later Docker reruns are not inferred successful.
+
+Independent QC accepts the bounded covered cases. Full implementation/Q4 remains
+HOLD for the recorded time/concurrency/authority, catalog/effective-privilege and
+log-privacy matrices and remaining cleanup edge boundaries. Q3 protected deployment
+and actual observer/PRESENT prerequisites stay open. No production SQL/client/
+workflow changes in C7/C8, merge, deployment or user DB action. Sonar remains paused.
+See `docs/qc/PROVIDER_EVIDENCE_PUBLICATION_QC_REPORT.md` and
+`docs/qc/PROVIDER_EVIDENCE_PUBLICATION_REVIEW.md`.
+
 # Provider evidence storage candidate — 2 November 2026
 
 PR47 adds empty V025 evidence storage and restricted capability-role scaffolding.
