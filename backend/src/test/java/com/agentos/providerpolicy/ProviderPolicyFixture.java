@@ -30,6 +30,7 @@ abstract class ProviderPolicyFixture {
   @Autowired JdbcTemplate jdbc;
   @Autowired PolicyService policies;
   @Autowired AdmissionService admission;
+  @Autowired ProviderListSnapshot providerList;
   @Autowired PlatformTransactionManager manager;
   UUID org, actor;
   HumanIdentity human;
@@ -75,6 +76,44 @@ abstract class ProviderPolicyFixture {
               assertThat(failure.code()).isEqualTo(code);
               assertThat(failure.getCause()).isNull();
             });
+  }
+
+  @Test
+  void providerListCountsDisabledRowsAndPagesWithinAuthorizedOrganization() {
+    for (int index = 1; index <= 21; index++) {
+      UUID connection = new UUID(org.getMostSignificantBits(), index);
+      jdbc.update(
+          """
+          insert into provider_credential_versions
+          values (?,?,'OPENAI',1,'reference','version','key-version','v2','verifier',
+                  timestamp with time zone '2026-11-03 00:00:00+00')
+          """,
+          org,
+          connection);
+      jdbc.update(
+          """
+          insert into provider_connections
+          values (?,?,'OPENAI','OPENAI_API_KEY','Connection',null,'DISABLED',1,1,
+                  timestamp with time zone '2026-11-03 00:00:00+00',
+                  timestamp with time zone '2026-11-03 00:00:00+00')
+          """,
+          connection,
+          org);
+    }
+
+    var first = providerList.read(human, org, 0);
+    assertThat(first.total()).isEqualTo(21);
+    assertThat(first.rows()).hasSize(20);
+    assertThat(first.rows().getFirst().id()).isEqualTo(new UUID(org.getMostSignificantBits(), 21));
+    assertThat(first.rows())
+        .allMatch(row -> row.organization().equals(org) && row.state().equals("DISABLED"));
+    var second = providerList.read(human, org, 1);
+    assertThat(second.total()).isEqualTo(21);
+    assertThat(second.rows())
+        .extracting(ProviderListSnapshot.Row::id)
+        .containsExactly(new UUID(org.getMostSignificantBits(), 1));
+    assertThat(providerList.read(human, org, 2).rows()).isEmpty();
+    denied(() -> providerList.read(human, UUID.randomUUID(), 0), "FORBIDDEN");
   }
 
   @Test
