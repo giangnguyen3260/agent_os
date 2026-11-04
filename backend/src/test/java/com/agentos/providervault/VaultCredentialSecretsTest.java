@@ -74,6 +74,7 @@ class VaultCredentialSecretsTest {
     var status = new AtomicInteger(200);
     var calls = new AtomicInteger();
     var mismatch = new AtomicInteger();
+    var afterWrite = new AtomicReference<Runnable>(() -> {});
     server.createContext(
         "/",
         exchange -> {
@@ -81,6 +82,7 @@ class VaultCredentialSecretsTest {
           byte[] response;
           if (exchange.getRequestMethod().equals("POST")) {
             saved.set(json.readTree(exchange.getRequestBody()).path("data"));
+            afterWrite.get().run();
             response =
                 "{\"data\":{\"version\":1}}".getBytes(java.nio.charset.StandardCharsets.UTF_8);
           } else {
@@ -123,6 +125,74 @@ class VaultCredentialSecretsTest {
       assertThat(token.get()).containsOnly('\0');
       assertThat(adapter.read(reference))
           .isEqualTo("fixture-key".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+      var datasource =
+          new org.springframework.jdbc.datasource.DriverManagerDataSource(
+              "jdbc:h2:mem:journaled_vault_"
+                  + UUID.randomUUID()
+                  + ";MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
+              "sa",
+              "");
+      var jdbc = new org.springframework.jdbc.core.JdbcTemplate(datasource);
+      jdbc.execute("create domain TIMESTAMPTZ as timestamp with time zone");
+      jdbc.execute("create table organizations(id uuid primary key)");
+      try (var connection = datasource.getConnection()) {
+        org.springframework.jdbc.datasource.init.ScriptUtils.executeSqlScript(
+            connection,
+            new org.springframework.core.io.ClassPathResource(
+                "db/migration/V026__provider_preparation_journal.sql"));
+      }
+      jdbc.update("insert into organizations(id) values (?)", scope.organization());
+      var journal = new com.agentos.providerpreparation.ProviderPreparationJournal(datasource);
+      var composed = new JournaledVaultSecrets(journal, adapter);
+      var pendingWitness = new java.util.concurrent.atomic.AtomicBoolean();
+      afterWrite.set(
+          () ->
+              pendingWitness.set(
+                  jdbc.queryForObject(
+                          "select count(*) from provider_secret_preparations where state='PENDING'",
+                          Long.class)
+                      > 0));
+      byte[] synthetic = "fixture-key".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+      var journaledReference = composed.store(scope, synthetic);
+      assertThat(pendingWitness.get()).isTrue();
+      assertThat(
+              jdbc.queryForObject(
+                  "select state from provider_secret_preparations where external_locator=?",
+                  String.class,
+                  journaledReference.locator()))
+          .isEqualTo("WRITTEN");
+      status.set(503);
+      assertThatThrownBy(() -> composed.store(scope, synthetic))
+          .isInstanceOf(Failure.class)
+          .hasNoCause();
+      assertThat(
+              jdbc.queryForObject(
+                  "select count(*) from provider_secret_preparations where state='UNKNOWN'",
+                  Long.class))
+          .isEqualTo(1L);
+      status.set(200);
+      var faultScope = new Scope(scope.organization(), UUID.randomUUID(), Provider.OPENAI, 1);
+      afterWrite.set(
+          () ->
+              jdbc.execute(
+                  "alter table provider_secret_preparations add constraint reject_test_ack check "
+                      + "(state <> 'WRITTEN' or connection_id <> '"
+                      + faultScope.connection()
+                      + "')"));
+      assertThatThrownBy(() -> composed.store(faultScope, synthetic))
+          .isInstanceOf(Failure.class)
+          .hasNoCause();
+      assertThat(
+              jdbc.queryForObject(
+                  "select state from provider_secret_preparations where connection_id=?",
+                  String.class,
+                  faultScope.connection()))
+          .isEqualTo("UNKNOWN");
+      afterWrite.set(() -> {});
+      int beforeBeginFailure = calls.get();
+      var absentOrg = new Scope(UUID.randomUUID(), UUID.randomUUID(), Provider.OPENAI, 1);
+      assertThatThrownBy(() -> composed.store(absentOrg, synthetic)).isInstanceOf(Failure.class);
+      assertThat(calls.get()).isEqualTo(beforeBeginFailure);
       mismatch.set(1);
       assertThatThrownBy(() -> adapter.read(reference)).isInstanceOf(Failure.class).hasNoCause();
       mismatch.set(0);

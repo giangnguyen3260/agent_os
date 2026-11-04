@@ -4,6 +4,7 @@ import com.agentos.providercredentials.CredentialBoundary.Failure;
 import com.agentos.providercredentials.CredentialBoundary.Reference;
 import com.agentos.providercredentials.CredentialBoundary.Scope;
 import com.agentos.providercredentials.CredentialBoundary.Secrets;
+import com.agentos.providerpreparation.ProviderPreparationJournal.Preparation;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -48,6 +49,15 @@ public final class VaultCredentialSecrets implements Secrets {
 
   @Override
   public Reference store(Scope scope, byte[] borrowedCredential) {
+    return storeAt(scope, UUID.randomUUID().toString(), borrowedCredential);
+  }
+
+  Reference storePrepared(Preparation preparation, byte[] borrowedCredential) {
+    if (preparation == null) throw new Failure();
+    return storeAt(preparation.scope(), preparation.locator(), borrowedCredential);
+  }
+
+  private Reference storeAt(Scope scope, String locator, byte[] borrowedCredential) {
     outsideTransaction();
     byte[] payload = null;
     byte[] response = null;
@@ -59,7 +69,6 @@ public final class VaultCredentialSecrets implements Secrets {
       for (byte value : borrowedCredential) {
         if (value < 0x21 || value > 0x7e) throw new Failure();
       }
-      String locator = UUID.randomUUID().toString();
       var root = JSON.createObjectNode();
       root.putObject("options").put("cas", 0);
       var data = root.putObject("data");
