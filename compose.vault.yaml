@@ -1,0 +1,26 @@
+# Explicit local prerequisite. Does not configure backend credentials or enable provider commands.
+services:
+  vault:
+    image: ${AGENTOS_VAULT_IMAGE:?Set a reviewed hashicorp/vault image pinned by sha256 digest}
+    command: ["server", "-config=/vault/config/server.hcl"]
+    environment:
+      VAULT_ADDR: https://127.0.0.1:8200
+      VAULT_CACERT: /vault/tls/server.crt
+      SKIP_SETCAP: "true"
+    ports:
+      - "127.0.0.1:8200:8200"
+    volumes:
+      - ./docker/vault/server.hcl:/vault/config/server.hcl:ro
+      - ./docker/vault/provider-app.hcl:/vault/policies/provider-app.hcl:ro
+      - ${AGENTOS_VAULT_TLS_DIR:?Set absolute path to prepared local TLS directory}:/vault/tls:ro
+      - vault-data:/vault/data
+    healthcheck:
+      test: ["CMD", "vault", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+
+volumes:
+  vault-data:
