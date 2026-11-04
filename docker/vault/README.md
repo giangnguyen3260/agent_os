@@ -69,3 +69,18 @@ Official references checked4 November2026:
 - https://developer.hashicorp.com/vault/api-docs/secret/kv/kv-v2
 - https://developer.hashicorp.com/vault/docs/configuration/storage/raft
 - https://developer.hashicorp.com/vault/docs/configuration/listener/tcp
+
+## Disposable CI verification
+
+Local Vault integration runs scripts/check-vault-local.sh on an isolated
+random Compose project with its own throwaway Raft volume. It resolves the fixed
+2.1.2 release tag to a runtime RepoDigest before startup. This is a reproducible
+candidate, not an assertion of latest/security-cleared production release.
+
+The test initializes only its disposable instance with one share, uses temporary
+private header/body files, checks exact-version KV reads, refuses application
+overwrite/delete/list/foreign-prefix/anonymous access, checks TLS hostname refusal
+and reads the original value after restart/unseal. It removes its own volume
+and private files on exit; no artifacts or Vault response bodies are uploaded.
+Never repurpose this script to initialize or clean up an existing Vault.
+The configured tests are authored until their workflow completes successfully.

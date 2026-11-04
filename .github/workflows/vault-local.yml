@@ -1,0 +1,23 @@
+name: Local Vault integration
+on:
+  pull_request:
+    paths:
+      - compose.vault.yaml
+      - docker/vault/**
+      - scripts/check-vault-local.sh
+      - .github/workflows/vault-local.yml
+permissions:
+  contents: read
+jobs:
+  vault:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve fixed Vault release to immutable image
+        run: |
+          docker pull hashicorp/vault:2.1.2
+          image=$(docker image inspect hashicorp/vault:2.1.2 --format '{{index .RepoDigests 0}}')
+          echo "AGENTOS_VAULT_IMAGE=$image" >> "$GITHUB_ENV"
+      - name: Real disposable Vault integration
+        run: bash scripts/check-vault-local.sh
