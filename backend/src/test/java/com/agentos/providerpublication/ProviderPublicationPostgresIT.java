@@ -1529,8 +1529,39 @@ class ProviderPublicationPostgresIT {
               .build();
       var loginResponse = http.send(signIn, HttpResponse.BodyHandlers.discarding());
       assertThat(loginResponse.statusCode()).isEqualTo(200);
-      assertThat(listHttp(http, root + path + "?page=00", "GET").statusCode()).isEqualTo(400);
-      assertThat(listHttp(http, root + path, "HEAD").statusCode()).isEqualTo(405);
+      String wireBefore = fingerprint();
+      for (String query :
+          List.of(
+              "page=00",
+              "page=-1",
+              "page=100001",
+              "page=",
+              "page=0&page=1",
+              "page=%30",
+              "page=+1",
+              "page=1.0",
+              "page=0&unknown=1",
+              "unknown=1")) {
+        var invalid = listHttp(http, root + path + "?" + query, "GET");
+        assertThat(invalid.statusCode()).as("query %s", query).isEqualTo(400);
+        assertThat(invalid.headers().firstValue("Cache-Control")).contains("no-store");
+      }
+      for (String method : List.of("HEAD", "POST", "PUT", "PATCH", "DELETE")) {
+        assertThat(listHttp(http, root + path, method).statusCode())
+            .as("method %s", method)
+            .isEqualTo(405);
+      }
+      for (int page : List.of(1, 100_000)) {
+        var empty = listHttp(http, root + path + "?page=" + page, "GET");
+        assertThat(empty.statusCode()).isEqualTo(200);
+        var data = json.readTree(empty.body()).path("data");
+        assertThat(data.path("page").asInt()).isEqualTo(page);
+        assertThat(data.path("pageSize").asInt()).isEqualTo(20);
+        assertThat(data.path("total").asLong()).isEqualTo(1);
+        assertThat(data.path("items").isArray()).isTrue();
+        assertThat(data.path("items").isEmpty()).isTrue();
+      }
+      assertThat(fingerprint()).isEqualTo(wireBefore);
       var initial = listHttp(http, root + path, "GET");
       assertThat(initial.statusCode()).isEqualTo(200);
       assertThat(initial.headers().firstValue("Cache-Control")).contains("no-store");
