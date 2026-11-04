@@ -1,0 +1,21 @@
+# Disposable integration harness only; never use this database as an application environment.
+services:
+  journal-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: vault_journal_test
+      POSTGRES_USER: vault_journal_test
+      POSTGRES_PASSWORD_FILE: /run/secrets/journal-db-password
+    ports:
+      - "127.0.0.1::5432"
+    volumes:
+      - ${AGENTOS_TEST_PG_PASSWORD_FILE:?Private CI password file required}:/run/secrets/journal-db-password:ro
+      - journal-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vault_journal_test -d vault_journal_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  journal-db-data:

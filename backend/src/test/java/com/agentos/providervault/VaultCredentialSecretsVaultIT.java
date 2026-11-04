@@ -112,6 +112,15 @@ class VaultCredentialSecretsVaultIT {
     }
     assertThatThrownBy(() -> credentialKeys.key("3")).isInstanceOf(Failure.class).hasNoCause();
     assertThatThrownBy(() -> credentialKeys.key("01")).isInstanceOf(Failure.class).hasNoCause();
+    var datasource =
+        new org.springframework.jdbc.datasource.DriverManagerDataSource(
+            required("AGENTOS_TEST_JOURNAL_URL"),
+            "vault_journal_test",
+            Files.readString(Path.of(required("AGENTOS_TEST_PG_PASSWORD_FILE"))).strip());
+    org.flywaydb.core.Flyway.configure().dataSource(datasource).load().migrate();
+    var jdbc = new org.springframework.jdbc.core.JdbcTemplate(datasource);
+    var journal = new com.agentos.providerpreparation.ProviderPreparationJournal(datasource);
+    var composed = new JournaledVaultSecrets(journal, adapter);
     Path evidence = Path.of(required("AGENTOS_TEST_VAULT_REFERENCE_FILE"));
     String phase = required("AGENTOS_TEST_VAULT_PHASE");
     var json = new ObjectMapper();
@@ -121,7 +130,12 @@ class VaultCredentialSecretsVaultIT {
       Reference reference;
       if (phase.equals("prepare")) {
         var scope = new Scope(UUID.randomUUID(), UUID.randomUUID(), Provider.OPENAI, 1);
-        reference = adapter.store(scope, expected);
+        jdbc.update(
+            "insert into organizations(id,name,slug,status,created_at,updated_at) values (?,'Vault"
+                + " journal fixture',?,'ACTIVE',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)",
+            scope.organization(),
+            scope.organization().toString());
+        reference = composed.store(scope, expected);
         var safe = json.createObjectNode();
         safe.put("organization", scope.organization().toString());
         safe.put("connection", scope.connection().toString());
@@ -138,10 +152,44 @@ class VaultCredentialSecretsVaultIT {
                 1);
         reference = new Reference(scope, safe.path("locator").asText(), "1");
       }
-      actual = adapter.read(reference);
+      actual = composed.read(reference);
       assertThat(Arrays.equals(actual, expected))
           .as("exact synthetic credential readback")
           .isTrue();
+      var row =
+          jdbc.queryForMap(
+              "select * from provider_secret_preparations where external_locator=?",
+              reference.locator());
+      assertThat(row.get("organization_id")).isEqualTo(reference.scope().organization());
+      assertThat(row.get("connection_id")).isEqualTo(reference.scope().connection());
+      assertThat(row.get("state")).isEqualTo("WRITTEN");
+      assertThat(row.get("external_version")).isEqualTo("1");
+      assertThat(
+              jdbc.queryForObject("select count(*) from provider_secret_preparations", Long.class))
+          .isEqualTo(1L);
+      var forbidden = new java.util.ArrayList<String>();
+      forbidden.add(new String(expected, StandardCharsets.US_ASCII));
+      forbidden.add(java.util.Base64.getEncoder().encodeToString(expected));
+      for (String keyFile : new String[] {"credential-v1", "credential-v2", "command-v1"}) {
+        forbidden.add(
+            Files.readString(Path.of(required("AGENTOS_TEST_HMAC_FIXTURE_DIR"), keyFile)).strip());
+      }
+      for (String table :
+          jdbc.queryForList(
+              "select tablename from pg_catalog.pg_tables where schemaname='public'",
+              String.class)) {
+        if (!table.matches("[a-z_][a-z0-9_]*"))
+          throw new IllegalStateException("Unexpected test table");
+        for (String stored :
+            jdbc.queryForList(
+                "select row_to_json(t)::text from public." + table + " t", String.class)) {
+          for (String sentinel : forbidden) {
+            assertThat(stored.contains(sentinel))
+                .as("no synthetic secret in public DB rows")
+                .isFalse();
+          }
+        }
+      }
       Scope foreign =
           new Scope(UUID.randomUUID(), reference.scope().connection(), Provider.OPENAI, 1);
       assertThatThrownBy(() -> adapter.read(new Reference(foreign, reference.locator(), "1")))
