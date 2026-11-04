@@ -165,15 +165,21 @@ class ProviderListSnapshot {
               )
               and not exists (
                 select 1 from (values
-                  ('public.provider_credential_versions'),
-                  ('public.provider_credential_integrity'),
-                  ('public.provider_credential_health'),
-                  ('public.provider_evidence_publishers'),
-                  ('agentos_evidence_private.integrity_provenance'),
-                  ('agentos_evidence_private.integrity_assertions'),
-                  ('agentos_evidence_private.publication_attempts')
-                ) required(relation)
-                where pg_catalog.to_regclass(required.relation) is null
+                  ('public','provider_credential_versions'),
+                  ('public','provider_credential_integrity'),
+                  ('public','provider_credential_health'),
+                  ('public','provider_evidence_publishers'),
+                  ('agentos_evidence_private','integrity_provenance'),
+                  ('agentos_evidence_private','integrity_assertions'),
+                  ('agentos_evidence_private','publication_attempts')
+                ) required(schema_name,relation_name)
+                -- Inspect catalogs without requiring USAGE on the private evidence schema.
+                where not exists (
+                  select 1 from pg_catalog.pg_class c
+                  join pg_catalog.pg_namespace n on n.oid=c.relnamespace
+                  where n.nspname=required.schema_name and c.relname=required.relation_name
+                    and c.relkind in ('r','p')
+                )
               )
               and not pg_catalog.has_function_privilege(current_user,
                   'agentos_list_read.credential_available(uuid,uuid)','EXECUTE WITH GRANT OPTION')
