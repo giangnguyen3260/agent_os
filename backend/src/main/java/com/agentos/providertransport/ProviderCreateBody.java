@@ -8,6 +8,7 @@ import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonToken;
 import com.fasterxml.jackson.core.StreamReadFeature;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
@@ -26,6 +27,30 @@ public final class ProviderCreateBody implements AutoCloseable {
   private ProviderCreateBody(Create command, byte[] key) {
     this.command = command;
     this.key = key;
+  }
+
+  /**
+   * Reads at most 8193 bytes without trusting Content-Length. The caller owns stream lifecycle and
+   * must enforce authentication, ingress concurrency and transport deadlines before calling.
+   */
+  public static ProviderCreateBody read(InputStream input) {
+    byte[] bounded = new byte[8193];
+    try {
+      if (input == null) throw invalid();
+      int used = 0;
+      while (used < bounded.length) {
+        int count = input.read(bounded, used, bounded.length - used);
+        if (count == -1) return consume(Arrays.copyOf(bounded, used));
+        // A non-progressing or broken stream must not create an unbounded loop.
+        if (count <= 0 || count > bounded.length - used) throw invalid();
+        used += count;
+      }
+      throw invalid();
+    } catch (Exception failure) {
+      throw invalid();
+    } finally {
+      Arrays.fill(bounded, (byte) 0);
+    }
   }
 
   /** Consumes and erases the exclusively caller-owned body, including on failure. */

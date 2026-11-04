@@ -46,3 +46,17 @@ uncertain commit recovery and native concurrency/no-secret-row tests are wired.
 Then connect the reviewed create form and test UNKNOWN/replay/denied/outage flows.
 Rotation is a separate decoder/application/UI slice; this candidate does not
 implement it, call providers, grant runtime privileges, merge or deploy.
+
+## Bounded stream reader follow-up
+
+The same decoder now offers read(InputStream): fixed8193-byte owned scratch,
+at most8193 bytes consumed, reject on the first excess byte, and erase scratch
+on success, malformed body or I/O failure. No Content-Length is trusted and no
+unbounded body collector is used. Caller retains ownership of stream close and
+must enforce server read deadlines/concurrency; the synchronous reader itself
+does not implement timeout scheduling. A zero-progress stream fails immediately.
+
+Five additional tests cover fragmented reads, exact8192-byte input, overflow
+without draining a100000-byte stream, failure after a partial read with safe
+exception text/no cause, empty/null/nonprogressing input and scratch erasure.
+This remains an internal helper; no new public command or DB persistence path.
