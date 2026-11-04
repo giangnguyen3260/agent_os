@@ -63,6 +63,27 @@ java_probe() {
   AGENTOS_TEST_VAULT_PHASE="$1" mvn -B -ntp -f backend/pom.xml \
     -Dtest=VaultCredentialSecretsVaultIT test
 }
+# Provision independent random HMAC keys only in the disposable Vault.
+jq -Rs '{policy:.}' docker/vault/provider-hmac-reader.hcl > "$scratch/hmac-policy.json"
+request 204 PUT sys/policies/acl/agentos-hmac-reader -H "@$scratch/root.headers" --data-binary "@$scratch/hmac-policy.json"
+hmac_fixture() {
+  local purpose=$1 cas=$2 name=$3
+  openssl rand -base64 32 > "$scratch/$name"
+  jq -n --rawfile material "$scratch/$name" --arg purpose "$purpose" --argjson cas "$cas" \
+    '{options:{cas:$cas},data:{purpose:$purpose,algorithm:"HmacSHA256",key:($material|rtrimstr("\n"))}}' > "$scratch/hmac-write.json"
+  request 200 POST "agentos/data/hmac-keys/$purpose" -H "@$scratch/root.headers" --data-binary "@$scratch/hmac-write.json"
+}
+hmac_fixture credential-integrity 0 credential-v1
+hmac_fixture credential-integrity 1 credential-v2
+hmac_fixture command-receipts 0 command-v1
+request 200 POST auth/token/create -H "@$scratch/root.headers" --data '{"policies":["agentos-hmac-reader"],"no_default_policy":true,"ttl":"10m"}'
+jq -er '.auth.client_token' "$scratch/response" > "$scratch/hmac.token"
+jq -er '"X-Vault-Token: "+.auth.client_token' "$scratch/response" > "$scratch/hmac.headers"
+request 403 GET agentos/data/hmac-keys/credential-integrity -H "@$scratch/app.headers"
+request 403 POST agentos/data/hmac-keys/credential-integrity -H "@$scratch/hmac.headers" --data-binary "@$scratch/hmac-write.json"
+request 403 GET agentos/data/provider-credentials/fixture -H "@$scratch/hmac.headers"
+export AGENTOS_TEST_HMAC_TOKEN_FILE="$scratch/hmac.token"
+export AGENTOS_TEST_HMAC_FIXTURE_DIR="$scratch"
 java_probe prepare
 # The only credential value here is an explicitly synthetic CI sentinel.
 request 200 POST agentos/data/provider-credentials/fixture -H "@$scratch/app.headers" --data '{"options":{"cas":0},"data":{"credential":"synthetic-vault-ci-only"}}'

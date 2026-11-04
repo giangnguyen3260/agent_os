@@ -52,6 +52,66 @@ class VaultCredentialSecretsVaultIT {
               throw new Failure();
             },
             tls.getSocketFactory());
+    Path hmacToken = Path.of(required("AGENTOS_TEST_HMAC_TOKEN_FILE"));
+    java.util.function.Supplier<char[]> hmacTokens =
+        () -> {
+          try {
+            return Files.readString(hmacToken, StandardCharsets.UTF_8).strip().toCharArray();
+          } catch (Exception failure) {
+            throw new Failure();
+          }
+        };
+    var credentialKeys =
+        new VaultHmacKeys(
+            URI.create(required("AGENTOS_TEST_VAULT_URL")),
+            "agentos",
+            hmacTokens,
+            VaultHmacKeys.Purpose.CREDENTIAL_INTEGRITY,
+            2,
+            tls.getSocketFactory());
+    var commandKeys =
+        new VaultHmacKeys(
+            URI.create(required("AGENTOS_TEST_VAULT_URL")),
+            "agentos",
+            hmacTokens,
+            VaultHmacKeys.Purpose.COMMAND_RECEIPTS,
+            1,
+            tls.getSocketFactory());
+    assertThat(credentialKeys.currentVersion()).isEqualTo("2");
+    for (String version : new String[] {"1", "2"}) {
+      byte[] expectedKey =
+          java.util.Base64.getDecoder()
+              .decode(
+                  Files.readString(
+                          Path.of(
+                              required("AGENTOS_TEST_HMAC_FIXTURE_DIR"), "credential-v" + version))
+                      .strip());
+      byte[] fetched = credentialKeys.key(version).getEncoded();
+      try {
+        assertThat(Arrays.equals(fetched, expectedKey))
+            .as("exact historical credential HMAC key")
+            .isTrue();
+      } finally {
+        Arrays.fill(expectedKey, (byte) 0);
+        Arrays.fill(fetched, (byte) 0);
+      }
+    }
+    byte[] expectedCommand =
+        java.util.Base64.getDecoder()
+            .decode(
+                Files.readString(Path.of(required("AGENTOS_TEST_HMAC_FIXTURE_DIR"), "command-v1"))
+                    .strip());
+    byte[] fetchedCommand = commandKeys.key("1").getEncoded();
+    try {
+      assertThat(Arrays.equals(fetchedCommand, expectedCommand))
+          .as("separate command HMAC key")
+          .isTrue();
+    } finally {
+      Arrays.fill(expectedCommand, (byte) 0);
+      Arrays.fill(fetchedCommand, (byte) 0);
+    }
+    assertThatThrownBy(() -> credentialKeys.key("3")).isInstanceOf(Failure.class).hasNoCause();
+    assertThatThrownBy(() -> credentialKeys.key("01")).isInstanceOf(Failure.class).hasNoCause();
     Path evidence = Path.of(required("AGENTOS_TEST_VAULT_REFERENCE_FILE"));
     String phase = required("AGENTOS_TEST_VAULT_PHASE");
     var json = new ObjectMapper();
