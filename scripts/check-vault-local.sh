@@ -26,7 +26,12 @@ for attempt in {1..30}; do
   if [[ "$code" == 501 ]]; then break; fi
   sleep 1
 done
-[[ "$code" == 501 ]] || { echo "Vault did not reach uninitialized state" >&2; exit 1; }
+[[ "$code" == 501 ]] || {
+  # Safe only before initialization: no root/app token or credential exists yet.
+  "${compose[@]}" logs --tail 30 vault
+  echo "Vault did not reach uninitialized state" >&2
+  exit 1
+}
 request() {
   local expected=$1 method=$2 path=$3
   shift 3

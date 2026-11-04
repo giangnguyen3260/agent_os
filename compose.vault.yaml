@@ -2,7 +2,7 @@
 services:
   vault:
     image: ${AGENTOS_VAULT_IMAGE:?Set a reviewed hashicorp/vault image pinned by sha256 digest}
-    command: ["server", "-config=/vault/config/server.hcl"]
+    command: ["server"]
     environment:
       VAULT_ADDR: https://127.0.0.1:8200
       VAULT_CACERT: /vault/tls/server.crt
