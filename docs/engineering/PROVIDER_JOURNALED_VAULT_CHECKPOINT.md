@@ -30,3 +30,23 @@ separate evidence; combined PostgreSQL+Vault/crash/commit-ack-loss verification 
 still required. This entry records authored assertions until matching CI passes.
 
 No production activation, CREATE/ROTATE completion, merge or deployment.
+
+## Combined native integration candidate
+
+The disposable Vault harness now also provisions its own PostgreSQL16 container
+through compose.vault-ci.yaml, random private password file and dynamic loopback
+port. This overlay is CI-only. Its volume belongs to the random test project and
+is removed at exit; no application database is used.
+
+The real Java IT migrates the complete schema, creates its isolated organization
+and writes via JournaledVaultSecrets. It verifies exact scoped WRITTEN/version1
+evidence plus byte-exact Vault readback. Both Vault and PostgreSQL are restarted;
+a second JVM repeats readback and journal checks using the same reference.
+Each phase scans all public-table JSON rows for the synthetic credential/plaintext
+and base64 form and the three generated HMAC key base64 fixtures. Assertions do
+not print stored rows or secret values on failure. This is a scoped sentinel
+inventory, not proof against every representation, production log or memory leak.
+
+Native execution remains pending until this candidate's workflow passes. Remote
+write/acknowledgement fault injection remains the separate H2/HTTPS fixture;
+combined PostgreSQL+Vault process-kill/unknown-commit cases are not claimed here.

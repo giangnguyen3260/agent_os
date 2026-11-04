@@ -6,6 +6,9 @@ on:
       - backend/src/test/java/com/agentos/providervault/**
       - backend/src/main/java/com/agentos/providercredentials/**
       - backend/pom.xml
+      - backend/src/main/java/com/agentos/providerpreparation/**
+      - backend/src/main/resources/db/migration/**
+      - compose.vault-ci.yaml
       - compose.vault.yaml
       - docker/vault/**
       - scripts/check-vault-local.sh
