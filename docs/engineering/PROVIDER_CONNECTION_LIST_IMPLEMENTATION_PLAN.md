@@ -30,3 +30,26 @@ Next implementation prerequisite is the concrete forward SQL/privilege layout,
 trusted publisher/provenance mechanism and reviewed read-service boundary. This
 is engineering work to complete, not a request for the user to approve a fake
 health default. No endpoint, migration or runtime pass is delivered by this branch.
+
+## Read-only list delivery checkpoint — 4 November 2026
+
+PR49 source d9b0e9950bf18fd92be999d6dce1273a0d1e9376 completed all five
+configured workflows. Quality run41752438748 passed1517 backend tests and
+frontend gates. Publication run41752438637 passed56 focused tests, including
+the actual-cookie PostgreSQL HTTP test through a restricted runtime LOGIN.
+Docker run41752438680 passed build/smoke, retained regression and789 browser
+invocations; nine list contract cases covered desktop, tablet and mobile.
+Focused counts overlap Quality. UI interception tests are synthetic contracts;
+the native HTTP test separately verifies persisted records and guarded evidence.
+
+The list endpoint and Angular screen are delivered within this read-only slice.
+The runtime capability check now uses catalogs to inspect private table existence
+without requiring private-schema USAGE. The opt-in runtime and reviewed grants
+remain deployment prerequisites. No merge/deployment or live external observer
+is claimed. Create/rotate/test/model commands and full publication-protocol
+acceptance remain separate; missing trusted evidence stays UNAVAILABLE.
+
+Next candidate extends the native authenticated HTTP test with ten invalid query
+forms, five denied methods and empty pages1/100000, retaining exact business-row
+fingerprints. These are authored assertions until CI executes this candidate.
+No new public commands, production privileges or provider calls are introduced.
