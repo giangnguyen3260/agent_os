@@ -54,6 +54,16 @@ jq -Rs '{policy:.}' docker/vault/provider-app.hcl > "$scratch/policy.json"
 request 204 PUT sys/policies/acl/agentos-provider-app -H "@$scratch/root.headers" --data-binary "@$scratch/policy.json"
 request 200 POST auth/token/create -H "@$scratch/root.headers" --data '{"policies":["agentos-provider-app"],"no_default_policy":true,"ttl":"10m"}'
 jq -er '"X-Vault-Token: "+.auth.client_token' "$scratch/response" > "$scratch/app.headers"
+jq -er '.auth.client_token' "$scratch/response" > "$scratch/app.token"
+export AGENTOS_TEST_VAULT_URL="$base"
+export AGENTOS_TEST_VAULT_CA="$AGENTOS_VAULT_TLS_DIR/server.crt"
+export AGENTOS_TEST_VAULT_TOKEN_FILE="$scratch/app.token"
+export AGENTOS_TEST_VAULT_REFERENCE_FILE="$scratch/java-reference.json"
+java_probe() {
+  AGENTOS_TEST_VAULT_PHASE="$1" mvn -B -ntp -f backend/pom.xml \
+    -Dtest=VaultCredentialSecretsVaultIT test
+}
+java_probe prepare
 # The only credential value here is an explicitly synthetic CI sentinel.
 request 200 POST agentos/data/provider-credentials/fixture -H "@$scratch/app.headers" --data '{"options":{"cas":0},"data":{"credential":"synthetic-vault-ci-only"}}'
 jq -e '.data.version==1' "$scratch/response" >/dev/null
@@ -79,4 +89,5 @@ done
 request 200 PUT sys/unseal --data-binary "@$scratch/unseal.json"
 request 200 GET 'agentos/data/provider-credentials/fixture?version=1' -H "@$scratch/app.headers"
 jq -e '.data.data.credential=="synthetic-vault-ci-only" and .data.metadata.version==1' "$scratch/response" >/dev/null
-echo "Disposable Vault TLS, KV policy and restart checks passed"
+java_probe restart
+echo "Disposable Vault TLS, KV policy, Java adapter and restart checks passed"
