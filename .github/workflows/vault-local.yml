@@ -2,6 +2,10 @@ name: Local Vault integration
 on:
   pull_request:
     paths:
+      - backend/src/main/java/com/agentos/providervault/**
+      - backend/src/test/java/com/agentos/providervault/**
+      - backend/src/main/java/com/agentos/providercredentials/**
+      - backend/pom.xml
       - compose.vault.yaml
       - docker/vault/**
       - scripts/check-vault-local.sh
@@ -14,6 +18,11 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
       - name: Resolve fixed Vault release to immutable image
         run: |
           docker pull hashicorp/vault:2.1.2

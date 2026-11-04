@@ -44,3 +44,19 @@ implementation, scoped managed HMAC service, token renewal/trust provisioning an
 CREATE receipt/application/HTTP/UI wiring. PR52 real Vault container tests are
 separate evidence and must not be represented as this adapter's acceptance.
 No CREATE/ROTATE completion, provider call, merge or deployment is claimed.
+
+## Native integration candidate
+
+The disposable Vault workflow now invokes VaultCredentialSecretsVaultIT through
+the actual Maven/Java21 project twice: before and after Vault restart/unseal.
+The first invocation writes a synthetic credential with the application token
+and retains only a safe random scope/locator fixture in the private temporary
+directory. The second JVM reads the same reference and validates exact bytes.
+Both phases require scope substitution and unsupported-version rejection.
+Tokens pass only through a private temporary file, not command-line values.
+
+The existing real Vault shell policy/TLS assertions remain in the same workflow.
+Adapter, credential-port, test and POM changes now trigger this gate. The IT is
+explicitly environment-gated and selected by the Vault harness; ordinary unit
+test success must not imply the native IT ran. This entry records authored wiring,
+not a completed native pass. Full Java21/real Vault logs determine acceptance.
