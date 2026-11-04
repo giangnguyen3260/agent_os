@@ -1,6 +1,17 @@
 # Explicit local prerequisite. Does not configure backend credentials or enable provider commands.
 services:
+  vault-storage-init:
+    image: ${AGENTOS_VAULT_IMAGE:?Set a reviewed hashicorp/vault image pinned by sha256 digest}
+    user: "0:0"
+    entrypoint: ["/bin/sh", "-ec"]
+    command: ["chown vault:vault /vault/data && chmod 700 /vault/data"]
+    volumes:
+      - vault-data:/vault/data
+    restart: "no"
   vault:
+    depends_on:
+      vault-storage-init:
+        condition: service_completed_successfully
     image: ${AGENTOS_VAULT_IMAGE:?Set a reviewed hashicorp/vault image pinned by sha256 digest}
     command: ["server"]
     environment:
