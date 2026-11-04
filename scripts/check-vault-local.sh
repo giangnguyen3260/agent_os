@@ -109,6 +109,9 @@ if curl "${curl_args[@]}" --resolve wrong.invalid:8200:127.0.0.1 https://wrong.i
 fi
 "${compose[@]}" restart vault journal-db >/dev/null
 "${compose[@]}" up -d --wait journal-db
+# Docker may reassign an ephemeral published port on restart.
+pg_address=$("${compose[@]}" port journal-db 5432)
+export AGENTOS_TEST_JOURNAL_URL="jdbc:postgresql://127.0.0.1:${pg_address##*:}/vault_journal_test"
 for attempt in {1..30}; do
   code=$(curl "${curl_args[@]}" -o "$scratch/status" -w '%{http_code}' "$base/v1/sys/health" || true)
   if [[ "$code" == 503 ]]; then break; fi
