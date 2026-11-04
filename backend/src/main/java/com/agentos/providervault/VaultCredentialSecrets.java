@@ -8,12 +8,10 @@ import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.net.Proxy;
 import java.net.URI;
 import java.util.Arrays;
 import java.util.UUID;
 import java.util.function.Supplier;
-import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SSLSocketFactory;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
@@ -28,11 +26,8 @@ public final class VaultCredentialSecrets implements Secrets {
       new ObjectMapper()
           .enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION)
           .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
-  private final SSLSocketFactory tls;
-  private final URI origin;
-  private final String mount;
-  private final Supplier<char[]> tokens;
   private final Reconciliation reconciliation;
+  private final VaultHttp http;
 
   /** Token supplier returns a fresh owned buffer; configure CA trust in the JVM truststore. */
   public VaultCredentialSecrets(
@@ -46,22 +41,8 @@ public final class VaultCredentialSecrets implements Secrets {
       Supplier<char[]> tokens,
       Reconciliation reconciliation,
       SSLSocketFactory tls) {
-    if (tls == null) throw new Failure();
-    this.tls = tls;
-    if (origin == null
-        || !"https".equals(origin.getScheme())
-        || origin.getHost() == null
-        || origin.getRawUserInfo() != null
-        || origin.getRawQuery() != null
-        || origin.getRawFragment() != null
-        || !(origin.getRawPath().isEmpty() || origin.getRawPath().equals("/"))
-        || mount == null
-        || !mount.matches("[A-Za-z0-9_-]{1,64}")
-        || tokens == null
-        || reconciliation == null) throw new Failure();
-    this.origin = origin.resolve("/");
-    this.mount = mount;
-    this.tokens = tokens;
+    if (reconciliation == null) throw new Failure();
+    this.http = new VaultHttp(origin, mount, tokens, tls);
     this.reconciliation = reconciliation;
   }
 
@@ -88,7 +69,7 @@ public final class VaultCredentialSecrets implements Secrets {
       data.put("revision", Long.toString(scope.credentialRevision()));
       data.put("credential", borrowedCredential);
       payload = JSON.writeValueAsBytes(root);
-      response = exchange("POST", path(locator), payload);
+      response = http.exchange("POST", path(locator), payload);
       JsonNode version = JSON.readTree(response).path("data").path("version");
       if (!version.isIntegralNumber() || !version.canConvertToLong() || version.longValue() != 1)
         throw new Failure();
@@ -111,7 +92,7 @@ public final class VaultCredentialSecrets implements Secrets {
           || !reference.locator().matches("[0-9a-f-]{36}")
           || !UUID.fromString(reference.locator()).toString().equals(reference.locator())
           || !"1".equals(reference.keyVersion())) throw new Failure();
-      response = exchange("GET", path(reference.locator()) + "?version=1", null);
+      response = http.exchange("GET", path(reference.locator()) + "?version=1", null);
       JsonNode root = JSON.readTree(response).path("data");
       JsonNode metadata = root.path("metadata");
       JsonNode data = root.path("data");
@@ -156,58 +137,7 @@ public final class VaultCredentialSecrets implements Secrets {
   }
 
   private String path(String locator) {
-    return "v1/" + mount + "/data/provider-credentials/" + locator;
-  }
-
-  private byte[] exchange(String method, String path, byte[] payload) throws Exception {
-    HttpsURLConnection connection = null;
-    char[] token = null;
-    byte[] result = null;
-    try {
-      token = tokens.get();
-      if (token == null || token.length == 0 || token.length > 4096) throw new Failure();
-      for (char value : token) {
-        if (value < 0x21 || value > 0x7e) throw new Failure();
-      }
-      connection = (HttpsURLConnection) origin.resolve(path).toURL().openConnection(Proxy.NO_PROXY);
-      connection.setSSLSocketFactory(tls);
-      connection.setInstanceFollowRedirects(false);
-      connection.setConnectTimeout(5000);
-      connection.setReadTimeout(5000);
-      connection.setRequestMethod(method);
-      connection.setRequestProperty("X-Vault-Token", new String(token));
-      connection.setRequestProperty("Accept", "application/json");
-      if (payload != null) {
-        connection.setDoOutput(true);
-        connection.setFixedLengthStreamingMode(payload.length);
-        connection.setRequestProperty("Content-Type", "application/json");
-        try (var output = connection.getOutputStream()) {
-          output.write(payload);
-        }
-      }
-      if (connection.getResponseCode() != 200) throw new Failure();
-      int used = 0;
-      result = new byte[32769];
-      long deadline = System.nanoTime() + 10_000_000_000L;
-      try (var input = connection.getInputStream()) {
-        while (used < result.length) {
-          int count = input.read(result, used, result.length - used);
-          if (System.nanoTime() - deadline >= 0) throw new Failure();
-          if (count == -1) break;
-          if (count == 0) throw new Failure();
-          used += count;
-        }
-      }
-      if (used > 32768) throw new Failure();
-      byte[] owned = Arrays.copyOf(result, used);
-      clear(result);
-      result = null;
-      return owned;
-    } finally {
-      clear(result);
-      if (token != null) Arrays.fill(token, '\0');
-      if (connection != null) connection.disconnect();
-    }
+    return "data/provider-credentials/" + locator;
   }
 
   private static boolean text(JsonNode data, String field, String expected) {
