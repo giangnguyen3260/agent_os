@@ -1453,6 +1453,14 @@ class ProviderPublicationPostgresIT {
   }
 
   @Test
+  void durablePreparationJournalUsesIndependentScopedCommits() throws Exception {
+    var scope = seed();
+    com.agentos.providerpreparation.ProviderPreparationJournalTest.verify(
+        new DriverManagerDataSource(databaseUrl, required("ADMIN_USER"), password("admin")),
+        scope.organizationId());
+  }
+
+  @Test
   void providerListHttpReadsRealRowsThroughRestrictedRuntimeLogin() throws Exception {
     var scope = seed();
     UUID account = UUID.randomUUID();
