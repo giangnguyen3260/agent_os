@@ -237,12 +237,20 @@ abstract class ProviderCompletionFixture {
             });
     var coordinator =
         new com.agentos.providercreation.ProviderCreateCoordinator(
-            receipts, healthy, commandKeys, credentialBoundary);
+            receipts,
+            healthy,
+            commandKeys,
+            credentialBoundary,
+            new com.agentos.providercreation.ProviderCreateAdmission(jdbc.getDataSource()));
     var first = coordinator.create(human, org, key, createBody());
     assertThat(first.state()).isEqualTo(WriteState.COMMITTED);
     assertThat(first.result().replayed()).isFalse();
     assertThat(writes.get()).isEqualTo(1);
     outage.set(true);
+    jdbc.update("update provider_deployment_policy set openai_enabled=false where id=1");
+    var blocked = coordinator.create(human, org, UUID.randomUUID(), createBody());
+    assertThat(blocked.failure().code()).isEqualTo(Code.PROVIDER_DISABLED);
+    assertThat(writes.get()).isEqualTo(1);
     var replay = coordinator.create(human, org, key, createBody());
     assertThat(replay.state()).isEqualTo(WriteState.COMMITTED);
     assertThat(replay.result().replayed()).isTrue();
@@ -315,7 +323,11 @@ abstract class ProviderCompletionFixture {
             });
     var coordinator =
         new com.agentos.providercreation.ProviderCreateCoordinator(
-            receipts, healthy, commandKeys, credentialBoundary);
+            receipts,
+            healthy,
+            commandKeys,
+            credentialBoundary,
+            new com.agentos.providercreation.ProviderCreateAdmission(jdbc.getDataSource()));
     var decoded = createBody();
     byte[] borrowed = decoded.credential();
     var result = coordinator.create(human, org, key, decoded);
@@ -354,6 +366,84 @@ abstract class ProviderCompletionFixture {
     assertThat(denied.state()).isEqualTo(WriteState.REJECTED);
     assertThat(denied.failure().code()).isEqualTo(Code.CONNECTION_LIMIT);
     assertThat(rows()).isEqualTo(before);
+  }
+
+  @Test
+  void durableCreateAdmissionLimitsFreshAttemptsAndExpiresOldSamples() {
+    enableCreatePolicy();
+    var admission = new com.agentos.providercreation.ProviderCreateAdmission(jdbc.getDataSource());
+    for (int index = 0; index < 30; index++) {
+      assertThat(admission.acquire(human, org, UUID.randomUUID(), Provider.OPENAI)).isTrue();
+    }
+    assertThatThrownBy(() -> admission.acquire(human, org, UUID.randomUUID(), Provider.OPENAI))
+        .isInstanceOf(ProviderReceiptFailure.class)
+        .hasMessage("RATE_LIMITED");
+    jdbc.update(
+        "update provider_write_admission set recent_requests='1' where organization_id=? and"
+            + " actor_id=?",
+        org,
+        actor);
+    assertThat(admission.acquire(human, org, UUID.randomUUID(), Provider.OPENAI)).isTrue();
+    var before =
+        jdbc.queryForMap(
+            "select * from provider_write_admission where organization_id=? and actor_id=?",
+            org,
+            actor);
+    execute(healthy);
+    assertThat(admission.acquire(human, org, key, Provider.OPENAI)).isFalse();
+    assertThat(
+            jdbc.queryForMap(
+                "select * from provider_write_admission where organization_id=? and actor_id=?",
+                org,
+                actor))
+        .isEqualTo(before);
+    jdbc.update(
+        "update provider_write_admission set recent_requests='broken' where organization_id=? and"
+            + " actor_id=?",
+        org,
+        actor);
+    assertThatThrownBy(() -> admission.acquire(human, org, UUID.randomUUID(), Provider.OPENAI))
+        .hasMessage("COMMAND_UNAVAILABLE")
+        .hasNoCause();
+  }
+
+  @Test
+  void concurrentCreateAdmissionCannotExceedThirtySlots() throws Exception {
+    try (var connection = jdbc.getDataSource().getConnection()) {
+      org.junit.jupiter.api.Assumptions.assumeTrue(
+          connection.getMetaData().getDatabaseProductName().equals("PostgreSQL"),
+          "Native post-wait database clock required");
+    }
+    enableCreatePolicy();
+    var admission = new com.agentos.providercreation.ProviderCreateAdmission(jdbc.getDataSource());
+    var workers = java.util.concurrent.Executors.newFixedThreadPool(6);
+    var start = new java.util.concurrent.CountDownLatch(1);
+    try {
+      var results = new java.util.ArrayList<java.util.concurrent.Future<String>>();
+      for (int index = 0; index < 36; index++) {
+        results.add(
+            workers.submit(
+                () -> {
+                  start.await();
+                  try {
+                    return admission.acquire(human, org, UUID.randomUUID(), Provider.OPENAI)
+                        ? "ACCEPTED"
+                        : "REPLAY";
+                  } catch (ProviderReceiptFailure failure) {
+                    return failure.code();
+                  }
+                }));
+      }
+      start.countDown();
+      var outcomes = new java.util.ArrayList<String>();
+      for (var result : results)
+        outcomes.add(result.get(30, java.util.concurrent.TimeUnit.SECONDS));
+      assertThat(outcomes.stream().filter("ACCEPTED"::equals).count()).isEqualTo(30);
+      assertThat(outcomes.stream().filter("RATE_LIMITED"::equals).count()).isEqualTo(6);
+    } finally {
+      start.countDown();
+      workers.shutdownNow();
+    }
   }
 
   private void enableCreatePolicy() {
