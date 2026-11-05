@@ -20,6 +20,8 @@ import com.fasterxml.jackson.annotation.JsonIgnoreType;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -124,9 +126,32 @@ public class ProviderReceiptService {
       Metadata prepared,
       UUID createId,
       CredentialBoundary.Metadata credential) {
+    return executeInternal(actor, org, key, command, prepared, createId, credential, false);
+  }
+
+  public Result executeCreateGoverned(
+      HumanIdentity actor,
+      UUID org,
+      UUID key,
+      Command command,
+      Metadata prepared,
+      UUID createId,
+      CredentialBoundary.Metadata credential) {
+    return executeInternal(actor, org, key, command, prepared, createId, credential, true);
+  }
+
+  private Result executeInternal(
+      HumanIdentity actor,
+      UUID org,
+      UUID key,
+      Command command,
+      Metadata prepared,
+      UUID createId,
+      CredentialBoundary.Metadata credential,
+      boolean governed) {
     return safe(
         () -> {
-          authority(actor, org, true);
+          var policy = authority(actor, org, true, governed);
           if (command == null || command instanceof CredentialCommand)
             throw fail(400, "INVALID_COMMAND");
           validKey(key);
@@ -138,6 +163,25 @@ public class ProviderReceiptService {
             if (CommandBoundary.compare(prepared, stored.metadata()) != Comparison.MATCH)
               throw fail(409, "IDEMPOTENCY_CONFLICT");
             return stored.result();
+          }
+          if (governed) {
+            if (!(command instanceof Create create)) throw fail(400, "INVALID_COMMAND");
+            if (policy.size() != 1) throw fail(503, "COMMAND_UNAVAILABLE");
+            String enabled =
+                switch (create.provider()) {
+                  case OPENAI -> "openai_enabled";
+                  case ANTHROPIC -> "anthropic_enabled";
+                  case GOOGLE_GEMINI -> "gemini_enabled";
+                };
+            if (!Boolean.TRUE.equals(policy.get(0).get(enabled)))
+              throw fail(409, "PROVIDER_DISABLED");
+            Long count =
+                jdbc.queryForObject(
+                    "select count(*) from provider_connections where organization_id=?",
+                    Long.class,
+                    org);
+            if (count == null || count < 0) throw fail(503, "COMMAND_UNAVAILABLE");
+            if (count >= 100) throw fail(409, "CONNECTION_LIMIT");
           }
           boolean creating = command instanceof Create;
           if (creating) {
@@ -472,12 +516,21 @@ public class ProviderReceiptService {
   }
 
   private void authority(HumanIdentity actor, UUID org, boolean write) {
+    authority(actor, org, write, false);
+  }
+
+  private List<Map<String, Object>> authority(
+      HumanIdentity actor, UUID org, boolean write, boolean governed) {
     if (actor == null || actor.id() == null) throw fail(401, "UNAUTHORIZED");
     if (!uuid(org) || !uuid(actor.id())) throw fail(403, "FORBIDDEN");
     transaction(write);
     String lock = write ? " for update" : "";
     if (jdbc.queryForList("select id from organizations where id=?" + lock, org).size() != 1)
       throw fail(403, "FORBIDDEN");
+    var policy =
+        governed
+            ? jdbc.queryForList("select * from provider_deployment_policy where id=1 for update")
+            : List.<Map<String, Object>>of();
     var accounts =
         jdbc.queryForList(
             "select enabled,credential_version from human_accounts where id=?" + lock, actor.id());
@@ -493,6 +546,7 @@ public class ProviderReceiptService {
         || ((Number) accounts.get(0).get("credential_version")).longValue()
             != actor.credentialVersion()
         || !"ADMIN".equals(members.get(0).get("role"))) throw fail(403, "FORBIDDEN");
+    return policy;
   }
 
   private void transaction(boolean write) {

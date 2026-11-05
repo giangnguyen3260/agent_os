@@ -189,6 +189,7 @@ abstract class ProviderCompletionFixture {
 
   @Test
   void createCoordinatorReplaysWithoutAnotherSecretWriteAndDeniesRevocation() {
+    enableCreatePolicy();
     var writes = new java.util.concurrent.atomic.AtomicInteger();
     var outage = new java.util.concurrent.atomic.AtomicBoolean();
     var commandKeys =
@@ -263,6 +264,7 @@ abstract class ProviderCompletionFixture {
 
   @Test
   void createCoordinatorRechecksAuthorityAfterExternalPreparation() {
+    enableCreatePolicy();
     var calls = new java.util.concurrent.atomic.AtomicInteger();
     var commandKeys =
         new CommandBoundary(
@@ -322,6 +324,71 @@ abstract class ProviderCompletionFixture {
     assertThat(calls.get()).isEqualTo(1);
     assertThat(borrowed).containsOnly((byte) 0);
     empty();
+  }
+
+  @Test
+  void governedCreateCapacityCountsDisabledConnectionsAndMakesNoChanges() {
+    enableCreatePolicy();
+    for (int index = 0; index < 100; index++) {
+      UUID connection = UUID.randomUUID();
+      jdbc.update(
+          "insert into provider_credential_versions"
+              + "(organization_id,connection_id,provider,credential_revision,external_locator,"
+              + "external_key_version,hmac_key_version,hmac_domain_version,verifier,created_at)"
+              + " values"
+              + " (?,?,'OPENAI',1,'opaque/capacity-fixture','external-v1','credential-v1','v2',?,CURRENT_TIMESTAMP)",
+          org,
+          connection,
+          credential.digest());
+      jdbc.update(
+          "insert into provider_connections"
+              + "(id,organization_id,provider,mode,name,state,configuration_revision,credential_revision,created_at,updated_at)"
+              + " values (?,?,'OPENAI','OPENAI_API_KEY','Capacity"
+              + " fixture',?,1,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)",
+          connection,
+          org,
+          index % 2 == 0 ? "DISABLED" : "ENABLED");
+    }
+    var before = rows();
+    var denied = healthy.executeCreatePrepared(human, org, key, command, prepared, id, credential);
+    assertThat(denied.state()).isEqualTo(WriteState.REJECTED);
+    assertThat(denied.failure().code()).isEqualTo(Code.CONNECTION_LIMIT);
+    assertThat(rows()).isEqualTo(before);
+  }
+
+  private void enableCreatePolicy() {
+    jdbc.update("delete from provider_deployment_policy");
+    jdbc.update(
+        "insert into provider_deployment_policy"
+            + "(id,revision,openai_enabled,anthropic_enabled,gemini_enabled,created_at,updated_at)"
+            + " values (1,1,true,true,true,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)");
+  }
+
+  @Test
+  void governedCreatePolicyDoesNotOverrideHistoricalReplay() {
+    enableCreatePolicy();
+    var first = healthy.executeCreatePrepared(human, org, key, command, prepared, id, credential);
+    assertThat(first.state()).isEqualTo(WriteState.COMMITTED);
+    jdbc.update(
+        "update provider_deployment_policy set openai_enabled=false,revision=revision+1 where"
+            + " id=1");
+    var replay = healthy.executeCreatePrepared(human, org, key, command, prepared, id, credential);
+    assertThat(replay.state()).isEqualTo(WriteState.COMMITTED);
+    assertThat(replay.result().replayed()).isTrue();
+    var before = rows();
+    var denied =
+        healthy.executeCreatePrepared(
+            human, org, UUID.randomUUID(), command, prepared, UUID.randomUUID(), credential);
+    assertThat(denied.state()).isEqualTo(WriteState.REJECTED);
+    assertThat(denied.failure().code()).isEqualTo(Code.PROVIDER_DISABLED);
+    assertThat(rows()).isEqualTo(before);
+    jdbc.update("delete from provider_deployment_policy");
+    var missing =
+        healthy.executeCreatePrepared(
+            human, org, UUID.randomUUID(), command, prepared, id, credential);
+    assertThat(missing.state()).isEqualTo(WriteState.REJECTED);
+    assertThat(missing.failure().code()).isEqualTo(Code.COMMAND_UNAVAILABLE);
+    assertThat(rows()).isEqualTo(before);
   }
 
   private static com.agentos.providertransport.ProviderCreateBody createBody() {
