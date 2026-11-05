@@ -59,7 +59,8 @@ public final class ProviderCreateCoordinator {
         var digest =
             commands.prepareVersion(scope, command, secret, historical.metadata().keyVersion());
         committing = true;
-        return completion.executePrepared(actor, organization, key, command, digest, null, null);
+        return completion.executeCreatePrepared(
+            actor, organization, key, command, digest, null, null);
       }
       var digest = commands.prepareCurrent(scope, command, secret);
       UUID connection = UUID.randomUUID();
@@ -72,7 +73,7 @@ public final class ProviderCreateCoordinator {
       var prepared = credentials.prepare(credentialScope, secret.clone());
       committing = true;
       var result =
-          completion.executePrepared(
+          completion.executeCreatePrepared(
               actor, organization, key, command, digest, connection, prepared);
       // One bounded historical re-probe after a concurrent receipt chose another HMAC version.
       if (result.state() == WriteState.REJECTED
@@ -83,7 +84,7 @@ public final class ProviderCreateCoordinator {
         digest =
             commands.prepareVersion(scope, command, secret, historical.metadata().keyVersion());
         committing = true;
-        return completion.executePrepared(
+        return completion.executeCreatePrepared(
             actor, organization, key, command, digest, connection, prepared);
       }
       return result;

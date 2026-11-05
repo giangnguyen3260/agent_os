@@ -36,6 +36,8 @@ public final class ProviderCompletionBoundary {
     NO_CHANGE(409),
     REVISION_EXHAUSTED(409),
     CONNECTION_CONFLICT(409),
+    PROVIDER_DISABLED(409),
+    CONNECTION_LIMIT(409),
     PREPARATION_REQUIRED(409),
     RECEIPT_UNAVAILABLE(500),
     COMMAND_UNAVAILABLE(503),
@@ -153,6 +155,29 @@ public final class ProviderCompletionBoundary {
       Metadata prepared,
       UUID createId,
       CredentialBoundary.Metadata credential) {
+    return executeWrite(actor, org, key, command, prepared, createId, credential, false);
+  }
+
+  public WriteOutcome executeCreatePrepared(
+      HumanIdentity actor,
+      UUID org,
+      UUID key,
+      Command command,
+      Metadata prepared,
+      UUID createId,
+      CredentialBoundary.Metadata credential) {
+    return executeWrite(actor, org, key, command, prepared, createId, credential, true);
+  }
+
+  private WriteOutcome executeWrite(
+      HumanIdentity actor,
+      UUID org,
+      UUID key,
+      Command command,
+      Metadata prepared,
+      UUID createId,
+      CredentialBoundary.Metadata credential,
+      boolean governed) {
     Owned owned = begin(false);
     if (owned == null) return write(WriteState.UNAVAILABLE, Code.COMMAND_UNAVAILABLE);
     if (!owned.valid)
@@ -161,7 +186,11 @@ public final class ProviderCompletionBoundary {
           : write(WriteState.UNKNOWN, Code.COMMAND_OUTCOME_UNKNOWN);
     Result result;
     try {
-      result = receipts.execute(actor, org, key, command, prepared, createId, credential);
+      result =
+          governed
+              ? receipts.executeCreateGoverned(
+                  actor, org, key, command, prepared, createId, credential)
+              : receipts.execute(actor, org, key, command, prepared, createId, credential);
     } catch (RuntimeException failure) {
       Code code = known(failure);
       return rollback(owned)
