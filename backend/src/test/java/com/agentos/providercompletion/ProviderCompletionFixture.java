@@ -28,6 +28,7 @@ import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 import org.aopalliance.intercept.MethodInterceptor;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -410,7 +411,7 @@ abstract class ProviderCompletionFixture {
   @Test
   void concurrentCreateAdmissionCannotExceedThirtySlots() throws Exception {
     try (var connection = jdbc.getDataSource().getConnection()) {
-      org.junit.jupiter.api.Assumptions.assumeTrue(
+      Assumptions.assumeTrue(
           connection.getMetaData().getDatabaseProductName().equals("PostgreSQL"),
           "Native post-wait database clock required");
     }
