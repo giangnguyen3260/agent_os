@@ -126,6 +126,8 @@ class VaultCredentialSecretsVaultIT {
     var json = new ObjectMapper();
     byte[] expected = "java-vault-integration-synthetic-only".getBytes(StandardCharsets.US_ASCII);
     byte[] actual = null;
+    var boundary = new com.agentos.providercredentials.CredentialBoundary(credentialKeys, composed);
+    com.agentos.providercredentials.CredentialBoundary.Metadata persisted;
     try {
       Reference reference;
       if (phase.equals("prepare")) {
@@ -135,7 +137,44 @@ class VaultCredentialSecretsVaultIT {
                 + " journal fixture',?,'ACTIVE',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)",
             scope.organization(),
             scope.organization().toString());
-        reference = composed.store(scope, expected);
+        char[] submitted = new String(expected, StandardCharsets.US_ASCII).toCharArray();
+        persisted = boundary.prepare(scope, submitted);
+        assertThat(submitted).containsOnly('\0');
+        reference = persisted.reference();
+        UUID preparationId =
+            jdbc.queryForObject(
+                "select id from provider_secret_preparations where external_locator=?",
+                UUID.class,
+                reference.locator());
+        var preparation =
+            new com.agentos.providerpreparation.ProviderPreparationJournal.Preparation(
+                preparationId, scope, reference.locator());
+        assertThat(journal.observe(preparation))
+            .isEqualTo(
+                com.agentos.providerpreparation.ProviderPreparationJournal.Observation.UNRESOLVED);
+        new org.springframework.transaction.support.TransactionTemplate(
+                new org.springframework.jdbc.datasource.DataSourceTransactionManager(datasource))
+            .executeWithoutResult(
+                status -> {
+                  jdbc.update(
+                      "insert into provider_credential_versions"
+                          + "(organization_id,connection_id,provider,credential_revision,external_locator,"
+                          + "external_key_version,hmac_key_version,hmac_domain_version,verifier,created_at)"
+                          + " values (?,?,'OPENAI',1,?,'1',?,'v2',?,CURRENT_TIMESTAMP)",
+                      scope.organization(),
+                      scope.connection(),
+                      persisted.reference().locator(),
+                      persisted.macVersion(),
+                      persisted.digest());
+                  jdbc.update(
+                      "insert into provider_connections"
+                          + "(id,organization_id,provider,mode,name,state,configuration_revision,"
+                          + "credential_revision,created_at,updated_at) values"
+                          + " (?,?,'OPENAI','OPENAI_API_KEY','Synthetic"
+                          + " fixture','ENABLED',1,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)",
+                      scope.connection(),
+                      scope.organization());
+                });
         var safe = json.createObjectNode();
         safe.put("organization", scope.organization().toString());
         safe.put("connection", scope.connection().toString());
@@ -151,7 +190,26 @@ class VaultCredentialSecretsVaultIT {
                 Provider.OPENAI,
                 1);
         reference = new Reference(scope, safe.path("locator").asText(), "1");
+        var stored =
+            jdbc.queryForMap(
+                "select hmac_key_version,verifier from provider_credential_versions where"
+                    + " organization_id=? and connection_id=? and provider='OPENAI' and"
+                    + " credential_revision=1",
+                scope.organization(),
+                scope.connection());
+        persisted =
+            new com.agentos.providercredentials.CredentialBoundary.Metadata(
+                scope,
+                (String) stored.get("hmac_key_version"),
+                reference,
+                (String) stored.get("verifier"));
       }
+      var verified = new java.util.concurrent.atomic.AtomicBoolean();
+      boundary.use(
+          reference.scope(),
+          persisted,
+          borrowed -> verified.set(Arrays.equals(borrowed, expected)));
+      assertThat(verified.get()).as("HMAC verified before credential callback").isTrue();
       actual = composed.read(reference);
       assertThat(Arrays.equals(actual, expected))
           .as("exact synthetic credential readback")
@@ -164,9 +222,51 @@ class VaultCredentialSecretsVaultIT {
       assertThat(row.get("connection_id")).isEqualTo(reference.scope().connection());
       assertThat(row.get("state")).isEqualTo("WRITTEN");
       assertThat(row.get("external_version")).isEqualTo("1");
+      String beforeObservation =
+          jdbc.queryForObject(
+              "select row_to_json(p)::text from provider_secret_preparations p where id=?",
+              String.class,
+              row.get("id"));
+      var preparation =
+          new com.agentos.providerpreparation.ProviderPreparationJournal.Preparation(
+              (UUID) row.get("id"), reference.scope(), reference.locator());
+      assertThat(journal.observe(preparation))
+          .isEqualTo(
+              com.agentos.providerpreparation.ProviderPreparationJournal.Observation
+                  .RETAINED_REFERENCE_FOUND);
+      assertThat(
+              jdbc.queryForObject(
+                  "select row_to_json(p)::text from provider_secret_preparations p where id=?",
+                  String.class,
+                  preparation.id()))
+          .isEqualTo(beforeObservation);
       assertThat(
               jdbc.queryForObject("select count(*) from provider_secret_preparations", Long.class))
           .isEqualTo(1L);
+      var foreignPreparation =
+          new com.agentos.providerpreparation.ProviderPreparationJournal.Preparation(
+              preparation.id(),
+              new Scope(reference.scope().organization(), UUID.randomUUID(), Provider.OPENAI, 1),
+              reference.locator());
+      assertThatThrownBy(() -> journal.observe(foreignPreparation))
+          .hasMessage("PREPARATION_JOURNAL_UNAVAILABLE")
+          .hasNoCause();
+      jdbc.update(
+          "update provider_credential_versions set external_key_version='2' where organization_id=?"
+              + " and connection_id=?",
+          reference.scope().organization(),
+          reference.scope().connection());
+      try {
+        assertThat(journal.observe(preparation))
+            .isEqualTo(
+                com.agentos.providerpreparation.ProviderPreparationJournal.Observation.UNRESOLVED);
+      } finally {
+        jdbc.update(
+            "update provider_credential_versions set external_key_version='1' where"
+                + " organization_id=? and connection_id=?",
+            reference.scope().organization(),
+            reference.scope().connection());
+      }
       var forbidden = new java.util.ArrayList<String>();
       forbidden.add(new String(expected, StandardCharsets.US_ASCII));
       forbidden.add(java.util.Base64.getEncoder().encodeToString(expected));
