@@ -18,6 +18,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 /** Internal preparation/replay composition, not a public command gate or automatic bean. */
 public final class ProviderCreateCoordinator {
+  private final ProviderCreateAdmission admission;
   private final ProviderReceiptService receipts;
   private final ProviderCompletionBoundary completion;
   private final CommandBoundary commands;
@@ -27,12 +28,15 @@ public final class ProviderCreateCoordinator {
       ProviderReceiptService receipts,
       ProviderCompletionBoundary completion,
       CommandBoundary commands,
-      CredentialBoundary credentials) {
+      CredentialBoundary credentials,
+      ProviderCreateAdmission admission) {
     if (receipts == null
         || !AopUtils.isAopProxy(receipts)
         || completion == null
         || commands == null
-        || credentials == null) throw new IllegalArgumentException("INVALID_CONFIGURATION");
+        || credentials == null
+        || admission == null) throw new IllegalArgumentException("INVALID_CONFIGURATION");
+    this.admission = admission;
     this.receipts = receipts;
     this.completion = completion;
     this.commands = commands;
@@ -51,6 +55,10 @@ public final class ProviderCreateCoordinator {
       // The proxied RR probe authenticates/authorizes and commits before any key service access.
       var historical = receipts.probeOwn(actor, organization, key);
       var command = body.command();
+      if (historical == null && !admission.acquire(actor, organization, key, command.provider())) {
+        historical = receipts.probeOwn(actor, organization, key);
+        if (historical == null) return unavailable();
+      }
       var scope = new CommandBoundary.Scope(organization, actor.id());
       byte[] borrowed = body.credential();
       secret = new char[borrowed.length];
@@ -94,6 +102,13 @@ public final class ProviderCreateCoordinator {
             WriteState.REJECTED,
             null,
             new Failure(failure.status() == 401 ? Code.UNAUTHORIZED : Code.FORBIDDEN));
+      }
+      if (!committing
+          && (failure.code().equals("PROVIDER_DISABLED")
+              || failure.code().equals("CONNECTION_LIMIT")
+              || failure.code().equals("RATE_LIMITED"))) {
+        return new WriteOutcome(
+            WriteState.REJECTED, null, new Failure(Code.valueOf(failure.code())));
       }
       return committing ? unknown() : unavailable();
     } catch (RuntimeException failure) {
