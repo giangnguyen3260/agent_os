@@ -2,6 +2,8 @@ name: Provider completion boundary
 on:
   pull_request:
     paths:
+      - 'backend/src/main/java/com/agentos/providercreation/**'
+      - 'backend/src/main/java/com/agentos/providertransport/**'
       - 'backend/src/main/java/com/agentos/providercompletion/**'
       - 'backend/src/test/java/com/agentos/providercompletion/**'
       - '.github/workflows/provider-completion-boundary.yml'

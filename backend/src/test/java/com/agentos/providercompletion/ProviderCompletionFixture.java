@@ -187,6 +187,150 @@ abstract class ProviderCompletionFixture {
     return outcome;
   }
 
+  @Test
+  void createCoordinatorReplaysWithoutAnotherSecretWriteAndDeniesRevocation() {
+    var writes = new java.util.concurrent.atomic.AtomicInteger();
+    var outage = new java.util.concurrent.atomic.AtomicBoolean();
+    var commandKeys =
+        new CommandBoundary(
+            new CommandBoundary.Keys() {
+              public String currentVersion() {
+                outside();
+                return "key-v1";
+              }
+
+              public Key key(String version) {
+                outside();
+                return new SecretKeySpec(new byte[32], "HmacSHA256");
+              }
+            });
+    var credentialBoundary =
+        new CredentialBoundary(
+            new CredentialBoundary.Keys() {
+              public String currentVersion() {
+                outside();
+                return "credential-v1";
+              }
+
+              public SecretKey key(String version) {
+                outside();
+                return new SecretKeySpec(new byte[32], "HmacSHA256");
+              }
+            },
+            new CredentialBoundary.Secrets() {
+              public CredentialBoundary.Reference store(
+                  CredentialBoundary.Scope scope, byte[] value) {
+                outside();
+                if (outage.get()) throw new CredentialBoundary.Failure();
+                writes.incrementAndGet();
+                return new CredentialBoundary.Reference(
+                    scope, "opaque/create-fixture", "external-v1");
+              }
+
+              public byte[] read(CredentialBoundary.Reference reference) {
+                throw new AssertionError("No secret read");
+              }
+
+              public void preparationFailed(
+                  CredentialBoundary.Scope scope, CredentialBoundary.Reference reference) {}
+            });
+    var coordinator =
+        new com.agentos.providercreation.ProviderCreateCoordinator(
+            receipts, healthy, commandKeys, credentialBoundary);
+    var first = coordinator.create(human, org, key, createBody());
+    assertThat(first.state()).isEqualTo(WriteState.COMMITTED);
+    assertThat(first.result().replayed()).isFalse();
+    assertThat(writes.get()).isEqualTo(1);
+    outage.set(true);
+    var replay = coordinator.create(human, org, key, createBody());
+    assertThat(replay.state()).isEqualTo(WriteState.COMMITTED);
+    assertThat(replay.result().replayed()).isTrue();
+    assertThat(replay.result().receipt()).isEqualTo(first.result().receipt());
+    assertThat(writes.get()).isEqualTo(1);
+    jdbc.update(
+        "update organization_memberships set role='MEMBER' where account_id=? and"
+            + " organization_id=?",
+        actor,
+        org);
+    var denied = coordinator.create(human, org, key, createBody());
+    assertThat(denied.state()).isEqualTo(WriteState.REJECTED);
+    assertThat(denied.failure().code()).isEqualTo(Code.FORBIDDEN);
+    assertThat(writes.get()).isEqualTo(1);
+    rows().values().forEach(value -> assertThat(value).hasSize(1));
+    assertThat(rows().get("provider_connections").get(0).get("id"))
+        .isEqualTo(first.result().receipt().connectionId());
+  }
+
+  @Test
+  void createCoordinatorRechecksAuthorityAfterExternalPreparation() {
+    var calls = new java.util.concurrent.atomic.AtomicInteger();
+    var commandKeys =
+        new CommandBoundary(
+            new CommandBoundary.Keys() {
+              public String currentVersion() {
+                outside();
+                return "key-v1";
+              }
+
+              public Key key(String version) {
+                outside();
+                return new SecretKeySpec(new byte[32], "HmacSHA256");
+              }
+            });
+    var credentialBoundary =
+        new CredentialBoundary(
+            new CredentialBoundary.Keys() {
+              public String currentVersion() {
+                outside();
+                return "credential-v1";
+              }
+
+              public SecretKey key(String version) {
+                outside();
+                return new SecretKeySpec(new byte[32], "HmacSHA256");
+              }
+            },
+            new CredentialBoundary.Secrets() {
+              public CredentialBoundary.Reference store(
+                  CredentialBoundary.Scope scope, byte[] value) {
+                outside();
+                calls.incrementAndGet();
+                jdbc.update(
+                    "update organization_memberships set role='MEMBER' where account_id=? and"
+                        + " organization_id=?",
+                    actor,
+                    org);
+                return new CredentialBoundary.Reference(
+                    scope, "opaque/revocation-fixture", "external-v1");
+              }
+
+              public byte[] read(CredentialBoundary.Reference reference) {
+                throw new AssertionError("No secret read");
+              }
+
+              public void preparationFailed(
+                  CredentialBoundary.Scope scope, CredentialBoundary.Reference reference) {}
+            });
+    var coordinator =
+        new com.agentos.providercreation.ProviderCreateCoordinator(
+            receipts, healthy, commandKeys, credentialBoundary);
+    var decoded = createBody();
+    byte[] borrowed = decoded.credential();
+    var result = coordinator.create(human, org, key, decoded);
+    assertThat(result.state()).isEqualTo(WriteState.REJECTED);
+    assertThat(result.failure().code()).isEqualTo(Code.FORBIDDEN);
+    assertThat(calls.get()).isEqualTo(1);
+    assertThat(borrowed).containsOnly((byte) 0);
+    empty();
+  }
+
+  private static com.agentos.providertransport.ProviderCreateBody createBody() {
+    return com.agentos.providertransport.ProviderCreateBody.consume(
+        ("{\"provider\":\"OPENAI\",\"credentialMode\":\"OPENAI_API_KEY\","
+                + "\"name\":\"Coordinator fixture\",\"options\":{},\"apiKey\":\"synthetic-only\"}")
+            .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+  }
+
   Map<String, List<Map<String, Object>>> rows() {
     Map<String, List<Map<String, Object>>> result = new LinkedHashMap<>();
     for (String table : TABLES)
