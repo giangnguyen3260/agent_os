@@ -119,7 +119,11 @@ public final class ProviderCreateAdmission {
                     if (value > millis - 60_000) retained.add(sample);
                   }
                 }
-                if (retained.size() >= 30) throw failure(429, "RATE_LIMITED");
+                if (retained.size() >= 30) {
+                  long remaining = Long.parseLong(retained.get(0)) + 60_000 - millis;
+                  int retryAfter = (int) Math.max(1, Math.min(60, (remaining + 999) / 1000));
+                  throw new ProviderReceiptFailure(429, "RATE_LIMITED", retryAfter);
+                }
                 retained.add(Long.toString(millis));
                 if (rows.isEmpty()) {
                   jdbc.update(

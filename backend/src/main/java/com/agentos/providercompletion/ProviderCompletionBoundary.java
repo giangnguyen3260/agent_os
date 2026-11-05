@@ -56,9 +56,16 @@ public final class ProviderCompletionBoundary {
   }
 
   @JsonIgnoreType
-  public record Failure(Code code) {
+  public record Failure(Code code, int retryAfter) {
+    public Failure(Code code) {
+      this(code, 0);
+    }
+
     public Failure {
-      if (code == null) throw invalid();
+      if (code == null
+          || retryAfter < 0
+          || retryAfter > 60
+          || (retryAfter != 0 && code != Code.RATE_LIMITED)) throw invalid();
     }
 
     public int status() {

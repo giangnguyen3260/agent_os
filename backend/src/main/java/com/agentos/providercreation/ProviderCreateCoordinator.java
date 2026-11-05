@@ -108,7 +108,9 @@ public final class ProviderCreateCoordinator {
               || failure.code().equals("CONNECTION_LIMIT")
               || failure.code().equals("RATE_LIMITED"))) {
         return new WriteOutcome(
-            WriteState.REJECTED, null, new Failure(Code.valueOf(failure.code())));
+            WriteState.REJECTED,
+            null,
+            new Failure(Code.valueOf(failure.code()), failure.retryAfter()));
       }
       return committing ? unknown() : unavailable();
     } catch (RuntimeException failure) {
