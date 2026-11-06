@@ -13,6 +13,7 @@ import com.agentos.providerconnections.ProviderConnectionService;
 import com.agentos.providercreation.ProviderCreateAdmission;
 import com.agentos.providercreation.ProviderCreateCoordinator;
 import com.agentos.providercredentials.CredentialBoundary;
+import com.agentos.providercredentials.CredentialBoundary.CreateAttempt;
 import com.agentos.providercredentials.CredentialBoundary.Failure;
 import com.agentos.providercredentials.CredentialBoundary.Provider;
 import com.agentos.providercredentials.CredentialBoundary.Reference;
@@ -254,6 +255,8 @@ class VaultCredentialSecretsVaultIT {
       assertThat(row.get("connection_id")).isEqualTo(reference.scope().connection());
       assertThat(row.get("state")).isEqualTo("WRITTEN");
       assertThat(row.get("external_version")).isEqualTo("1");
+      assertThat(row.get("create_actor_id")).isNull();
+      assertThat(row.get("create_idempotency_key")).isNull();
       String beforeObservation =
           jdbc.queryForObject(
               "select row_to_json(p)::text from provider_secret_preparations p where id=?",
@@ -394,21 +397,44 @@ class VaultCredentialSecretsVaultIT {
       var reference = stored.reference();
       assertThat(reference.scope()).isEqualTo(new Scope(org, connection, Provider.OPENAI, 1));
       assertThat(reference.keyVersion()).isEqualTo("1");
+      var attempt = new CreateAttempt(human.id(), key);
       UUID preparationId =
           jdbc.queryForObject(
               "select id from provider_secret_preparations where organization_id=? and"
                   + " connection_id=? and external_locator=? and external_version=? and"
-                  + " state='WRITTEN'",
+                  + " create_actor_id=? and create_idempotency_key=? and state='WRITTEN'",
               UUID.class,
               org,
               connection,
               reference.locator(),
-              reference.keyVersion());
+              reference.keyVersion(),
+              attempt.actor(),
+              attempt.idempotencyKey());
       var preparation =
           new ProviderPreparationJournal.Preparation(
               preparationId, reference.scope(), reference.locator());
-      assertThat(journal.observe(preparation))
+      assertThat(journal.observeCreate(preparation, attempt))
           .isEqualTo(ProviderPreparationJournal.Observation.RETAINED_REFERENCE_FOUND);
+      assertThatThrownBy(
+              () ->
+                  journal.observeCreate(
+                      preparation, new CreateAttempt(human.id(), UUID.randomUUID())))
+          .hasMessage("PREPARATION_JOURNAL_UNAVAILABLE")
+          .hasNoCause();
+      String versionUpdate =
+          "update provider_credential_versions set external_key_version=?"
+              + " where organization_id=? and connection_id=? and credential_revision=1";
+      assertThat(jdbc.update(versionUpdate, "2", org, connection)).isEqualTo(1);
+      try {
+        assertThat(journal.observeCreate(preparation, attempt))
+            .isEqualTo(ProviderPreparationJournal.Observation.UNRESOLVED);
+      } finally {
+        assertThat(jdbc.update(versionUpdate, "1", org, connection)).isEqualTo(1);
+      }
+      assertThatThrownBy(
+              () -> journal.observeCreate(preparation, new CreateAttempt(UUID.randomUUID(), key)))
+          .hasMessage("PREPARATION_JOURNAL_UNAVAILABLE")
+          .hasNoCause();
       var replay = coordinator.create(human, org, key, createBody());
       assertThat(replay.state()).isEqualTo(WriteState.COMMITTED);
       assertThat(replay.result().replayed()).isTrue();
@@ -475,12 +501,20 @@ class VaultCredentialSecretsVaultIT {
       throws Exception {
     UUID org = UUID.randomUUID(), key = UUID.randomUUID();
     var human = seedCreateActor(jdbc, org);
+    var attempt = new CreateAttempt(human.id(), key);
     var acknowledgedStores = new CountDownLatch(2);
     var gatedSecrets =
         new CredentialBoundary.Secrets() {
           @Override
           public Reference store(Scope scope, byte[] borrowedCredential) {
-            Reference written = composed.store(scope, borrowedCredential);
+            throw new AssertionError("Create must use a correlated Vault preparation");
+          }
+
+          @Override
+          public Reference storeForCreate(
+              Scope scope, byte[] borrowedCredential, CreateAttempt actualAttempt) {
+            assertThat(actualAttempt).isEqualTo(attempt);
+            Reference written = composed.storeForCreate(scope, borrowedCredential, actualAttempt);
             acknowledgedStores.countDown();
             try {
               if (!acknowledgedStores.await(20, TimeUnit.SECONDS)) {
@@ -538,16 +572,22 @@ class VaultCredentialSecretsVaultIT {
         jdbc.query(
             "select id,connection_id,external_locator from provider_secret_preparations"
                 + " where organization_id=? and provider='OPENAI' and credential_revision=1"
-                + " and state='WRITTEN' and external_version='1'",
+                + " and state='WRITTEN' and external_version='1'"
+                + " and create_actor_id=? and create_idempotency_key=?",
             (row, index) ->
                 new ProviderPreparationJournal.Preparation(
                     row.getObject("id", UUID.class),
                     new Scope(org, row.getObject("connection_id", UUID.class), Provider.OPENAI, 1),
                     row.getString("external_locator")),
-            org);
+            org,
+            attempt.actor(),
+            attempt.idempotencyKey());
     assertThat(preparations).hasSize(2);
     var retained = connections.credentialVersion(human, org, connection, 1).reference();
-    assertThat(preparations.stream().map(journal::observe).toList())
+    assertThat(
+            preparations.stream()
+                .map(preparation -> journal.observeCreate(preparation, attempt))
+                .toList())
         .containsExactlyInAnyOrder(
             ProviderPreparationJournal.Observation.RETAINED_REFERENCE_FOUND,
             ProviderPreparationJournal.Observation.UNRESOLVED);
@@ -555,7 +595,7 @@ class VaultCredentialSecretsVaultIT {
     try {
       for (var preparation : preparations) {
         var reference = new Reference(preparation.scope(), preparation.locator(), "1");
-        assertThat(journal.observe(preparation))
+        assertThat(journal.observeCreate(preparation, attempt))
             .isEqualTo(
                 retained.equals(reference)
                     ? ProviderPreparationJournal.Observation.RETAINED_REFERENCE_FOUND
@@ -680,15 +720,20 @@ class VaultCredentialSecretsVaultIT {
     var reference = connections.credentialVersion(human, org, connection, 1).reference();
     var row =
         jdbc.queryForMap(
-            "select id,external_version,state from provider_secret_preparations"
-                + " where organization_id=? and external_locator=?",
+            "select id,external_version,state,create_actor_id,create_idempotency_key"
+                + " from provider_secret_preparations where organization_id=? and external_locator=?",
             org,
             reference.locator());
-    assertThat(row).containsEntry("state", "WRITTEN").containsEntry("external_version", "1");
+    var attempt = new CreateAttempt(human.id(), key);
+    assertThat(row)
+        .containsEntry("state", "WRITTEN")
+        .containsEntry("external_version", "1")
+        .containsEntry("create_actor_id", attempt.actor())
+        .containsEntry("create_idempotency_key", attempt.idempotencyKey());
     var preparation =
         new ProviderPreparationJournal.Preparation(
             (UUID) row.get("id"), reference.scope(), reference.locator());
-    assertThat(journal.observe(preparation))
+    assertThat(journal.observeCreate(preparation, attempt))
         .isEqualTo(ProviderPreparationJournal.Observation.RETAINED_REFERENCE_FOUND);
   }
 

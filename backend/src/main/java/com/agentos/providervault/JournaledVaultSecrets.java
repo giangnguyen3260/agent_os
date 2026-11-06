@@ -1,5 +1,6 @@
 package com.agentos.providervault;
 
+import com.agentos.providercredentials.CredentialBoundary.CreateAttempt;
 import com.agentos.providercredentials.CredentialBoundary.Failure;
 import com.agentos.providercredentials.CredentialBoundary.Reference;
 import com.agentos.providercredentials.CredentialBoundary.Scope;
@@ -20,9 +21,23 @@ public final class JournaledVaultSecrets implements Secrets {
 
   @Override
   public Reference store(Scope scope, byte[] borrowedCredential) {
+    return store(scope, borrowedCredential, null);
+  }
+
+  @Override
+  public Reference storeForCreate(Scope scope, byte[] borrowedCredential, CreateAttempt attempt) {
+    if (attempt == null) throw new Failure();
+    return store(scope, borrowedCredential, attempt);
+  }
+
+  private Reference store(Scope scope, byte[] borrowedCredential, CreateAttempt attempt) {
     ProviderPreparationJournal.Preparation preparation;
     try {
-      preparation = journal.begin(scope, UUID.randomUUID().toString());
+      String locator = UUID.randomUUID().toString();
+      preparation =
+          attempt == null
+              ? journal.begin(scope, locator)
+              : journal.beginCreate(scope, locator, attempt);
     } catch (RuntimeException failure) {
       // No network call is permitted after failed or uncertain journal begin.
       throw new Failure();

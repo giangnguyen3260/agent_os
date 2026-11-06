@@ -1,5 +1,6 @@
 package com.agentos.providerpreparation;
 
+import com.agentos.providercredentials.CredentialBoundary.CreateAttempt;
 import com.agentos.providercredentials.CredentialBoundary.Scope;
 import com.fasterxml.jackson.annotation.JsonIgnoreType;
 import java.util.UUID;
@@ -74,6 +75,35 @@ public final class ProviderPreparationJournal {
     }
   }
 
+  /** Commits the Create receipt namespace along with the preparation before any Vault write. */
+  public Preparation beginCreate(Scope scope, String locator, CreateAttempt attempt) {
+    outside();
+    if (attempt == null || scope == null || scope.credentialRevision() != 1) throw unavailable();
+    var preparation = new Preparation(UUID.randomUUID(), scope, locator);
+    try {
+      transaction.executeWithoutResult(
+          status ->
+              jdbc.update(
+                  """
+                  insert into provider_secret_preparations
+                    (id,organization_id,connection_id,provider,credential_revision,external_locator,
+                     state,create_actor_id,create_idempotency_key)
+                  values (?,?,?,?,?,?,'PENDING',?,?)
+                  """,
+                  preparation.id(),
+                  scope.organization(),
+                  scope.connection(),
+                  scope.provider().name(),
+                  scope.credentialRevision(),
+                  locator,
+                  attempt.actor(),
+                  attempt.idempotencyKey()));
+      return preparation;
+    } catch (RuntimeException failure) {
+      throw unavailable();
+    }
+  }
+
   /** Acknowledgement is scoped to the exact preparation, never a locator supplied by a browser. */
   public void written(Preparation preparation) {
     transition(preparation, true);
@@ -118,6 +148,56 @@ public final class ProviderPreparationJournal {
                     scope.provider().name(),
                     scope.credentialRevision(),
                     preparation.locator());
+            if (results.size() != 1 || results.get(0) == null) throw unavailable();
+            return results.get(0) ? Observation.RETAINED_REFERENCE_FOUND : Observation.UNRESOLVED;
+          });
+    } catch (RuntimeException failure) {
+      throw unavailable();
+    }
+  }
+
+  /**
+   * Positive evidence for this Create attempt only. A receipt for a competing preparation or an
+   * absent receipt leaves this preparation unresolved and grants no cleanup authority.
+   */
+  public Observation observeCreate(Preparation preparation, CreateAttempt attempt) {
+    outside();
+    if (preparation == null || attempt == null) throw unavailable();
+    try {
+      return snapshot.execute(
+          status -> {
+            Scope scope = preparation.scope();
+            var results =
+                jdbc.queryForList(
+                    """
+                    select p.state='WRITTEN' and exists (
+                      select 1 from provider_command_receipts r
+                      join provider_credential_versions v on v.organization_id=r.organization_id
+                        and v.connection_id=r.connection_id
+                      join provider_connections c on c.organization_id=v.organization_id
+                        and c.id=v.connection_id and c.provider=v.provider
+                        and c.credential_revision>=v.credential_revision
+                      where r.organization_id=p.organization_id and r.actor_id=p.create_actor_id
+                        and r.idempotency_key=p.create_idempotency_key and r.operation='CREATE'
+                        and r.connection_id=p.connection_id and v.provider=p.provider
+                        and v.credential_revision=p.credential_revision
+                        and v.external_locator=p.external_locator
+                        and v.external_key_version=p.external_version
+                    )
+                    from provider_secret_preparations p
+                    where p.id=? and p.organization_id=? and p.connection_id=? and p.provider=?
+                      and p.credential_revision=? and p.external_locator=?
+                      and p.create_actor_id=? and p.create_idempotency_key=?
+                    """,
+                    Boolean.class,
+                    preparation.id(),
+                    scope.organization(),
+                    scope.connection(),
+                    scope.provider().name(),
+                    scope.credentialRevision(),
+                    preparation.locator(),
+                    attempt.actor(),
+                    attempt.idempotencyKey());
             if (results.size() != 1 || results.get(0) == null) throw unavailable();
             return results.get(0) ? Observation.RETAINED_REFERENCE_FOUND : Observation.UNRESOLVED;
           });
