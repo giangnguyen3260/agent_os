@@ -54,8 +54,7 @@ public class ProviderCreateReceiptController {
       throw OptionsWire.bad();
     }
     OptionsWire.validate(request, organizationId);
-    var result =
-        completion.lookupOwn(actor, UUID.fromString(organizationId), UUID.fromString(key));
+    var result = completion.lookupOwn(actor, UUID.fromString(organizationId), UUID.fromString(key));
     if (result.failure() != null && result.failure().code() == Code.UNAUTHORIZED) {
       var session = request.getSession(false);
       if (session != null) session.invalidate();
