@@ -3,15 +3,20 @@ package com.agentos.providertransport;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.agentos.providercommands.CommandBoundary.CredentialMode;
 import com.agentos.providercommands.CommandBoundary.Operation;
+import com.agentos.providercommands.CommandBoundary.Provider;
 import com.agentos.providercompletion.ProviderCompletionBoundary.Code;
 import com.agentos.providercompletion.ProviderCompletionBoundary.Failure;
 import com.agentos.providercompletion.ProviderCompletionBoundary.WriteOutcome;
 import com.agentos.providercompletion.ProviderCompletionBoundary.WriteState;
+import com.agentos.providerreceipts.ProviderReceiptService.Configuration;
 import com.agentos.providerreceipts.ProviderReceiptService.Receipt;
 import com.agentos.providerreceipts.ProviderReceiptService.Result;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.time.OffsetDateTime;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -19,6 +24,156 @@ import org.springframework.mock.web.MockHttpServletResponse;
 
 class ProviderCreateResponsesTest {
   private final ObjectMapper json = new ObjectMapper();
+
+  @Test
+  void committedCreateAndReplayReturnExactlyTheSameHistoricalData() throws Exception {
+    var mapper = new ObjectMapper().setSerializationInclusion(JsonInclude.Include.NON_EMPTY);
+    var org = UUID.randomUUID();
+    var command = UUID.randomUUID();
+    var connection = UUID.randomUUID();
+    var actor = UUID.randomUUID();
+    var eventTime = OffsetDateTime.parse("2026-11-06T13:00:00.123456+07:00");
+    var recorded = eventTime.plusNanos(1000);
+    for (var profile :
+        new Configuration[] {
+          snapshot(
+              org, connection, Provider.OPENAI, CredentialMode.OPENAI_API_KEY, null, eventTime),
+          snapshot(
+              org,
+              connection,
+              Provider.GOOGLE_GEMINI,
+              CredentialMode.GEMINI_API_KEY,
+              null,
+              eventTime),
+          snapshot(
+              org,
+              connection,
+              Provider.ANTHROPIC,
+              CredentialMode.ANTHROPIC_API_KEY,
+              null,
+              eventTime),
+          snapshot(
+              org,
+              connection,
+              Provider.ANTHROPIC,
+              CredentialMode.ANTHROPIC_API_KEY,
+              "wrkspc_test",
+              eventTime)
+        }) {
+      var receipt =
+          new Receipt(org, command, Operation.CREATE, connection, actor, recorded, null, profile);
+      var first = new MockHttpServletResponse();
+      var replay = new MockHttpServletResponse();
+      ProviderCreateResponses.writeOutcome(mapper, first, committed(receipt, false));
+      ProviderCreateResponses.writeOutcome(mapper, replay, committed(receipt, true));
+      assertThat(first.getStatus()).isEqualTo(201);
+      assertThat(replay.getStatus()).isEqualTo(200);
+      var firstBody = json.readTree(first.getContentAsByteArray());
+      var replayBody = json.readTree(replay.getContentAsByteArray());
+      assertThat(firstBody.properties())
+          .extracting(Map.Entry::getKey)
+          .containsExactlyInAnyOrder("data", "meta");
+      assertThat(firstBody.path("meta").properties())
+          .extracting(Map.Entry::getKey)
+          .containsExactly("requestId");
+      assertThat(UUID.fromString(firstBody.path("meta").path("requestId").asText()).version())
+          .isEqualTo(4);
+      assertThat(replayBody.path("data")).isEqualTo(firstBody.path("data"));
+      String options =
+          profile.provider() != Provider.ANTHROPIC
+              ? "{}"
+              : profile.workspaceId() == null
+                  ? "{\"workspaceId\":null}"
+                  : "{\"workspaceId\":\"wrkspc_test\"}";
+      assertThat(firstBody.path("data"))
+          .isEqualTo(
+              json.readTree(
+                  """
+                  {
+                    "organizationId":"%s","commandId":"%s","operation":"CREATE","connectionId":"%s",
+                    "actorId":"%s","committedAt":"2026-11-06T06:00:00.123457Z","before":null,
+                    "after":{
+                      "organizationId":"%s","id":"%s","provider":"%s","credentialMode":"%s",
+                      "name":"Fixture connection","options":%s,"state":"ENABLED","revision":"1",
+                      "credentialRevision":"1","createdAt":"2026-11-06T06:00:00.123456Z",
+                      "updatedAt":"2026-11-06T06:00:00.123456Z"
+                    },"checkId":null
+                  }
+                  """
+                      .formatted(
+                          org,
+                          command,
+                          connection,
+                          actor,
+                          org,
+                          connection,
+                          profile.provider(),
+                          profile.credentialMode(),
+                          options)));
+      for (var response : new MockHttpServletResponse[] {first, replay}) {
+        assertThat(response.getHeader("Cache-Control")).isEqualTo("no-store");
+        assertThat(response.getContentType()).isEqualTo("application/json");
+        assertThat(response.getHeader("Retry-After")).isNull();
+      }
+    }
+  }
+
+  @Test
+  void invalidReceiptAndUnknownOutcomeNeverExposeSuccessData() throws Exception {
+    var org = UUID.randomUUID();
+    var id = UUID.randomUUID();
+    var time = OffsetDateTime.parse("2026-11-06T06:00:00.123456Z");
+    var after = snapshot(org, id, Provider.OPENAI, CredentialMode.OPENAI_API_KEY, null, time);
+    var paddedName =
+        new Configuration(
+            org,
+            id,
+            Provider.OPENAI,
+            CredentialMode.OPENAI_API_KEY,
+            " Padded ",
+            null,
+            "ENABLED",
+            1,
+            1,
+            time,
+            time);
+    for (var outcome :
+        new WriteOutcome[] {
+          committed(new Receipt(org, id, Operation.RENAME, id, id, time, null, after), false),
+          committed(new Receipt(org, id, Operation.CREATE, id, id, time, after, after), false),
+          committed(new Receipt(org, id, Operation.CREATE, id, id, time, null, null), false),
+          committed(
+              new Receipt(UUID.randomUUID(), id, Operation.CREATE, id, id, time, null, after),
+              true),
+          committed(
+              new Receipt(org, id, Operation.CREATE, id, id, time.minusNanos(1000), null, after),
+              true),
+          committed(new Receipt(org, id, Operation.CREATE, id, id, time, null, paddedName), true),
+          new WriteOutcome(WriteState.UNKNOWN, null, new Failure(Code.COMMAND_OUTCOME_UNKNOWN))
+        }) {
+      var response = new MockHttpServletResponse();
+      ProviderCreateResponses.writeOutcome(json, response, outcome);
+      assertThat(response.getStatus()).isEqualTo(503);
+      assertThat(envelope(response).path("error").path("code").asText())
+          .isEqualTo("PROVIDER_CONNECTION_UNAVAILABLE");
+      assertThat(response.getContentAsString()).doesNotContain(id.toString(), "Fixture connection");
+    }
+  }
+
+  private static Configuration snapshot(
+      UUID org,
+      UUID id,
+      Provider provider,
+      CredentialMode mode,
+      String workspace,
+      OffsetDateTime time) {
+    return new Configuration(
+        org, id, provider, mode, "Fixture connection", workspace, "ENABLED", 1, 1, time, time);
+  }
+
+  private static WriteOutcome committed(Receipt receipt, boolean replayed) {
+    return new WriteOutcome(WriteState.COMMITTED, new Result(receipt, replayed), null);
+  }
 
   @Test
   void everyInternalFailureHasAnExplicitPublicStatusAndCode() throws Exception {

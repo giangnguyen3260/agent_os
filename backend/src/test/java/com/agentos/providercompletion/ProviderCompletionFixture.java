@@ -16,9 +16,13 @@ import com.agentos.providerconnections.ProviderConnectionService;
 import com.agentos.providercredentials.CredentialBoundary;
 import com.agentos.providerreceipts.ProviderReceiptFailure;
 import com.agentos.providerreceipts.ProviderReceiptService;
+import com.agentos.providertransport.ProviderCreateResponses;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.lang.reflect.Proxy;
 import java.security.Key;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -41,6 +45,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.TransactionStatus;
@@ -189,7 +194,7 @@ abstract class ProviderCompletionFixture {
   }
 
   @Test
-  void createCoordinatorReplaysWithoutAnotherSecretWriteAndDeniesRevocation() {
+  void createCoordinatorReplaysWithoutAnotherSecretWriteAndDeniesRevocation() throws Exception {
     enableCreatePolicy();
     var writes = new java.util.concurrent.atomic.AtomicInteger();
     var outage = new java.util.concurrent.atomic.AtomicBoolean();
@@ -247,6 +252,43 @@ abstract class ProviderCompletionFixture {
     assertThat(first.state()).isEqualTo(WriteState.COMMITTED);
     assertThat(first.result().replayed()).isFalse();
     assertThat(writes.get()).isEqualTo(1);
+    UUID connection = first.result().receipt().connectionId();
+    var mapper = new ObjectMapper();
+    var firstResponse = new MockHttpServletResponse();
+    ProviderCreateResponses.writeOutcome(mapper, firstResponse, first);
+    assertThat(firstResponse.getStatus()).isEqualTo(201);
+    assertThat(firstResponse.getHeader("Cache-Control")).isEqualTo("no-store");
+    var firstData = mapper.readTree(firstResponse.getContentAsByteArray()).path("data");
+    assertThat(firstData.path("connectionId").asText()).isEqualTo(connection.toString());
+    assertThat(firstData.path("commandId").asText())
+        .isEqualTo(first.result().receipt().commandId().toString());
+    assertThat(firstData.path("after").path("name").asText()).isEqualTo("Coordinator fixture");
+    assertThat(firstData.path("after").path("revision").asText()).isEqualTo("1");
+    var storedTimes =
+        jdbc.queryForObject(
+            "select r.recorded_at,e.created_at from provider_command_receipts r"
+                + " join provider_connection_events e on e.organization_id=r.organization_id"
+                + " and e.connection_id=r.connection_id and e.id=r.after_event_id"
+                + " where r.organization_id=? and r.actor_id=? and r.idempotency_key=?",
+            (rs, row) ->
+                List.of(
+                    rs.getObject("recorded_at", OffsetDateTime.class),
+                    rs.getObject("created_at", OffsetDateTime.class)),
+            org,
+            actor,
+            key);
+    var timestamp = DateTimeFormatter.ofPattern("uuuu-MM-dd'T'HH:mm:ss.SSSSSSXXX");
+    assertThat(firstData.path("committedAt").asText())
+        .isEqualTo(timestamp.format(storedTimes.get(0).withOffsetSameInstant(ZoneOffset.UTC)));
+    String createdAt = timestamp.format(storedTimes.get(1).withOffsetSameInstant(ZoneOffset.UTC));
+    assertThat(firstData.path("after").path("createdAt").asText()).isEqualTo(createdAt);
+    assertThat(firstData.path("after").path("updatedAt").asText()).isEqualTo(createdAt);
+    assertThat(firstResponse.getContentAsString())
+        .doesNotContain("synthetic-only", "opaque/create-fixture", key.toString());
+    var renamed = connections.rename(human, org, connection, 1, "Renamed after creation");
+    assertThat(renamed.name()).isEqualTo("Renamed after creation");
+    assertThat(renamed.revision()).isEqualTo(2);
+    var afterRename = rows();
     outage.set(true);
     jdbc.update("update provider_deployment_policy set openai_enabled=false where id=1");
     var blocked = coordinator.create(human, org, UUID.randomUUID(), createBody());
@@ -256,6 +298,12 @@ abstract class ProviderCompletionFixture {
     assertThat(replay.state()).isEqualTo(WriteState.COMMITTED);
     assertThat(replay.result().replayed()).isTrue();
     assertThat(replay.result().receipt()).isEqualTo(first.result().receipt());
+    var replayResponse = new MockHttpServletResponse();
+    ProviderCreateResponses.writeOutcome(mapper, replayResponse, replay);
+    assertThat(replayResponse.getStatus()).isEqualTo(200);
+    assertThat(replayResponse.getHeader("Cache-Control")).isEqualTo("no-store");
+    assertThat(mapper.readTree(replayResponse.getContentAsByteArray()).path("data"))
+        .isEqualTo(firstData);
     assertThat(writes.get()).isEqualTo(1);
     jdbc.update(
         "update organization_memberships set role='MEMBER' where account_id=? and"
@@ -266,9 +314,18 @@ abstract class ProviderCompletionFixture {
     assertThat(denied.state()).isEqualTo(WriteState.REJECTED);
     assertThat(denied.failure().code()).isEqualTo(Code.FORBIDDEN);
     assertThat(writes.get()).isEqualTo(1);
-    rows().values().forEach(value -> assertThat(value).hasSize(1));
-    assertThat(rows().get("provider_connections").get(0).get("id"))
-        .isEqualTo(first.result().receipt().connectionId());
+    var finalRows = rows();
+    assertThat(finalRows)
+        .usingRecursiveComparison()
+        .ignoringCollectionOrder()
+        .isEqualTo(afterRename);
+    assertThat(finalRows.get("provider_connections").get(0))
+        .containsEntry("id", connection)
+        .containsEntry("name", "Renamed after creation")
+        .containsEntry("configuration_revision", 2L);
+    assertThat(finalRows.get("provider_connection_events")).hasSize(2);
+    assertThat(finalRows.get("provider_credential_versions")).hasSize(1);
+    assertThat(finalRows.get("provider_command_receipts")).hasSize(1);
   }
 
   @Test
