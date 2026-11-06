@@ -3,6 +3,8 @@ on:
   pull_request:
     paths:
       - 'backend/src/main/java/com/agentos/providercreation/**'
+      - 'backend/src/main/java/com/agentos/providerpolicy/ProviderCreate*.java'
+      - 'backend/src/test/java/com/agentos/providerpolicy/ProviderCreateHttpPostgresIT.java'
       - 'backend/src/main/java/com/agentos/providertransport/**'
       - 'backend/src/main/java/com/agentos/providercompletion/**'
       - 'backend/src/main/java/com/agentos/providerreceipts/**'
@@ -44,7 +46,7 @@ jobs:
           TASK_EDIT_TEST_JDBC_URL: jdbc:postgresql://127.0.0.1:15432/agentos_test
           TASK_EDIT_TEST_DB_USER: agentos
           TASK_EDIT_TEST_DB_PASSWORD: agentos_ci_only
-        run: mvn --batch-mode --no-transfer-progress -f backend/pom.xml '-Dtest=ProviderCreateResponsesTest,ProviderCsrfHandlerTest,ProviderCreateRequestTest,CredentialBoundaryTest,CommandBoundaryTest,ProviderCompletion*Test,ProviderCompletionPostgresIT' verify
+        run: mvn --batch-mode --no-transfer-progress -f backend/pom.xml '-Dtest=ProviderCreateResponsesTest,ProviderCsrfHandlerTest,ProviderCreateRequestTest,CredentialBoundaryTest,CommandBoundaryTest,ProviderCompletion*Test,ProviderCompletionPostgresIT,ProviderCreateHttpPostgresIT' verify
       - uses: actions/upload-artifact@v4
         if: always()
         with:
