@@ -1,6 +1,6 @@
 import {HttpClient, HttpErrorResponse} from '@angular/common/http';
 import {NgTemplateOutlet} from '@angular/common';
-import {Component, inject, signal} from '@angular/core';
+import {Component, computed, inject, signal} from '@angular/core';
 import {takeUntilDestroyed, toObservable} from '@angular/core/rxjs-interop';
 import {ActivatedRoute, Router, RouterLink} from '@angular/router';
 import {
@@ -15,12 +15,13 @@ import {
 } from 'rxjs';
 import {AuthService} from '../../core/auth/auth.service';
 import {uuid} from '../task-dependencies/task-dependencies-validation';
+import {ProviderCreateComponent} from './provider-create.component';
 import {parseProviderPage, ProviderPage} from './provider-list-wire';
 
 @Component({
   selector: 'app-provider-connections',
   standalone: true,
-  imports: [RouterLink, NgTemplateOutlet],
+  imports: [RouterLink, NgTemplateOutlet, ProviderCreateComponent],
   templateUrl: './provider-connections.component.html',
   styleUrls: [
     '../dashboard/dashboard-page.component.css',
@@ -38,6 +39,17 @@ export class ProviderConnectionsComponent {
   readonly loading = signal(false);
   readonly error = signal('');
   readonly expanded = signal<string | null>(null);
+  private readonly createdScope = signal<{org: string; actor: string} | null>(
+    null,
+  );
+  readonly createdHere = computed(() => {
+    const scope = this.createdScope();
+    return (
+      scope !== null &&
+      scope.org === this.organization() &&
+      scope.actor === this.auth.user()?.id
+    );
+  });
   readonly providers = {
     OPENAI: 'OpenAI',
     ANTHROPIC: 'Anthropic / Claude',
@@ -60,6 +72,9 @@ export class ProviderConnectionsComponent {
           this.expanded.set(null);
           this.error.set('');
           const org = params.get('id');
+          const notice = this.createdScope();
+          if (!notice || org !== notice.org || actor !== notice.actor)
+            this.createdScope.set(null);
           this.organization.set(org ?? '');
           const raw = query.get('page') ?? '0';
           if (!actor) {
@@ -116,6 +131,12 @@ export class ProviderConnectionsComponent {
 
   reload() {
     this.refresh.next();
+  }
+
+  createCompleted() {
+    const actor = this.auth.user()?.id;
+    if (actor) this.createdScope.set({org: this.organization(), actor});
+    this.reload();
   }
 
   toggle(id: string) {

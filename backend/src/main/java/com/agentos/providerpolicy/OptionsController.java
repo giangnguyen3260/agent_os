@@ -5,6 +5,7 @@ import com.agentos.common.api.ApiResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import java.io.IOException;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -14,9 +15,13 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 public class OptionsController {
   private final PolicyService policies;
+  private final boolean createEnabled;
 
-  public OptionsController(PolicyService policies) {
+  public OptionsController(
+      PolicyService policies,
+      @Value("${agentos.provider-create.enabled:false}") boolean createEnabled) {
     this.policies = policies;
+    this.createEnabled = createEnabled;
   }
 
   @GetMapping("/api/v1/organizations/{organizationId}/provider-connections/options")
@@ -36,6 +41,7 @@ public class OptionsController {
     }
     return ResponseEntity.ok()
         .header("Cache-Control", "no-store")
+        .header("X-Provider-Create-Enabled", Boolean.toString(createEnabled))
         .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
         .body(ApiResponse.ok(result));
   }

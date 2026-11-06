@@ -38,6 +38,9 @@
     <p class="breadcrumb">Models / Kết nối provider</p>
     <h1>Kết nối model</h1>
     <p>Xem từng kết nối và trạng thái lưu trữ khóa truy cập.</p>
+    @if (createdHere()) {
+      <p role="status">Đã tạo kết nối provider.</p>
+    }
     @if (loading()) {
       <p role="status">Đang tải kết nối…</p>
     } @else if (error()) {
@@ -46,6 +49,10 @@
         Thử lại
       </button>
     } @else if (data(); as page) {
+      <app-provider-create
+        [organization]="organization()"
+        (created)="createCompleted()"
+      />
       <p role="status">{{ page.total }} kết nối · Trang {{ page.page + 1 }}</p>
       <section class="provider-panel" aria-label="Danh sách kết nối">
         @if (!page.items.length) {
