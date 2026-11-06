@@ -3,10 +3,21 @@ package com.agentos.providervault;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.agentos.auth.HumanIdentity;
+import com.agentos.providercommands.CommandBoundary;
+import com.agentos.providercompletion.ProviderCompletionBoundary;
+import com.agentos.providercompletion.ProviderCompletionBoundary.WriteState;
+import com.agentos.providerconnections.ProviderConnectionService;
+import com.agentos.providercreation.ProviderCreateAdmission;
+import com.agentos.providercreation.ProviderCreateCoordinator;
+import com.agentos.providercredentials.CredentialBoundary;
 import com.agentos.providercredentials.CredentialBoundary.Failure;
 import com.agentos.providercredentials.CredentialBoundary.Provider;
 import com.agentos.providercredentials.CredentialBoundary.Reference;
 import com.agentos.providercredentials.CredentialBoundary.Scope;
+import com.agentos.providerpreparation.ProviderPreparationJournal;
+import com.agentos.providerreceipts.ProviderReceiptService;
+import com.agentos.providertransport.ProviderCreateBody;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -16,14 +27,25 @@ import java.security.KeyStore;
 import java.security.cert.CertificateFactory;
 import java.util.Arrays;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManagerFactory;
+import javax.sql.DataSource;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
+import org.springframework.aop.support.AopUtils;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.EnableTransactionManagement;
 
 /** Explicit real Vault integration, invoked only by the disposable Vault CI harness. */
 @EnabledIfEnvironmentVariable(named = "AGENTOS_TEST_VAULT_URL", matches = "https://.*")
 class VaultCredentialSecretsVaultIT {
+  private static final String CREATE_SENTINEL = "coordinator-vault-integration-synthetic";
+
   @Test
   void realVaultScopedVersionedRoundTripAndRestartReadback() throws Exception {
     var keys = KeyStore.getInstance(KeyStore.getDefaultType());
@@ -37,11 +59,13 @@ class VaultCredentialSecretsVaultIT {
     var tls = SSLContext.getInstance("TLS");
     tls.init(null, trust.getTrustManagers(), null);
     Path token = Path.of(required("AGENTOS_TEST_VAULT_TOKEN_FILE"));
+    var vaultRequests = new AtomicInteger();
     var adapter =
         new VaultCredentialSecrets(
             URI.create(required("AGENTOS_TEST_VAULT_URL")),
             "agentos",
             () -> {
+              vaultRequests.incrementAndGet();
               try {
                 return Files.readString(token, StandardCharsets.UTF_8).strip().toCharArray();
               } catch (Exception failure) {
@@ -267,9 +291,16 @@ class VaultCredentialSecretsVaultIT {
             reference.scope().organization(),
             reference.scope().connection());
       }
+      if (phase.equals("restart")) {
+        realCreateAndReplay(datasource, jdbc, journal, boundary, commandKeys, vaultRequests);
+      }
       var forbidden = new java.util.ArrayList<String>();
       forbidden.add(new String(expected, StandardCharsets.US_ASCII));
       forbidden.add(java.util.Base64.getEncoder().encodeToString(expected));
+      forbidden.add(CREATE_SENTINEL);
+      forbidden.add(
+          java.util.Base64.getEncoder()
+              .encodeToString(CREATE_SENTINEL.getBytes(StandardCharsets.US_ASCII)));
       for (String keyFile : new String[] {"credential-v1", "credential-v2", "command-v1"}) {
         forbidden.add(
             Files.readString(Path.of(required("AGENTOS_TEST_HMAC_FIXTURE_DIR"), keyFile)).strip());
@@ -304,6 +335,127 @@ class VaultCredentialSecretsVaultIT {
       if (actual != null) Arrays.fill(actual, (byte) 0);
     }
   }
+
+  private static void realCreateAndReplay(
+      DataSource datasource,
+      JdbcTemplate jdbc,
+      ProviderPreparationJournal journal,
+      CredentialBoundary credentials,
+      VaultHmacKeys commandKeys,
+      AtomicInteger vaultRequests) {
+    UUID org = UUID.randomUUID(), actor = UUID.randomUUID(), key = UUID.randomUUID();
+    jdbc.update(
+        "insert into organizations(id,name,slug,status,created_at,updated_at) values"
+            + " (?,'Vault Create fixture',?,'ACTIVE',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)",
+        org,
+        org.toString());
+    jdbc.update(
+        "insert into human_accounts(id,email,display_name,password_hash) values"
+            + " (?,?,'Vault Create fixture','unused')",
+        actor,
+        actor + "@example.test");
+    jdbc.update(
+        "insert into organization_memberships(account_id,organization_id,role) values"
+            + " (?,?,'ADMIN')",
+        actor,
+        org);
+    jdbc.update(
+        "insert into provider_deployment_policy"
+            + " (id,revision,openai_enabled,anthropic_enabled,gemini_enabled,created_at,updated_at)"
+            + " values (1,1,true,false,false,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)");
+    var human = new HumanIdentity(actor, actor + "@example.test", "Vault Create fixture", 0);
+    try (var context = new AnnotationConfigApplicationContext()) {
+      context.registerBean(JdbcTemplate.class, () -> jdbc);
+      context.registerBean(
+          PlatformTransactionManager.class, () -> new DataSourceTransactionManager(datasource));
+      context.register(
+          TransactionConfiguration.class,
+          ProviderReceiptService.class,
+          ProviderConnectionService.class);
+      context.refresh();
+      var receipts = context.getBean(ProviderReceiptService.class);
+      var connections = context.getBean(ProviderConnectionService.class);
+      assertThat(AopUtils.isCglibProxy(receipts)).isTrue();
+      assertThat(AopUtils.isCglibProxy(connections)).isTrue();
+      var completion =
+          new ProviderCompletionBoundary(
+              context.getBean(PlatformTransactionManager.class), jdbc, receipts);
+      var coordinator =
+          new ProviderCreateCoordinator(
+              receipts,
+              completion,
+              new CommandBoundary(commandKeys),
+              credentials,
+              new ProviderCreateAdmission(datasource));
+      int beforeCreate = vaultRequests.get();
+      var first = coordinator.create(human, org, key, createBody());
+      assertThat(first.state()).isEqualTo(WriteState.COMMITTED);
+      assertThat(first.result().replayed()).isFalse();
+      assertThat(vaultRequests.get()).isEqualTo(beforeCreate + 1);
+      UUID connection = first.result().receipt().connectionId();
+      var stored = connections.credentialVersion(human, org, connection, 1);
+      var reference = stored.reference();
+      assertThat(reference.scope()).isEqualTo(new Scope(org, connection, Provider.OPENAI, 1));
+      assertThat(reference.keyVersion()).isEqualTo("1");
+      UUID preparationId =
+          jdbc.queryForObject(
+              "select id from provider_secret_preparations where organization_id=? and"
+                  + " connection_id=? and external_locator=? and external_version=? and"
+                  + " state='WRITTEN'",
+              UUID.class,
+              org,
+              connection,
+              reference.locator(),
+              reference.keyVersion());
+      var preparation =
+          new ProviderPreparationJournal.Preparation(
+              preparationId, reference.scope(), reference.locator());
+      assertThat(journal.observe(preparation))
+          .isEqualTo(ProviderPreparationJournal.Observation.RETAINED_REFERENCE_FOUND);
+      var replay = coordinator.create(human, org, key, createBody());
+      assertThat(replay.state()).isEqualTo(WriteState.COMMITTED);
+      assertThat(replay.result().replayed()).isTrue();
+      assertThat(replay.result().receipt()).isEqualTo(first.result().receipt());
+      assertThat(vaultRequests.get()).isEqualTo(beforeCreate + 1);
+      for (String table :
+          new String[] {
+            "provider_secret_preparations",
+            "provider_credential_versions",
+            "provider_connections",
+            "provider_command_receipts",
+            "provider_connection_events"
+          }) {
+        assertThat(
+                jdbc.queryForObject(
+                    "select count(*) from " + table + " where organization_id=?", Long.class, org))
+            .as("exactly one scoped row in %s", table)
+            .isEqualTo(1L);
+      }
+      byte[] expected = CREATE_SENTINEL.getBytes(StandardCharsets.US_ASCII);
+      try {
+        credentials.use(
+            reference.scope(),
+            stored,
+            borrowed -> assertThat(Arrays.equals(borrowed, expected)).isTrue());
+      } finally {
+        Arrays.fill(expected, (byte) 0);
+      }
+    }
+  }
+
+  private static ProviderCreateBody createBody() {
+    return ProviderCreateBody.consume(
+        """
+        {"provider":"OPENAI","credentialMode":"OPENAI_API_KEY","name":"Vault Create fixture",
+        "options":{},"apiKey":"%s"}
+        """
+            .formatted(CREATE_SENTINEL)
+            .getBytes(StandardCharsets.UTF_8));
+  }
+
+  @TestConfiguration(proxyBeanMethods = false)
+  @EnableTransactionManagement(proxyTargetClass = true)
+  static class TransactionConfiguration {}
 
   private static String required(String name) {
     String value = System.getenv(name);
