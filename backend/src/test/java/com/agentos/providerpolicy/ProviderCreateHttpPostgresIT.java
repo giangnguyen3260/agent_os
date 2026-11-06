@@ -120,14 +120,9 @@ class ProviderCreateHttpPostgresIT {
         send(client, post(path + "?unexpected=1", key, CREATE).header(header, value)),
         400,
         "BAD_REQUEST");
+    error(send(client, post(path, key, "{malformed").header(header, value)), 400, "BAD_REQUEST");
     error(
-        send(client, post(path, key, "{malformed").header(header, value)),
-        400,
-        "BAD_REQUEST");
-    error(
-        send(client, post(path, key, "x".repeat(8193)).header(header, value)),
-        400,
-        "BAD_REQUEST");
+        send(client, post(path, key, "x".repeat(8193)).header(header, value)), 400, "BAD_REQUEST");
     error(
         send(
             client,
