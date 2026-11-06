@@ -376,9 +376,26 @@ abstract class ProviderCompletionFixture {
     for (int index = 0; index < 30; index++) {
       assertThat(admission.acquire(human, org, UUID.randomUUID(), Provider.OPENAI)).isTrue();
     }
+    var quotaBefore =
+        jdbc.queryForMap(
+            "select * from provider_write_admission where organization_id=? and actor_id=?",
+            org,
+            actor);
     assertThatThrownBy(() -> admission.acquire(human, org, UUID.randomUUID(), Provider.OPENAI))
-        .isInstanceOf(ProviderReceiptFailure.class)
-        .hasMessage("RATE_LIMITED");
+        .isInstanceOfSatisfying(
+            ProviderReceiptFailure.class,
+            failure -> {
+              assertThat(failure.status()).isEqualTo(429);
+              assertThat(failure.code()).isEqualTo("RATE_LIMITED");
+              assertThat(failure.retryAfter()).isBetween(1, 60);
+              assertThat(failure.getCause()).isNull();
+            });
+    assertThat(
+            jdbc.queryForMap(
+                "select * from provider_write_admission where organization_id=? and actor_id=?",
+                org,
+                actor))
+        .isEqualTo(quotaBefore);
     jdbc.update(
         "update provider_write_admission set recent_requests='1' where organization_id=? and"
             + " actor_id=?",
@@ -406,6 +423,62 @@ abstract class ProviderCompletionFixture {
     assertThatThrownBy(() -> admission.acquire(human, org, UUID.randomUUID(), Provider.OPENAI))
         .hasMessage("COMMAND_UNAVAILABLE")
         .hasNoCause();
+  }
+
+  @Test
+  void coordinatorPreservesRetryDelayWithoutCallingKeyServices() {
+    enableCreatePolicy();
+    var admission = new com.agentos.providercreation.ProviderCreateAdmission(jdbc.getDataSource());
+    for (int index = 0; index < 30; index++) {
+      admission.acquire(human, org, UUID.randomUUID(), Provider.OPENAI);
+    }
+    var before =
+        jdbc.queryForMap(
+            "select * from provider_write_admission where organization_id=? and actor_id=?",
+            org,
+            actor);
+    var commands = Mockito.mock(CommandBoundary.class);
+    var credentials = Mockito.mock(CredentialBoundary.class);
+    var coordinator =
+        new com.agentos.providercreation.ProviderCreateCoordinator(
+            receipts, healthy, commands, credentials, admission);
+    var result = coordinator.create(human, org, UUID.randomUUID(), createBody());
+    assertThat(result.state()).isEqualTo(WriteState.REJECTED);
+    assertThat(result.failure().code()).isEqualTo(Code.RATE_LIMITED);
+    assertThat(result.failure().retryAfter()).isBetween(1, 60);
+    assertThat(result.result()).isNull();
+    Mockito.verifyNoInteractions(commands, credentials);
+    assertThat(
+            jdbc.queryForMap(
+                "select * from provider_write_admission where organization_id=? and actor_id=?",
+                org,
+                actor))
+        .isEqualTo(before);
+    rows().values().forEach(value -> assertThat(value).isEmpty());
+  }
+
+  @Test
+  void retryMetadataIsBoundedAndOnlyAllowedForRateDenials() {
+    for (int seconds : new int[] {1, 2, 59, 60}) {
+      var failure = new ProviderCompletionBoundary.Failure(Code.RATE_LIMITED, seconds);
+      assertThat(failure.status()).isEqualTo(429);
+      assertThat(failure.retryAfter()).isEqualTo(seconds);
+      assertThat(failure.toString()).isEqualTo("Failure[redacted]");
+    }
+    for (int seconds : new int[] {-1, 61, Integer.MAX_VALUE}) {
+      assertThatThrownBy(() -> new ProviderCompletionBoundary.Failure(Code.RATE_LIMITED, seconds))
+          .isInstanceOf(IllegalArgumentException.class);
+      assertThatThrownBy(() -> new ProviderReceiptFailure(429, "RATE_LIMITED", seconds))
+          .isInstanceOf(IllegalArgumentException.class);
+    }
+    assertThatThrownBy(() -> new ProviderCompletionBoundary.Failure(Code.FORBIDDEN, 1))
+        .isInstanceOf(IllegalArgumentException.class);
+    assertThatThrownBy(() -> new ProviderReceiptFailure(403, "RATE_LIMITED", 1))
+        .isInstanceOf(IllegalArgumentException.class);
+    assertThatThrownBy(() -> new ProviderReceiptFailure(429, "FORBIDDEN", 1))
+        .isInstanceOf(IllegalArgumentException.class);
+    assertThat(new ProviderCompletionBoundary.Failure(Code.FORBIDDEN).retryAfter()).isZero();
+    assertThat(new ProviderReceiptFailure(403, "FORBIDDEN").retryAfter()).isZero();
   }
 
   @Test
@@ -1300,7 +1373,7 @@ abstract class ProviderCompletionFixture {
     assertThat(read.receipt()).isNull();
     assertThat(ProviderCompletionBoundary.Failure.class.getRecordComponents())
         .extracting(java.lang.reflect.RecordComponent::getName)
-        .containsExactly("code");
+        .containsExactly("code", "retryAfter");
   }
 
   @Test
