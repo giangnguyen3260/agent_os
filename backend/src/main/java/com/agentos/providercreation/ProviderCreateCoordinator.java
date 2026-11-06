@@ -78,7 +78,8 @@ public final class ProviderCreateCoordinator {
               connection,
               CredentialBoundary.Provider.valueOf(command.provider().name()),
               1);
-      var prepared = credentials.prepare(credentialScope, secret.clone());
+      var attempt = new CredentialBoundary.CreateAttempt(actor.id(), key);
+      var prepared = credentials.prepareCreate(credentialScope, secret.clone(), attempt);
       committing = true;
       var result =
           completion.executeCreatePrepared(

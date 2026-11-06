@@ -1,5 +1,6 @@
 package com.agentos.providercredentials;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreType;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -28,6 +29,23 @@ public final class CredentialBoundary {
       Objects.requireNonNull(connection);
       Objects.requireNonNull(provider);
       if (credentialRevision < 1) throw new IllegalArgumentException("Invalid credential revision");
+    }
+  }
+
+  /** Internal command identity used to associate a preparation with its Create attempt. */
+  @JsonIgnoreType
+  public record CreateAttempt(UUID actor, UUID idempotencyKey) {
+    public CreateAttempt {
+      if (!commandUuid(actor) || !commandUuid(idempotencyKey)) throw new Failure();
+    }
+
+    private static boolean commandUuid(UUID value) {
+      return value != null && value.variant() == 2 && value.version() >= 1 && value.version() <= 5;
+    }
+
+    @Override
+    public String toString() {
+      return "CreateAttempt[redacted]";
     }
   }
 
@@ -90,6 +108,12 @@ public final class CredentialBoundary {
      */
     Reference store(Scope scope, byte[] borrowedCredential) throws Exception;
 
+    /** Store a Create credential with its command identity when supported by the adapter. */
+    default Reference storeForCreate(Scope scope, byte[] borrowedCredential, CreateAttempt attempt)
+        throws Exception {
+      return store(scope, borrowedCredential);
+    }
+
     /**
      * Enforce scope binding and immutable version lookup in the external manager. Return a fresh
      * owned buffer; caller erases it. On failure before returning, erase adapter-owned buffers.
@@ -128,11 +152,22 @@ public final class CredentialBoundary {
 
   /** Consumes and clears caller-owned characters on every exit, including validation failure. */
   public Metadata prepare(Scope scope, char[] credential) {
+    return prepare(scope, credential, null, false);
+  }
+
+  /** Prepares a revision-one credential and clears the caller-owned characters on every exit. */
+  public Metadata prepareCreate(Scope scope, char[] credential, CreateAttempt attempt) {
+    return prepare(scope, credential, attempt, true);
+  }
+
+  private Metadata prepare(
+      Scope scope, char[] credential, CreateAttempt attempt, boolean creating) {
     byte[] bytes = null;
     Reference reference = null;
     boolean storeAttempted = false;
     try {
       Objects.requireNonNull(scope);
+      if (creating && (attempt == null || scope.credentialRevision() != 1)) throw new Failure();
       if (credential == null || credential.length < 1 || credential.length > 4096)
         throw new Failure();
       bytes = new byte[credential.length];
@@ -144,7 +179,8 @@ public final class CredentialBoundary {
       requireToken(version);
       Mac mac = prepareMac(scope, version);
       storeAttempted = true;
-      reference = secrets.store(scope, bytes);
+      reference =
+          creating ? secrets.storeForCreate(scope, bytes, attempt) : secrets.store(scope, bytes);
       if (reference == null || !scope.equals(reference.scope())) throw new Failure();
       return new Metadata(scope, version, reference, finishMac(mac, reference, bytes));
     } catch (Exception failure) {
