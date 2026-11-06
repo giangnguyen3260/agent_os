@@ -1,6 +1,8 @@
 package com.agentos.providertransport;
 
 import com.agentos.common.api.ApiErrorResponse;
+import com.agentos.common.api.ApiResponse;
+import com.agentos.providercompletion.ProviderCompletionBoundary.Code;
 import com.agentos.providercompletion.ProviderCompletionBoundary.Failure;
 import com.agentos.providercompletion.ProviderCompletionBoundary.WriteOutcome;
 import com.agentos.providercompletion.ProviderCompletionBoundary.WriteState;
@@ -8,14 +10,35 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 
-/** Error projection for a response whose Retry-After header has not been set. */
+/** Create projections for a response whose Retry-After header has not been set. */
 public final class ProviderCreateResponses {
   private ProviderCreateResponses() {}
 
+  /** Writes a confirmed Create receipt or its safe public error response. */
+  public static void writeOutcome(
+      ObjectMapper json, HttpServletResponse response, WriteOutcome outcome) throws IOException {
+    if (json == null || response == null) {
+      throw new IllegalArgumentException("Provider response inputs required");
+    }
+    if (outcome != null && outcome.state() != WriteState.COMMITTED) {
+      error(json, response, outcome);
+      return;
+    }
+    var result = outcome == null ? null : outcome.result();
+    var receipt = result == null ? null : ProviderCreateReceipt.from(result.receipt());
+    if (receipt == null) {
+      error(json, response, new Failure(Code.RECEIPT_UNAVAILABLE));
+      return;
+    }
+    response.setStatus(result.replayed() ? 200 : 201);
+    response.setContentType("application/json");
+    response.setHeader("Cache-Control", "no-store");
+    json.writeValue(response.getOutputStream(), ApiResponse.ok(receipt));
+  }
+
   /**
-   * A committed result requires a separately reviewed historical receipt projection. Reject it
-   * before touching the response instead of misrepresenting success as a failed or retryable
-   * command.
+   * Reject a committed result before touching the response instead of misrepresenting success as a
+   * failed or retryable command.
    */
   public static void error(ObjectMapper json, HttpServletResponse response, WriteOutcome outcome)
       throws IOException {
