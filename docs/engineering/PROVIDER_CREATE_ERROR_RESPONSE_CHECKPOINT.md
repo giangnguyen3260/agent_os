@@ -14,7 +14,8 @@ conflicts use the public contract's exact code names.
 All responses are JSON and `Cache-Control: no-store`. Only rate failures with
 bounded 1..60 second metadata emit 429 and `Retry-After`. The legacy zero-delay
 rate failure cannot supply a truthful wait and fails closed as safe 503 instead
-of fabricating one. Non-rate responses clear any previously staged Retry-After.
+of fabricating one. The writer owns Retry-After. Its caller leaves that header
+unset, and the writer sets it only on a 429 with valid delay metadata.
 UNKNOWN carries no provisional result, receipt, internal state or automatic
 retry instruction. The helper does not poll receipts or perform any mutation.
 

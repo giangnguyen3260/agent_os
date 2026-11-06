@@ -195,3 +195,13 @@ keeping all changes unmerged. The earlier approval block is resolved by that
 authorization. Direct Git HTTPS has no credentials in this workspace; publish
 the reviewed tree through the connected GitHub API on the separate feature
 branch, open a draft PR against PR63 and verify matching CI. No merge.
+
+## PR64 CI follow-up
+
+Draft [PR64](https://github.com/giangnguyen3260/agent_os/pull/64) published the
+reviewed tree at `b179d3e7`. Four workflows passed. Focused completion, Quality,
+and Docker each failed the same response test. Spring Mock kept a pre-staged
+Retry-After value after `setHeader(name, null)`. The reviewed fix makes the
+writer the sole owner of this header and sets it only on valid 429 responses.
+Tests still assert the missing header on 503 and every non-rate error.
+The corrected commit needs its own CI results. Keep the PR in draft.

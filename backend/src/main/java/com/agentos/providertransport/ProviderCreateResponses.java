@@ -8,7 +8,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 
-/** Explicit error-only projection. Does not activate a route or serialize internal outcomes. */
+/** Error projection for a response whose Retry-After header has not been set. */
 public final class ProviderCreateResponses {
   private ProviderCreateResponses() {}
 
@@ -34,9 +34,9 @@ public final class ProviderCreateResponses {
     response.setStatus(projected.status());
     response.setContentType("application/json");
     response.setHeader("Cache-Control", "no-store");
-    response.setHeader(
-        "Retry-After",
-        projected.retryAfter() == 0 ? null : Integer.toString(projected.retryAfter()));
+    if (projected.retryAfter() > 0) {
+      response.setHeader("Retry-After", Integer.toString(projected.retryAfter()));
+    }
     json.writeValue(
         response.getOutputStream(), ApiErrorResponse.of(projected.code(), projected.message()));
   }

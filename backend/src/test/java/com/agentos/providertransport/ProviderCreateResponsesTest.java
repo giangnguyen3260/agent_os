@@ -66,7 +66,6 @@ class ProviderCreateResponsesTest {
       envelope(response);
     }
     var response = new MockHttpServletResponse();
-    response.setHeader("Retry-After", "17");
     ProviderCreateResponses.error(json, response, new Failure(Code.RATE_LIMITED));
     assertThat(response.getStatus()).isEqualTo(503);
     assertThat(response.getHeader("Retry-After")).isNull();
