@@ -29,13 +29,13 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 @SpringBootTest(
     webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
@@ -53,7 +53,7 @@ class ProviderCreateHttpPostgresIT {
   @Autowired JdbcTemplate jdbc;
   @Autowired ObjectMapper json;
   @Autowired PasswordEncoder passwords;
-  @MockitoBean ProviderCreateCoordinator coordinator;
+  @MockBean ProviderCreateCoordinator coordinator;
 
   @DynamicPropertySource
   static void postgres(DynamicPropertyRegistry properties) {
