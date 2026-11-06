@@ -5,6 +5,12 @@ on:
       - backend/src/main/java/com/agentos/providervault/**
       - backend/src/test/java/com/agentos/providervault/**
       - backend/src/main/java/com/agentos/providercredentials/**
+      - backend/src/main/java/com/agentos/providercommands/**
+      - backend/src/main/java/com/agentos/providercompletion/**
+      - backend/src/main/java/com/agentos/providerconnections/**
+      - backend/src/main/java/com/agentos/providercreation/**
+      - backend/src/main/java/com/agentos/providerreceipts/**
+      - backend/src/main/java/com/agentos/providertransport/ProviderCreateBody.java
       - backend/pom.xml
       - backend/src/main/java/com/agentos/providerpreparation/**
       - backend/src/main/resources/db/migration/**
