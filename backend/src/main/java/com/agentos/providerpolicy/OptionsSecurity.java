@@ -1,6 +1,7 @@
 package com.agentos.providerpolicy;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -19,17 +20,17 @@ public class OptionsSecurity {
       PolicyAuthority authority,
       AdmissionService admission,
       ObjectMapper json,
-      @Value("${agentos.provider-list.enabled:false}") boolean listEnabled)
+      @Value("${agentos.provider-list.enabled:false}") boolean listEnabled,
+      @Value("${agentos.provider-create.enabled:false}") boolean createEnabled)
       throws Exception {
+    String suffix = listEnabled ? "(?:/options)?" : "/options";
+    if (createEnabled) suffix = "(?:" + suffix + "|/receipts/[^/]+)";
+    var paths = Pattern.compile("/api/v1/organizations/[^/]+/provider-connections" + suffix);
     http.securityMatcher(
             request ->
-                request
-                    .getRequestURI()
-                    .substring(request.getContextPath().length())
-                    .matches(
-                        listEnabled
-                            ? "/api/v1/organizations/[^/]+/provider-connections(?:/options)?"
-                            : "/api/v1/organizations/[^/]+/provider-connections/options"))
+                paths
+                    .matcher(request.getRequestURI().substring(request.getContextPath().length()))
+                    .matches())
         .securityContext(
             context ->
                 context.securityContextRepository(new HttpSessionSecurityContextRepository()))
