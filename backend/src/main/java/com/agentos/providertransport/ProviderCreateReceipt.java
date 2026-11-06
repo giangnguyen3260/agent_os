@@ -1,7 +1,7 @@
 package com.agentos.providertransport;
 
-import com.agentos.providercommands.CommandBoundary.CredentialMode;
 import com.agentos.providercommands.CommandBoundary.Create;
+import com.agentos.providercommands.CommandBoundary.CredentialMode;
 import com.agentos.providercommands.CommandBoundary.Failure;
 import com.agentos.providercommands.CommandBoundary.Operation;
 import com.agentos.providercommands.CommandBoundary.Provider;

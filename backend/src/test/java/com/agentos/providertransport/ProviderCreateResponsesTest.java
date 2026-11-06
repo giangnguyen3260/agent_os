@@ -36,11 +36,22 @@ class ProviderCreateResponsesTest {
     var recorded = eventTime.plusNanos(1000);
     for (var profile :
         new Configuration[] {
-          snapshot(org, connection, Provider.OPENAI, CredentialMode.OPENAI_API_KEY, null, eventTime),
           snapshot(
-              org, connection, Provider.GOOGLE_GEMINI, CredentialMode.GEMINI_API_KEY, null, eventTime),
+              org, connection, Provider.OPENAI, CredentialMode.OPENAI_API_KEY, null, eventTime),
           snapshot(
-              org, connection, Provider.ANTHROPIC, CredentialMode.ANTHROPIC_API_KEY, null, eventTime),
+              org,
+              connection,
+              Provider.GOOGLE_GEMINI,
+              CredentialMode.GEMINI_API_KEY,
+              null,
+              eventTime),
+          snapshot(
+              org,
+              connection,
+              Provider.ANTHROPIC,
+              CredentialMode.ANTHROPIC_API_KEY,
+              null,
+              eventTime),
           snapshot(
               org,
               connection,
@@ -115,17 +126,28 @@ class ProviderCreateResponsesTest {
     var after = snapshot(org, id, Provider.OPENAI, CredentialMode.OPENAI_API_KEY, null, time);
     var paddedName =
         new Configuration(
-            org, id, Provider.OPENAI, CredentialMode.OPENAI_API_KEY, " Padded ", null,
-            "ENABLED", 1, 1, time, time);
+            org,
+            id,
+            Provider.OPENAI,
+            CredentialMode.OPENAI_API_KEY,
+            " Padded ",
+            null,
+            "ENABLED",
+            1,
+            1,
+            time,
+            time);
     for (var outcome :
         new WriteOutcome[] {
           committed(new Receipt(org, id, Operation.RENAME, id, id, time, null, after), false),
           committed(new Receipt(org, id, Operation.CREATE, id, id, time, after, after), false),
           committed(new Receipt(org, id, Operation.CREATE, id, id, time, null, null), false),
           committed(
-              new Receipt(UUID.randomUUID(), id, Operation.CREATE, id, id, time, null, after), true),
+              new Receipt(UUID.randomUUID(), id, Operation.CREATE, id, id, time, null, after),
+              true),
           committed(
-              new Receipt(org, id, Operation.CREATE, id, id, time.minusNanos(1000), null, after), true),
+              new Receipt(org, id, Operation.CREATE, id, id, time.minusNanos(1000), null, after),
+              true),
           committed(new Receipt(org, id, Operation.CREATE, id, id, time, null, paddedName), true),
           new WriteOutcome(WriteState.UNKNOWN, null, new Failure(Code.COMMAND_OUTCOME_UNKNOWN))
         }) {
@@ -139,7 +161,12 @@ class ProviderCreateResponsesTest {
   }
 
   private static Configuration snapshot(
-      UUID org, UUID id, Provider provider, CredentialMode mode, String workspace, OffsetDateTime time) {
+      UUID org,
+      UUID id,
+      Provider provider,
+      CredentialMode mode,
+      String workspace,
+      OffsetDateTime time) {
     return new Configuration(
         org, id, provider, mode, "Fixture connection", workspace, "ENABLED", 1, 1, time, time);
   }
