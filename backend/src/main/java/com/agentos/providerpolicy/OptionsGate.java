@@ -12,6 +12,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 final class OptionsGate extends OncePerRequestFilter {
+  private static final String ADMITTED = OptionsGate.class.getName() + ".admitted";
   private final PolicyAuthority authority;
   private final AdmissionService admission;
   private final ObjectMapper json;
@@ -59,6 +60,11 @@ final class OptionsGate extends OncePerRequestFilter {
       OptionsResponses.error(json, request, response, PolicyFailure.unavailable());
       return;
     }
+    request.setAttribute(ADMITTED, request.getRequestURI());
     chain.doFilter(request, response);
+  }
+
+  static boolean admitted(HttpServletRequest request) {
+    return request.getRequestURI().equals(request.getAttribute(ADMITTED));
   }
 }

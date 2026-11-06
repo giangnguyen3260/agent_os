@@ -8,6 +8,8 @@ import com.agentos.providercommands.CommandBoundary.Operation;
 import com.agentos.providercommands.CommandBoundary.Provider;
 import com.agentos.providercompletion.ProviderCompletionBoundary.Code;
 import com.agentos.providercompletion.ProviderCompletionBoundary.Failure;
+import com.agentos.providercompletion.ProviderCompletionBoundary.LookupOutcome;
+import com.agentos.providercompletion.ProviderCompletionBoundary.LookupState;
 import com.agentos.providercompletion.ProviderCompletionBoundary.WriteOutcome;
 import com.agentos.providercompletion.ProviderCompletionBoundary.WriteState;
 import com.agentos.providerreceipts.ProviderReceiptService.Configuration;
@@ -158,6 +160,30 @@ class ProviderCreateResponsesTest {
           .isEqualTo("PROVIDER_CONNECTION_UNAVAILABLE");
       assertThat(response.getContentAsString()).doesNotContain(id.toString(), "Fixture connection");
     }
+  }
+
+  @Test
+  void receiptLookupPreservesExplicitNullAndRejectsUnsupportedOperations() throws Exception {
+    var mapper = new ObjectMapper().setSerializationInclusion(JsonInclude.Include.NON_EMPTY);
+    var absent = new MockHttpServletResponse();
+    ProviderCreateResponses.writeLookup(
+        mapper, absent, new LookupOutcome(LookupState.ABSENT, null, null));
+    assertThat(absent.getStatus()).isEqualTo(200);
+    assertThat(absent.getHeader("Cache-Control")).isEqualTo("no-store");
+    assertThat(json.readTree(absent.getContentAsByteArray()).path("data"))
+        .isEqualTo(json.readTree("{\"receipt\":null}"));
+
+    var id = UUID.randomUUID();
+    var time = OffsetDateTime.parse("2026-11-06T06:00:00.123456Z");
+    var after = snapshot(id, id, Provider.OPENAI, CredentialMode.OPENAI_API_KEY, null, time);
+    var receipt = new Receipt(id, id, Operation.RENAME, id, id, time, after, after);
+    var rejected = new MockHttpServletResponse();
+    ProviderCreateResponses.writeLookup(
+        json, rejected, new LookupOutcome(LookupState.FOUND, receipt, null));
+    assertThat(rejected.getStatus()).isEqualTo(503);
+    assertThat(envelope(rejected).at("/error/code").asText())
+        .isEqualTo("PROVIDER_CONNECTION_UNAVAILABLE");
+    assertThat(rejected.getContentAsString()).doesNotContain(id.toString(), "Fixture connection");
   }
 
   private static Configuration snapshot(

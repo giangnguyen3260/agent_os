@@ -8,12 +8,18 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.agentos.auth.HumanIdentity;
+import com.agentos.providercommands.CommandBoundary;
+import com.agentos.providercompletion.ProviderCompletionBoundary;
 import com.agentos.providercompletion.ProviderCompletionBoundary.Code;
 import com.agentos.providercompletion.ProviderCompletionBoundary.Failure;
 import com.agentos.providercompletion.ProviderCompletionBoundary.WriteOutcome;
 import com.agentos.providercompletion.ProviderCompletionBoundary.WriteState;
+import com.agentos.providerconnections.ProviderConnectionService;
 import com.agentos.providercreation.ProviderCreateCoordinator;
+import com.agentos.providercredentials.CredentialBoundary;
+import com.agentos.providerreceipts.ProviderReceiptService;
 import com.agentos.providertransport.ProviderCreateBody;
+import com.agentos.providertransport.ProviderCreateResponses;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.ByteArrayInputStream;
@@ -24,6 +30,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.Base64;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
@@ -32,10 +39,12 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.transaction.PlatformTransactionManager;
 
 @SpringBootTest(
     webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
@@ -53,6 +62,9 @@ class ProviderCreateHttpPostgresIT {
   @Autowired JdbcTemplate jdbc;
   @Autowired ObjectMapper json;
   @Autowired PasswordEncoder passwords;
+  @Autowired PlatformTransactionManager transactions;
+  @Autowired ProviderReceiptService receipts;
+  @Autowired ProviderConnectionService connections;
   @MockBean ProviderCreateCoordinator coordinator;
 
   @DynamicPropertySource
@@ -70,22 +82,8 @@ class ProviderCreateHttpPostgresIT {
     UUID actor = UUID.randomUUID();
     UUID org = UUID.randomUUID();
     UUID key = UUID.randomUUID();
-    jdbc.update(
-        "insert into organizations(id,name,slug,status,created_at,updated_at) values"
-            + " (?,'Create HTTP',?,'ACTIVE',current_timestamp,current_timestamp)",
-        org,
-        org.toString());
-    jdbc.update(
-        "insert into human_accounts(id,email,display_name,password_hash)"
-            + " values (?,?,'Create HTTP',?)",
-        actor,
-        actor + "@example.test",
-        passwords.encode(PASSWORD));
-    jdbc.update(
-        "insert into organization_memberships(account_id,organization_id,role) values"
-            + " (?,?,'ADMIN')",
-        actor,
-        org);
+    seedOrganization(org);
+    seedAdmin(actor, org);
 
     var client = client();
     String path = "/api/v1/organizations/" + org + "/provider-connections";
@@ -93,15 +91,7 @@ class ProviderCreateHttpPostgresIT {
     error(anonymous, 401, "UNAUTHORIZED");
     assertThat(anonymous.headers().allValues("set-cookie")).isEmpty();
 
-    var loginToken = csrf(client);
-    var login =
-        request("/api/v1/auth/login")
-            .header(loginToken.get("headerName").asText(), loginToken.get("token").asText())
-            .header("Content-Type", "application/x-www-form-urlencoded")
-            .POST(
-                HttpRequest.BodyPublishers.ofString(
-                    "username=" + actor + "%40example.test&password=" + PASSWORD));
-    assertThat(send(client, login).statusCode()).isEqualTo(200);
+    login(client, actor);
     var token = csrf(client);
     String header = token.get("headerName").asText();
     String value = token.get("token").asText();
@@ -158,6 +148,133 @@ class ProviderCreateHttpPostgresIT {
     error(send(client, post(path, key, CREATE).header(header, value)), 401, "UNAUTHORIZED");
     assertThat(send(client, request("/api/v1/auth/session").GET()).statusCode()).isEqualTo(401);
     verify(coordinator).create(any(), eq(org), eq(key), any());
+  }
+
+  @Test
+  void receiptLookupUsesCurrentSessionAndOnlyReturnsOwnCommittedCreate() throws Exception {
+    UUID org = UUID.randomUUID();
+    UUID actor = UUID.randomUUID();
+    UUID anotherAdmin = UUID.randomUUID();
+    UUID key = UUID.randomUUID();
+    UUID connection = UUID.randomUUID();
+    seedOrganization(org);
+    seedAdmin(actor, org);
+    seedAdmin(anotherAdmin, org);
+
+    var human = new HumanIdentity(actor, actor + "@example.test", "Create HTTP", 0);
+    var command =
+        new CommandBoundary.Create(
+            CommandBoundary.Provider.OPENAI,
+            CommandBoundary.CredentialMode.OPENAI_API_KEY,
+            "Historical receipt fixture",
+            null);
+    String digest = Base64.getEncoder().encodeToString(new byte[32]);
+    var prepared = new CommandBoundary.Metadata(CommandBoundary.DIGEST_VERSION, "key-v1", digest);
+    var scope =
+        new CredentialBoundary.Scope(org, connection, CredentialBoundary.Provider.OPENAI, 1);
+    var reference = new CredentialBoundary.Reference(scope, "fixture-opaque-reference", "1");
+    var credential = new CredentialBoundary.Metadata(scope, "key-v1", reference, digest);
+    var committed =
+        new ProviderCompletionBoundary(transactions, jdbc, receipts)
+            .executePrepared(human, org, key, command, prepared, connection, credential);
+    assertThat(committed.state()).isEqualTo(WriteState.COMMITTED);
+    var createResponse = new MockHttpServletResponse();
+    ProviderCreateResponses.writeOutcome(json, createResponse, committed);
+    assertThat(createResponse.getStatus()).isEqualTo(201);
+    var original = json.readTree(createResponse.getContentAsByteArray()).path("data");
+    assertThat(connections.rename(human, org, connection, 1, "Renamed after receipt").revision())
+        .isEqualTo(2);
+
+    String base = "/api/v1/organizations/" + org + "/provider-connections/receipts/";
+    String path = base + key;
+    var anonymous = send(client(), request(path).GET());
+    error(anonymous, 401, "UNAUTHORIZED");
+    assertThat(anonymous.headers().allValues("set-cookie")).isEmpty();
+
+    var owner = client();
+    login(owner, actor);
+    var found = receiptData(send(owner, request(path).GET()));
+    assertThat(found).isEqualTo(original);
+    assertThat(found.path("actorId").asText()).isEqualTo(actor.toString());
+    assertThat(found.at("/after/name").asText()).isEqualTo("Historical receipt fixture");
+    assertThat(found.at("/after/revision").asText()).isEqualTo("1");
+    assertThat(found.toString()).doesNotContain("fixture-opaque-reference", digest, key.toString());
+
+    assertThat(receiptData(send(owner, request(base + UUID.randomUUID()).GET())).isNull()).isTrue();
+    var other = client();
+    login(other, anotherAdmin);
+    assertThat(receiptData(send(other, request(path).GET())).isNull()).isTrue();
+
+    error(send(owner, request(base + "not-a-key").GET()), 400, "BAD_REQUEST");
+    error(send(owner, request(path + "?extra=1").GET()), 400, "BAD_REQUEST");
+    var alias = send(owner, request(path.replace("/receipts/", "/%72eceipts/")).GET());
+    assertThat(alias.statusCode()).isIn(400, 403, 404);
+    assertThat(alias.body()).doesNotContain("Historical receipt fixture");
+    error(
+        send(owner, request(path).method("GET", HttpRequest.BodyPublishers.ofString(SECRET))),
+        400,
+        "BAD_REQUEST");
+    String updateDigest =
+        "update provider_command_receipts set command_digest=?"
+            + " where organization_id=? and actor_id=? and idempotency_key=?";
+    assertThat(jdbc.update(updateDigest, "invalid-fixture-digest", org, actor, key)).isEqualTo(1);
+    try {
+      var unavailable = send(owner, request(path).GET());
+      error(unavailable, 503, "PROVIDER_CONNECTION_UNAVAILABLE");
+      assertThat(unavailable.body()).doesNotContain("invalid-fixture-digest");
+    } finally {
+      jdbc.update(updateDigest, digest, org, actor, key);
+    }
+    membership(actor, org, "MEMBER");
+    error(send(owner, request(path).GET()), 403, "FORBIDDEN");
+    verifyNoInteractions(coordinator);
+  }
+
+  private JsonNode receiptData(HttpResponse<String> response) throws Exception {
+    assertThat(response.statusCode()).isEqualTo(200);
+    assertThat(response.headers().firstValue("Cache-Control")).contains("no-store");
+    assertThat(response.headers().firstValue("Content-Type").orElse(""))
+        .startsWith("application/json");
+    var body = json.readTree(response.body());
+    assertThat(body.size()).isEqualTo(2);
+    assertThat(UUID.fromString(body.at("/meta/requestId").asText())).isNotNull();
+    assertThat(body.path("data").size()).isEqualTo(1);
+    assertThat(body.path("data").has("receipt")).isTrue();
+    return body.at("/data/receipt");
+  }
+
+  private void seedOrganization(UUID org) {
+    jdbc.update(
+        "insert into organizations(id,name,slug,status,created_at,updated_at) values"
+            + " (?,'Create HTTP',?,'ACTIVE',current_timestamp,current_timestamp)",
+        org,
+        org.toString());
+  }
+
+  private void seedAdmin(UUID actor, UUID org) {
+    jdbc.update(
+        "insert into human_accounts(id,email,display_name,password_hash)"
+            + " values (?,?,'Create HTTP',?)",
+        actor,
+        actor + "@example.test",
+        passwords.encode(PASSWORD));
+    jdbc.update(
+        "insert into organization_memberships(account_id,organization_id,role) values"
+            + " (?,?,'ADMIN')",
+        actor,
+        org);
+  }
+
+  private void login(HttpClient client, UUID actor) throws Exception {
+    var loginToken = csrf(client);
+    var login =
+        request("/api/v1/auth/login")
+            .header(loginToken.get("headerName").asText(), loginToken.get("token").asText())
+            .header("Content-Type", "application/x-www-form-urlencoded")
+            .POST(
+                HttpRequest.BodyPublishers.ofString(
+                    "username=" + actor + "%40example.test&password=" + PASSWORD));
+    assertThat(send(client, login).statusCode()).isEqualTo(200);
   }
 
   private static HttpClient client() {
