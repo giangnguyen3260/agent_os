@@ -1,0 +1,79 @@
+@if (providers().length || error()) {
+  <section class="provider-create" aria-label="Tạo kết nối Provider">
+    @if (providers().length) {
+      <h2>Tạo kết nối Provider</h2>
+    }
+    @if (error()) {
+      <p role="alert">{{ error() }}</p>
+    }
+    @if (pending()) {
+      <div data-testid="provider-create-unknown">
+        <p role="status">
+          Chưa xác nhận được kết quả tạo kết nối. Hãy kiểm tra biên nhận trước
+          khi gửi yêu cầu khác.
+        </p>
+        <button type="button" [disabled]="busy()" (click)="checkReceipt()">
+          Kiểm tra biên nhận
+        </button>
+        @if (receiptMessage()) {
+          <p role="status">{{ receiptMessage() }}</p>
+        }
+      </div>
+    } @else if (providers().length) {
+      <form
+        data-testid="provider-create-form"
+        novalidate
+        (submit)="submit($event, apiKey)"
+      >
+        <fieldset [disabled]="busy()">
+          <label>
+            Nhà cung cấp
+            <select
+              #selected
+              [value]="provider() ?? ''"
+              (change)="selectProvider(selected.value)"
+            >
+              @for (option of providers(); track option) {
+                <option [value]="option" [selected]="provider() === option">
+                  {{ labels[option] }}
+                </option>
+              }
+            </select>
+          </label>
+          <label>
+            Tên kết nối
+            <input
+              #nameInput
+              type="text"
+              [value]="name()"
+              (input)="name.set(nameInput.value)"
+              required
+            />
+          </label>
+          <label>
+            API key
+            <input
+              #apiKey
+              type="password"
+              autocomplete="off"
+              spellcheck="false"
+              required
+            />
+          </label>
+          @if (provider() === 'ANTHROPIC') {
+            <label>
+              Workspace ID (không bắt buộc)
+              <input
+                #workspaceInput
+                type="text"
+                [value]="workspace()"
+                (input)="workspace.set(workspaceInput.value)"
+              />
+            </label>
+          }
+          <button type="submit">Tạo kết nối</button>
+        </fieldset>
+      </form>
+    }
+  </section>
+}
