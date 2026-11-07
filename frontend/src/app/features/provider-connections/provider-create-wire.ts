@@ -203,3 +203,10 @@ export function createErrorCode(value: unknown): string | null {
     ? value['error']['code']
     : null;
 }
+
+/** Only the public bounded delta-seconds contract may be rendered to the user. */
+export function retryAfterSeconds(value: string | null): number | null {
+  if (value === null || !/^[1-9][0-9]?$/.test(value)) return null;
+  const seconds = Number(value);
+  return seconds <= 60 ? seconds : null;
+}

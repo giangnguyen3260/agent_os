@@ -301,3 +301,204 @@ test('provider Create recovers an unknown result without sending the API key aga
   }
   await expectNoPersistedSecrets();
 });
+
+// Synthetic browser contracts; these fixtures do not exercise server auth or admission.
+async function knownRejectionFixture(page, status, retryAfter) {
+  await session(page);
+  const collection = `/api/v1/organizations/${organization}/provider-connections`;
+  await page.route(api, route =>
+    route.fulfill({
+      json: envelope({
+        organizationId: organization,
+        page: 0,
+        pageSize: 20,
+        total: 0,
+        items: [],
+      }),
+    }),
+  );
+  await page.route(`**${collection}/options`, route =>
+    route.fulfill({
+      headers: {'X-Provider-Create-Enabled': 'true'},
+      json: envelope({
+        organizationId: organization,
+        policyRevision: '1',
+        providers: [
+          {
+            provider: 'OPENAI',
+            credentialMode: 'OPENAI_API_KEY',
+            enabled: true,
+            optionsSchema: 'EMPTY',
+          },
+          {
+            provider: 'ANTHROPIC',
+            credentialMode: 'ANTHROPIC_API_KEY',
+            enabled: false,
+            optionsSchema: 'ANTHROPIC_WORKSPACE',
+          },
+          {
+            provider: 'GOOGLE_GEMINI',
+            credentialMode: 'GEMINI_API_KEY',
+            enabled: false,
+            optionsSchema: 'EMPTY',
+          },
+        ],
+      }),
+    }),
+  );
+  await page.route('**/api/v1/auth/csrf', route =>
+    route.fulfill({
+      json: envelope({
+        headerName: 'X-CSRF-TOKEN',
+        token: 'synthetic-known-rejection-csrf',
+      }),
+    }),
+  );
+  const submissions = [],
+    lookups = [];
+  let release;
+  const firstResponse = new Promise(resolve => {
+    release = resolve;
+  });
+  await page.route(`**${collection}`, async route => {
+    submissions.push({
+      method: route.request().method(),
+      key: route.request().headers()['idempotency-key'],
+      body: route.request().postDataJSON(),
+    });
+    if (submissions.length === 1) await firstResponse;
+    await route.fulfill({
+      status,
+      headers: retryAfter === null ? {} : {'Retry-After': retryAfter},
+      json: {
+        error: {
+          code:
+            status === 429
+              ? 'RATE_LIMITED'
+              : status === 401
+                ? 'UNAUTHORIZED'
+                : 'FORBIDDEN',
+          message: 'Synthetic browser contract rejection',
+          details: {},
+        },
+        meta: {requestId: randomUUID()},
+      },
+    });
+  });
+  await page.route(`**${collection}/receipts/*`, route => {
+    lookups.push(route.request().url());
+    return route.fulfill({json: envelope({receipt: null})});
+  });
+  await page.goto(url);
+  const form = page.getByTestId('provider-create-form');
+  await expect(form).toBeVisible();
+  await form.getByLabel('Tên kết nối').fill('Known rejection fixture');
+  await form.getByLabel('API key').fill('synthetic-rejected-create-key');
+  await form.getByRole('button', {name: 'Tạo kết nối', exact: true}).click();
+  await expect.poll(() => submissions.length).toBe(1);
+  // Observe erasure during the pending POST, before a denied response unmounts the form.
+  await expect(form.getByLabel('API key')).toHaveValue('');
+  expect(submissions[0].method).toBe('POST');
+  expect(submissions[0].body.apiKey).toBe('synthetic-rejected-create-key');
+  release();
+  return {form, submissions, lookups};
+}
+
+for (const [label, retryAfter, seconds] of [
+  ['minimum', '1', 1],
+  ['maximum', '60', 60],
+  ['missing', null, null],
+  ['zero', '0', null],
+  ['over maximum', '61', null],
+  ['fraction', '1.5', null],
+  ['noncanonical', '01', null],
+  ['date', 'Wed, 21 Oct 2015 07:28:00 GMT', null],
+  ['arbitrary text', 'untrusted-header-content', null],
+]) {
+  test(`provider Create browser contract keeps 429 ${label} known and requires a fresh explicit submission`, async ({
+    page,
+  }) => {
+    await page.clock.install();
+    const {form, submissions, lookups} = await knownRejectionFixture(
+      page,
+      429,
+      retryAfter,
+    );
+    const alert = page.getByRole('alert');
+    await expect(alert).toHaveText(
+      seconds === null
+        ? 'Bạn đã gửi quá nhiều yêu cầu. Vui lòng thử lại sau.'
+        : `Bạn đã gửi quá nhiều yêu cầu. Vui lòng thử lại sau ${seconds} giây.`,
+    );
+    await expect(form.getByLabel('API key')).toHaveValue('');
+    await expect(page.getByTestId('provider-create-unknown')).toHaveCount(0);
+    await expect(
+      page.getByRole('button', {name: 'Kiểm tra biên nhận'}),
+    ).toHaveCount(0);
+    await page.clock.fastForward(65_000);
+    expect(submissions).toHaveLength(1);
+    expect(lookups).toHaveLength(0);
+    // An explicit submit without a freshly entered key must remain local.
+    await form.getByRole('button', {name: 'Tạo kết nối', exact: true}).click();
+    await expect(alert).toHaveText(
+      'Kiểm tra tên kết nối, API key và Workspace ID rồi thử lại.',
+    );
+    expect(submissions).toHaveLength(1);
+    await form.getByLabel('API key').fill('synthetic-fresh-create-key');
+    await form.getByRole('button', {name: 'Tạo kết nối', exact: true}).click();
+    await expect(alert).toContainText('Bạn đã gửi quá nhiều yêu cầu.');
+    expect(submissions).toHaveLength(2);
+    expect(submissions[1].body.apiKey).toBe('synthetic-fresh-create-key');
+    expect(submissions[1].key).toMatch(/^[0-9a-f-]{36}$/);
+    expect(submissions[1].key).not.toBe(submissions[0].key);
+    await expect(form.getByLabel('API key')).toHaveValue('');
+    await page.clock.fastForward(65_000);
+    expect(submissions).toHaveLength(2);
+    expect(lookups).toHaveLength(0);
+    const stored = await page.evaluate(() =>
+      JSON.stringify([
+        Object.entries(localStorage),
+        Object.entries(sessionStorage),
+      ]),
+    );
+    expect(stored).not.toContain('synthetic-rejected-create-key');
+    expect(stored).not.toContain('synthetic-fresh-create-key');
+    for (const submission of submissions)
+      expect(stored).not.toContain(submission.key);
+  });
+}
+
+for (const status of [401, 403]) {
+  test(`provider Create browser contract clears and unmounts the form after ${status}`, async ({
+    page,
+  }) => {
+    await page.clock.install();
+    const {form, submissions, lookups} = await knownRejectionFixture(
+      page,
+      status,
+      null,
+    );
+    await expect(page.getByRole('alert')).toHaveText(
+      status === 401
+        ? 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.'
+        : 'Yêu cầu bị từ chối. Vui lòng tải lại trang để kiểm tra phiên và quyền truy cập.',
+    );
+    await expect(form).toHaveCount(0);
+    await expect(page.getByTestId('provider-create-unknown')).toHaveCount(0);
+    await expect(
+      page.getByRole('button', {name: 'Kiểm tra biên nhận'}),
+    ).toHaveCount(0);
+    await expect(page.locator('input[type="password"]')).toHaveCount(0);
+    await page.clock.fastForward(65_000);
+    expect(submissions).toHaveLength(1);
+    expect(lookups).toHaveLength(0);
+    const stored = await page.evaluate(() =>
+      JSON.stringify([
+        Object.entries(localStorage),
+        Object.entries(sessionStorage),
+      ]),
+    );
+    expect(stored).not.toContain('synthetic-rejected-create-key');
+    expect(stored).not.toContain(submissions[0].key);
+  });
+}
