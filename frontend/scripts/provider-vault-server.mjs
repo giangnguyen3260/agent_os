@@ -35,7 +35,14 @@ const server = createServer(async (incoming, outgoing) => {
       response => {
         if (drop) {
           response.resume();
-          response.once('end', () => outgoing.destroy());
+          response.once('end', () => {
+            // Start an HTTP response so a browser cannot retry a reused connection silently.
+            outgoing.writeHead(response.statusCode || 502, {
+              'Content-Type': 'application/json',
+              'Cache-Control': 'no-store',
+            });
+            outgoing.end('{"data":');
+          });
           response.once('error', () => outgoing.destroy());
           return;
         }

@@ -164,7 +164,15 @@ class ProviderCreateVaultHttpIT {
                           line.replaceAll(".*(provider-create-live\\.spec\\.mjs:[0-9]+).*", "$1"))
                   .distinct()
                   .reduce("", (left, right) -> left + " " + right);
-          throw new AssertionError("Browser acceptance exit=" + browser.exitValue() + locations);
+          String status =
+              Files.readAllLines(diagnostics).stream()
+                  .filter(
+                      line ->
+                          line.matches("PROVIDER_LIVE_DIAGNOSTIC creates=[0-9]+ statuses=[0-9,]*"))
+                  .findFirst()
+                  .orElse("");
+          throw new AssertionError(
+              "Browser acceptance exit=" + browser.exitValue() + locations + " " + status);
         }
       } finally {
         browser.destroyForcibly();

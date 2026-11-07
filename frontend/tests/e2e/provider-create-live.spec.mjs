@@ -20,6 +20,13 @@ test('real provider Create recovers a dropped response through its own receipt',
   const root = `/api/v1/organizations/${organization}/provider-connections`;
   const creates = [];
   const lookups = [];
+  const statuses = [];
+  page.on('response', response => {
+    const path = new URL(response.url()).pathname;
+    if (path === root || path === '/api/v1/auth/csrf') {
+      statuses.push(response.status());
+    }
+  });
   page.on('request', request => {
     const path = new URL(request.url()).pathname;
     if (path === root && request.method() === 'POST') {
@@ -41,7 +48,17 @@ test('real provider Create recovers a dropped response through its own receipt',
   await form.getByLabel('Tên kết nối').fill('Live Vault browser fixture');
   await form.getByLabel('API key').fill(secret);
   await form.getByRole('button', {name: 'Tạo kết nối', exact: true}).click();
-  await expect(page.getByTestId('provider-create-unknown')).toBeVisible();
+  try {
+    await expect(page.getByTestId('provider-create-unknown')).toBeVisible();
+  } catch (failure) {
+    console.log(
+      'PROVIDER_LIVE_DIAGNOSTIC creates=' +
+        creates.length +
+        ' statuses=' +
+        statuses.join(','),
+    );
+    throw failure;
+  }
   expect(creates).toHaveLength(1);
   expect(creates[0]).toMatch(/^[0-9a-f-]{36}$/);
   expect(lookups).toHaveLength(0);
