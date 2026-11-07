@@ -3,7 +3,7 @@
 7 November 2026. PR75 implementation
 `0596d7868002492a16f1b73237b287b8b5ec41b8` on
 `feature/provider-rename-coordinator`: targeted internal orchestration, shared
-quota and command-HMAC-only acceptance PASS; matching Quality/Docker pending. Baseline PR74 head
+quota and command-HMAC-only acceptance PASS; broad regression remains OPEN with the test-isolation follow-up below. Baseline PR74 head
 `0cf54164f2719e41eb2e4b181d21ccdc7b4a346a` passed all seven workflows, as recorded
 with exact run links in [the delivery tracker](PROJECT_DELIVERY_TRACKER.md).
 Baseline green does not establish this candidate's acceptance.
@@ -123,6 +123,22 @@ green. Internal orchestration/shared quota/HMAC-only targeted acceptance is PASS
 
 [Quality 42388033757](https://github.com/giangnguyen3260/agent_os/actions/runs/42388033757)
 and [Docker 42388033756](https://github.com/giangnguyen3260/agent_os/actions/runs/42388033756)
-remain pending. Their completion is the remaining broad PR75 regression
-checkpoint. Public Rename HTTP, expanded own lookup and UI have
+has a test-isolation failure / remains pending, respectively. Corrected-head
+Quality completion is required to close the broad PR75 regression checkpoint. Public Rename HTTP, expanded own lookup and UI have
 no acceptance claim in this slice. No merge or deployment has occurred.
+
+## Broad regression isolation follow-up
+
+[Quality run 42388033757](https://github.com/giangnguyen3260/agent_os/actions/runs/42388033757)
+ran 1610 tests with one error and one intentional compatibility skip. The existing
+receipt-insert fault test could not install its global CREATE-rejection constraint
+because the new Rename fixture left its own seed CREATE receipts behind. Existing
+receipt and completion fixtures already perform scoped cleanup.
+
+The new Rename fixture now deletes only its organization/account rows in safe FK
+order after each test: receipts, events, connections, credential versions, shared
+admission, membership, account and organization. This includes capacity-test peers.
+Global policy and the old receipt fault test are unchanged. No production behavior
+changed. Formatting, imports, diff checks and Java17 subset compilation pass;
+corrected-head focused/native and full Quality execution remain required. Earlier
+targeted and managed passes retain their exact implementation attribution.

@@ -11,7 +11,7 @@ below preserve earlier evidence and decisions. The latest verified baseline is P
 `0cf54164f2719e41eb2e4b181d21ccdc7b4a346a`, with all seven matching workflows
 successful. PR75 implementation `0596d7868002492a16f1b73237b287b8b5ec41b8` on
 `feature/provider-rename-coordinator` now passes targeted internal orchestration,
-shared quota and command-HMAC-only acceptance; matching Quality/Docker remain pending. User authorization for publishing the
+shared quota and command-HMAC-only acceptance; broad regression is OPEN after a test-isolation failure described below. User authorization for publishing the
 reviewable project changes is resolved. The earlier push rejection is historical.
 The stacked PRs remain unmerged and deployment acceptance remains open.
 
@@ -165,15 +165,16 @@ Command receipts, options policy, SQL foundation and guarded publication passed.
 Internal Rename orchestration/quota/HMAC-only targeted acceptance is **PASS**.
 [Quality 42388033757](https://github.com/giangnguyen3260/agent_os/actions/runs/42388033757)
 and [Docker 42388033756](https://github.com/giangnguyen3260/agent_os/actions/runs/42388033756)
-remain pending. Public Rename HTTP, expanded own lookup and UI acceptance remain
+had a test-isolation failure / remains pending, respectively. Corrected-head Quality is required; public Rename HTTP, expanded own lookup and UI acceptance remain
 subsequent. See [the bounded checkpoint](PROVIDER_RENAME_COORDINATOR_CHECKPOINT.md).
 Later documentation-only commits must preserve this implementation/run attribution.
 
 ## Current next three actions
 
-1. Review the matching Quality/Docker completion for
-   implementation `0596d7868002492a16f1b73237b287b8b5ec41b8`; record exact
-   results before closing the PR75 regression checkpoint.
+1. Verify scoped Rename fixture cleanup in matching focused/native and Quality
+   CI. The earlier Quality run found seed receipts leaking into an existing global
+   DB-fault test. Keep that test and production unchanged; close the broad gate
+   only after corrected-head Quality passes. Track Docker separately.
 2. Add isolated current-ADMIN/session-CSRF Rename ingress and explicit Create-or-
    Rename own-receipt recovery, using the frozen parser and historical projector.
 3. Connect reviewed Rename UI confirmation, stale/NO_CHANGE and UNKNOWN recovery,

@@ -22,6 +22,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import javax.crypto.spec.SecretKeySpec;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -49,6 +50,25 @@ abstract class ProviderRenameFixture {
       new java.util.concurrent.CopyOnWriteArrayList<>();
   boolean requireAdmission;
   final AtomicBoolean historicalUnavailable = new AtomicBoolean();
+
+  @AfterEach
+  void cleanupRenameOrganization() {
+    // Native suites share a disposable database. Never leave our seed receipts behind
+    // for another suite's database-fault assertions, and never delete another tenant.
+    for (String table :
+        new String[] {
+          "provider_command_receipts",
+          "provider_connection_events",
+          "provider_connections",
+          "provider_credential_versions",
+          "provider_write_admission",
+          "organization_memberships"
+        }) {
+      jdbc.update("delete from " + table + " where organization_id=?", org);
+    }
+    jdbc.update("delete from human_accounts where id=?", actor);
+    jdbc.update("delete from organizations where id=?", org);
+  }
 
   @BeforeEach
   void seedRename() {
