@@ -16,7 +16,6 @@ import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
-import java.net.SocketTimeoutException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -35,11 +34,17 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManagerFactory;
+import org.apache.coyote.http11.AbstractHttp11Protocol;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.boot.web.embedded.tomcat.TomcatServletWebServerFactory;
+import org.springframework.boot.web.server.WebServerFactoryCustomizer;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -52,8 +57,22 @@ import org.springframework.test.context.DynamicPropertySource;
     webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
     properties = {"agentos.provider-create.enabled=true", "agentos.provider-list.enabled=true"})
 @ActiveProfiles("test")
+@Import(ProviderCreateVaultHttpIT.UploadReadContinue.class)
 @EnabledIfEnvironmentVariable(named = "AGENTOS_TEST_VAULT_URL", matches = "https://.*")
 class ProviderCreateVaultHttpIT {
+  @TestConfiguration(proxyBeanMethods = false)
+  static class UploadReadContinue {
+    @Bean
+    WebServerFactoryCustomizer<TomcatServletWebServerFactory> acknowledgeBodyRead() {
+      // Test-only observation barrier: the managed timeout and admission stay unchanged.
+      return factory ->
+          factory.addConnectorCustomizers(
+              connector ->
+                  ((AbstractHttp11Protocol<?>) connector.getProtocolHandler())
+                      .setContinueResponseTiming("onRead"));
+    }
+  }
+
   private static final String PASSWORD = "Vault-browser-fixture-93847";
   private static final String SECRET = "browser-vault-disposable-synthetic-key";
 
@@ -336,8 +355,8 @@ class ProviderCreateVaultHttpIT {
       assertThat(readStatus(raw)).as("raw cookie/header baseline reaches parser").isEqualTo(400);
     }
 
-    // A 503 malformed-body probe is the observation barrier: with fewer than eight held
-    // slots the exact same authenticated request reaches the parser and returns 400.
+    // Each raw request waits for onRead 100-continue after the command acquires its slot.
+    // Only then can the ninth malformed request observe 503 without stealing a slot.
     var sockets = new ArrayList<Socket>();
     long stalledAt = System.nanoTime();
     try {
@@ -346,7 +365,7 @@ class ProviderCreateVaultHttpIT {
         incompleteKeys.add(key);
         sockets.add(partialUpload(path, cookie, header, csrf, key));
       }
-      awaitSaturation(client, base + path, header, csrf, rejectedKeys, sockets);
+      assertSaturation(client, base + path, header, csrf, rejectedKeys);
       long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
       for (Socket socket : sockets) {
         long remaining = TimeUnit.NANOSECONDS.toMillis(deadline - System.nanoTime());
@@ -377,7 +396,7 @@ class ProviderCreateVaultHttpIT {
         incompleteKeys.add(key);
         sockets.add(partialUpload(path, cookie, header, csrf, key));
       }
-      awaitSaturation(client, base + path, header, csrf, rejectedKeys, sockets);
+      assertSaturation(client, base + path, header, csrf, rejectedKeys);
       for (Socket socket : sockets) {
         socket.getOutputStream().write('}');
         socket.getOutputStream().flush();
@@ -488,47 +507,33 @@ class ProviderCreateVaultHttpIT {
               + "\r\nIdempotency-Key: "
               + key
               + "\r\nAccept: application/json\r\nContent-Type: application/json"
-              + "\r\nConnection: close\r\nContent-Length: 2\r\n\r\n{";
+              + "\r\nExpect: 100-continue\r\nConnection: close\r\nContent-Length: 2\r\n\r\n{";
       socket.getOutputStream().write(headers.getBytes(StandardCharsets.US_ASCII));
       socket.getOutputStream().flush();
+      assertThat(readStatus(socket))
+          .as("body read follows successful slot acquisition")
+          .isEqualTo(100);
+      assertThat(socket.getInputStream().read()).isEqualTo((int) '\r');
+      assertThat(socket.getInputStream().read()).isEqualTo((int) '\n');
       return socket;
-    } catch (IOException failure) {
-      socket.close();
+    } catch (IOException | RuntimeException | Error failure) {
+      try {
+        socket.close();
+      } catch (IOException closeFailure) {
+        failure.addSuppressed(closeFailure);
+      }
       throw failure;
     }
   }
 
-  private void awaitSaturation(
-      HttpClient client,
-      String url,
-      String header,
-      String csrf,
-      List<UUID> rejectedKeys,
-      List<Socket> sockets)
+  private void assertSaturation(
+      HttpClient client, String url, String header, String csrf, List<UUID> rejectedKeys)
       throws Exception {
-    long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
-    for (int attempt = 0; attempt < 64 && System.nanoTime() < deadline; attempt++) {
-      UUID key = UUID.randomUUID();
-      rejectedKeys.add(key);
-      var response = malformedProbe(client, url, header, csrf, key);
-      if (response.statusCode() == 503) return;
-      assertThat(response.statusCode()).as("probe entered parser before saturation").isEqualTo(400);
-      // Back off between observations; the status barrier, rather than elapsed time, proves
-      // admission.
-      Thread.sleep(25);
-    }
-    var statuses = new ArrayList<Integer>();
-    for (Socket socket : sockets) {
-      socket.setSoTimeout(50);
-      try {
-        statuses.add(readStatus(socket));
-      } catch (SocketTimeoutException pending) {
-        statuses.add(-1);
-      } catch (EOFException | SocketException closed) {
-        statuses.add(0);
-      }
-    }
-    throw new AssertionError("Upload saturation not observed; numeric socket statuses=" + statuses);
+    UUID key = UUID.randomUUID();
+    rejectedKeys.add(key);
+    assertThat(malformedProbe(client, url, header, csrf, key).statusCode())
+        .as("all eight acknowledged uploads hold their admission slots")
+        .isEqualTo(503);
   }
 
   private HttpResponse<Void> malformedProbe(
