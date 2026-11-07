@@ -81,3 +81,20 @@ Create-or-Rename own lookup and reviewed Rename UI remain concrete subsequent
 work under [the frozen transport contract](PROVIDER_RENAME_TRANSPORT_CONTRACT.md).
 No external provider call, merge, deployment or overall project completion is
 established by this checkpoint.
+
+## Initial publication and CI follow-up
+
+Draft [PR75](https://github.com/giangnguyen3260/agent_os/pull/75) published initial
+implementation `d36b1d0`. [Vault run 42387591045](https://github.com/giangnguyen3260/agent_os/actions/runs/42387591045)
+passed both direct phases and the three managed tests: one command-only Rename
+case and two retained Create browser/upload cases, with no failures/errors/skips.
+[Focused run 42387591066](https://github.com/giangnguyen3260/agent_os/actions/runs/42387591066)
+ran 264 cases with one failure: the new rollback test expected the wrong existing
+internal failure code. Receipt persistence faults normalize to RECEIPT_UNAVAILABLE
+following confirmed rollback; the public projection is fixed 503
+PROVIDER_CONNECTION_UNAVAILABLE. The assertion now checks that precise internal
+code and additionally executes the public Rename mapper to require no-store,
+empty details, no success data and no constraint/name/internal-code disclosure.
+All database rollback and retained-admission comparisons remain unchanged.
+The corrected assertion still requires matching CI; no completed rollback pass
+is inferred from the earlier run. No production behavior changed in this follow-up.

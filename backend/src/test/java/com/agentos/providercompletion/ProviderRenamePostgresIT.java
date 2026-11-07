@@ -10,6 +10,8 @@ import com.agentos.providercompletion.ProviderCompletionBoundary.WriteOutcome;
 import com.agentos.providercompletion.ProviderCompletionBoundary.WriteState;
 import com.agentos.providerreceipts.ProviderReceiptFailure;
 import com.agentos.providerrename.ProviderRenameCoordinator;
+import com.agentos.providertransport.ProviderRenameResponses;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -17,6 +19,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -99,7 +102,7 @@ class ProviderRenamePostgresIT extends ProviderRenameFixture {
   }
 
   @Test
-  void eventAndReceiptInsertFailuresRollbackRenameWhileDurableAdmissionRemains() {
+  void eventAndReceiptInsertFailuresRollbackRenameWhileDurableAdmissionRemains() throws Exception {
     var baseline = configuration();
     var credentials =
         jdbc.queryForList(
@@ -123,8 +126,20 @@ class ProviderRenamePostgresIT extends ProviderRenameFixture {
       try {
         var result = coordinator.rename(human, org, key, new Rename(id, 1, "Must roll back"));
         assertThat(result.state()).isEqualTo(WriteState.REJECTED);
-        assertThat(result.failure().code()).isEqualTo(Code.COMMAND_UNAVAILABLE);
+        assertThat(result.failure().code()).isEqualTo(Code.RECEIPT_UNAVAILABLE);
         assertThat(result.result()).isNull();
+        var response = new MockHttpServletResponse();
+        var json = new ObjectMapper();
+        ProviderRenameResponses.writeOutcome(json, response, result);
+        assertThat(response.getStatus()).isEqualTo(503);
+        assertThat(response.getHeader("Cache-Control")).isEqualTo("no-store");
+        var envelope = json.readTree(response.getContentAsByteArray());
+        assertThat(envelope.at("/error/code").asText())
+            .isEqualTo("PROVIDER_CONNECTION_UNAVAILABLE");
+        assertThat(envelope.at("/error/details")).isEqualTo(json.createObjectNode());
+        assertThat(envelope.has("data")).isFalse();
+        assertThat(response.getContentAsString())
+            .doesNotContain(constraint, "Must roll back", "RECEIPT_UNAVAILABLE");
         assertThat(completion.lookupOwn(human, org, key).state())
             .isEqualTo(ProviderCompletionBoundary.LookupState.ABSENT);
         assertThat(configuration()).isEqualTo(baseline);
