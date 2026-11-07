@@ -1,7 +1,9 @@
 # Rename coordinator checkpoint
 
-7 November 2026. Engineering candidate on `feature/provider-rename-coordinator`;
-reviewed implementation and authored tests, runtime execution pending. Baseline PR74 head
+7 November 2026. PR75 implementation
+`0596d7868002492a16f1b73237b287b8b5ec41b8` on
+`feature/provider-rename-coordinator`: targeted internal orchestration, shared
+quota and command-HMAC-only acceptance PASS; matching Quality/Docker pending. Baseline PR74 head
 `0cf54164f2719e41eb2e4b181d21ccdc7b4a346a` passed all seven workflows, as recorded
 with exact run links in [the delivery tracker](PROJECT_DELIVERY_TRACKER.md).
 Baseline green does not establish this candidate's acceptance.
@@ -50,7 +52,7 @@ requires no credential token, credential preparation, credential health service
 or provider client. Remote command HMAC access remains outside database
 transactions; command key availability is still required for exact comparison.
 
-## Authored acceptance, pending execution
+## Acceptance scope and test inventory
 
 - Wrapper/fixture tests: fresh and historical command-key behavior, current
   authority, error outcomes and no credential collaborator; exact admission
@@ -68,11 +70,8 @@ available Java17 compiler module and pinned dependency jars. Google formatting,
 imports, shell syntax and diff checks pass; these checks are not H2/PostgreSQL or
 Vault execution. There are eight shared coordinator cases (H2 and PostgreSQL),
 three PostgreSQL-only cases, three config-runner cases and one managed-Vault case.
-These are source/test inventory statements, not executed PASS results. Review
-must check transaction/proxy ownership, authority and receipt precedence, shared
-quota compatibility and exact historical completion before recording matching
-execution evidence. Existing focused and regression workflows are being updated;
-no new run or candidate test count is claimed here.
+The executed corrected-head evidence below supersedes the initial pending test
+inventory. Earlier local compile checks are not attributed as runtime evidence.
 
 ## Subsequent deliverables
 
@@ -96,5 +95,34 @@ PROVIDER_CONNECTION_UNAVAILABLE. The assertion now checks that precise internal
 code and additionally executes the public Rename mapper to require no-store,
 empty details, no success data and no constraint/name/internal-code disclosure.
 All database rollback and retained-admission comparisons remain unchanged.
-The corrected assertion still requires matching CI; no completed rollback pass
-is inferred from the earlier run. No production behavior changed in this follow-up.
+The corrected assertion passed the matching focused run below; the earlier
+failed run remains historical evidence. No production behavior changed in this follow-up.
+
+## Corrected implementation executed acceptance
+
+Evidence belongs to implementation `0596d7868002492a16f1b73237b287b8b5ec41b8`,
+not an upcoming documentation-only commit. The coordinating agent verified
+[focused Java21 run 42388033761/job128449491753](https://github.com/giangnguyen3260/agent_os/actions/runs/42388033761/job/128449491753):
+264 tests, zero failures/errors and one intentional H2-only compatibility skip.
+New Rename coordinator H2 eight cases, PostgreSQL eleven cases and configuration
+three cases all passed without skips. Retained native PostgreSQL completion 73
+and actual Create HTTP two passed. This includes the precise rollback failure-code
+assertion and real public response projection: internal RECEIPT_UNAVAILABLE,
+public 503 PROVIDER_CONNECTION_UNAVAILABLE, empty details and no provisional data
+or diagnostic/name disclosure. The correction changed test expectations only;
+all rollback and durable-admission assertions remain enforced.
+
+[Vault run 42388033759/job128449494068](https://github.com/giangnguyen3260/agent_os/actions/runs/42388033759/job/128449494068)
+passed both direct TLS/restart phases and three managed cases: one command-only
+Rename case and two retained Create browser/upload cases, with zero failures,
+errors or skips. The coordinating agent read the matching job log. The Rename
+case verifies separate reader/writer privileges, no Create configuration, no
+credential-version mutation and command-token outage/recovery.
+Command receipts, options policy, SQL foundation and guarded publication are also
+green. Internal orchestration/shared quota/HMAC-only targeted acceptance is PASS.
+
+[Quality 42388033757](https://github.com/giangnguyen3260/agent_os/actions/runs/42388033757)
+and [Docker 42388033756](https://github.com/giangnguyen3260/agent_os/actions/runs/42388033756)
+remain pending. Their completion is the remaining broad PR75 regression
+checkpoint. Public Rename HTTP, expanded own lookup and UI have
+no acceptance claim in this slice. No merge or deployment has occurred.

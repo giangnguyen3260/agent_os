@@ -9,8 +9,9 @@ Initial reviewed source: `c4622de9652f8c0a05a63d8c277147642d1d54df`, branch
 This checkpoint governs current delivery status. The dated historical sections
 below preserve earlier evidence and decisions. The latest verified baseline is PR74 head
 `0cf54164f2719e41eb2e4b181d21ccdc7b4a346a`, with all seven matching workflows
-successful. The current uncommitted candidate is `feature/provider-rename-coordinator`;
-its authored tests have not yet established execution acceptance. User authorization for publishing the
+successful. PR75 implementation `0596d7868002492a16f1b73237b287b8b5ec41b8` on
+`feature/provider-rename-coordinator` now passes targeted internal orchestration,
+shared quota and command-HMAC-only acceptance; matching Quality/Docker remain pending. User authorization for publishing the
 reviewable project changes is resolved. The earlier push rejection is historical.
 The stacked PRs remain unmerged and deployment acceptance remains open.
 
@@ -149,21 +150,30 @@ This supersedes the earlier PR74 pending regression statements above. SQL
 foundation, options policy and guarded publication also passed. Earlier head/run
 counts remain historical evidence, not newly attributed test totals.
 
-The uncommitted coordinator candidate implements shared durable Create/Rename
-write admission, the compatible Create admission facade, governed Rename
-receipt/completion orchestration and independently enabled command-HMAC-only
-managed wiring with a private writer datasource. Test sources cover wrapper
-behavior, native contention/replay/rollback/UNKNOWN and managed command-only Vault
-integration; **execution and matching CI remain pending**. No candidate PASS,
-public Rename route, expanded own lookup or Rename UI completion is claimed.
-See [the bounded checkpoint](PROVIDER_RENAME_COORDINATOR_CHECKPOINT.md) for exact
-admission semantics, dependency boundaries and evidence requirements.
+PR75 implementation `0596d7868002492a16f1b73237b287b8b5ec41b8` implements
+shared durable admission, the compatible Create facade, governed Rename
+receipt/completion and independent command-HMAC-only managed wiring.
+[Focused Java21 run 42388033761/job128449491753](https://github.com/giangnguyen3260/agent_os/actions/runs/42388033761/job/128449491753)
+passed 264 tests with zero failures/errors and one intentional H2 compatibility
+skip. Rename H2 eight cases, native PostgreSQL eleven and config three all ran
+without skips; retained PostgreSQL completion 73 and actual Create HTTP two also
+passed. [Vault run 42388033759/job128449494068](https://github.com/giangnguyen3260/agent_os/actions/runs/42388033759/job/128449494068)
+passed both direct phases and all three managed tests (one command-only Rename,
+two retained Create browser/upload) with zero failures/errors/skips. The matching
+job log was inspected.
+Command receipts, options policy, SQL foundation and guarded publication passed.
+Internal Rename orchestration/quota/HMAC-only targeted acceptance is **PASS**.
+[Quality 42388033757](https://github.com/giangnguyen3260/agent_os/actions/runs/42388033757)
+and [Docker 42388033756](https://github.com/giangnguyen3260/agent_os/actions/runs/42388033756)
+remain pending. Public Rename HTTP, expanded own lookup and UI acceptance remain
+subsequent. See [the bounded checkpoint](PROVIDER_RENAME_COORDINATOR_CHECKPOINT.md).
+Later documentation-only commits must preserve this implementation/run attribution.
 
 ## Current next three actions
 
-1. Review and execute the coordinator candidate's focused, native PostgreSQL and
-   managed command-only Vault suites; record exact candidate head/run results and
-   matching regression before accepting this bounded internal slice.
+1. Review the matching Quality/Docker completion for
+   implementation `0596d7868002492a16f1b73237b287b8b5ec41b8`; record exact
+   results before closing the PR75 regression checkpoint.
 2. Add isolated current-ADMIN/session-CSRF Rename ingress and explicit Create-or-
    Rename own-receipt recovery, using the frozen parser and historical projector.
 3. Connect reviewed Rename UI confirmation, stale/NO_CHANGE and UNKNOWN recovery,
