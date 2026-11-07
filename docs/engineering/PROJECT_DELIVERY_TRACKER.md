@@ -37,7 +37,10 @@ credential values against the disposable secret manager.
 ### Native upload acceptance candidate
 
 `ProviderCreateVaultHttpIT.idleUploadsTimeOutAndReleaseEveryCreateAdmissionSlot`
-adds real socket coverage against the managed Spring/Tomcat fixture. An initial
+adds real socket coverage against the managed Spring/Tomcat fixture. A test-only
+connector changes 100-continue timing to `onRead`; the production timeout remains
+unchanged. Each partial request must receive the complete 100 response after
+the body reader (and hence semaphore acquisition) has begun. An initial
 malformed request establishes authenticated parser access (400). Eight partial
 bodies then occupy admission; the same malformed probe must return 503. Each
 stalled socket must finish by server 400/403/408 or EOF/reset within a shared
@@ -56,8 +59,11 @@ read timeout. Pinned Tomcat 10.1.31 `InputBuffer.handleReadException` marks
 forwards the resulting error to `/error`, which existing security can deny with
 403. This is a connector-abort outcome, not a guaranteed command 400 contract.
 Only the first cycle accepts it; all eight second-cycle responses remain exactly
-400. Source-reviewed correction `3d977a5` requires its matching CI outcome before
-claiming native acceptance. No production behavior changes or model calls occur.
+400. Correction `3d977a5` then exposed a race: the malformed probe could occupy
+a slot before the eighth upload and cause that upload to receive 503. The
+source-reviewed `2b8eca7` fixes the test barrier with per-request on-read ACKs
+and one ninth-request probe. It requires matching CI before native acceptance.
+No production behavior changes or model calls occur.
 
 ### Known-rejection UI acceptance candidate
 
