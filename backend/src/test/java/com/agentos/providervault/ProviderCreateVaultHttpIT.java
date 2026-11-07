@@ -16,6 +16,7 @@ import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
+import java.net.SocketTimeoutException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -329,6 +330,11 @@ class ProviderCreateVaultHttpIT {
     assertThat(malformedProbe(client, base + path, header, csrf, baselineKey).statusCode())
         .as("authenticated baseline reaches parser before occupancy")
         .isEqualTo(400);
+    try (Socket raw = partialUpload(path, cookie, header, csrf, UUID.randomUUID())) {
+      raw.getOutputStream().write('}');
+      raw.getOutputStream().flush();
+      assertThat(readStatus(raw)).as("raw cookie/header baseline reaches parser").isEqualTo(400);
+    }
 
     // A 503 malformed-body probe is the observation barrier: with fewer than eight held
     // slots the exact same authenticated request reaches the parser and returns 400.
@@ -339,7 +345,7 @@ class ProviderCreateVaultHttpIT {
         incompleteKeys.add(key);
         sockets.add(partialUpload(path, cookie, header, csrf, key));
       }
-      awaitSaturation(client, base + path, header, csrf, rejectedKeys);
+      awaitSaturation(client, base + path, header, csrf, rejectedKeys, sockets);
       long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
       for (Socket socket : sockets) {
         long remaining = TimeUnit.NANOSECONDS.toMillis(deadline - System.nanoTime());
@@ -365,7 +371,7 @@ class ProviderCreateVaultHttpIT {
         incompleteKeys.add(key);
         sockets.add(partialUpload(path, cookie, header, csrf, key));
       }
-      awaitSaturation(client, base + path, header, csrf, rejectedKeys);
+      awaitSaturation(client, base + path, header, csrf, rejectedKeys, sockets);
       for (Socket socket : sockets) {
         socket.getOutputStream().write('}');
         socket.getOutputStream().flush();
@@ -487,7 +493,12 @@ class ProviderCreateVaultHttpIT {
   }
 
   private void awaitSaturation(
-      HttpClient client, String url, String header, String csrf, List<UUID> rejectedKeys)
+      HttpClient client,
+      String url,
+      String header,
+      String csrf,
+      List<UUID> rejectedKeys,
+      List<Socket> sockets)
       throws Exception {
     long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
     for (int attempt = 0; attempt < 64 && System.nanoTime() < deadline; attempt++) {
@@ -500,7 +511,18 @@ class ProviderCreateVaultHttpIT {
       // admission.
       Thread.sleep(25);
     }
-    throw new AssertionError("All eight partial uploads did not reach admission within budget");
+    var statuses = new ArrayList<Integer>();
+    for (Socket socket : sockets) {
+      socket.setSoTimeout(50);
+      try {
+        statuses.add(readStatus(socket));
+      } catch (SocketTimeoutException pending) {
+        statuses.add(-1);
+      } catch (EOFException | SocketException closed) {
+        statuses.add(0);
+      }
+    }
+    throw new AssertionError("Upload saturation not observed; numeric socket statuses=" + statuses);
   }
 
   private HttpResponse<Void> malformedProbe(
