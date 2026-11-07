@@ -122,4 +122,5 @@ request 200 PUT sys/unseal --data-binary "@$scratch/unseal.json"
 request 200 GET 'agentos/data/provider-credentials/fixture?version=1' -H "@$scratch/app.headers"
 jq -e '.data.data.credential=="synthetic-vault-ci-only" and .data.metadata.version==1' "$scratch/response" >/dev/null
 java_probe restart
+mvn -B -ntp -f backend/pom.xml -Dtest=ProviderCreateVaultHttpIT test
 echo "Disposable Vault TLS, KV policy, Java adapter and restart checks passed"
