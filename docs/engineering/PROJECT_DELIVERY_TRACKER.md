@@ -4,6 +4,52 @@ PM baseline: 5 November 2026 (Asia/Saigon). Repository: `giangnguyen3260/agent_o
 Initial reviewed source: `c4622de9652f8c0a05a63d8c277147642d1d54df`, branch
 `feature/provider-create-retry-after`. Working tree was clean before this document.
 
+## Current delivery checkpoint — 7 November 2026
+
+This checkpoint governs current delivery status. The dated historical sections
+below preserve earlier evidence and decisions. Reviewed implementation is local
+`ca4c97c`, published as PR71 implementation head
+`e3b252e3fb418d0cb2b9e995ea7195b3ac6f0fe4` on
+`feature/provider-create-managed-vault`. User authorization for publishing the
+reviewable project changes is resolved. The earlier push rejection is historical.
+The stacked PRs remain unmerged and deployment acceptance remains open.
+
+| Dependency | Implemented scope | Evidence and remaining boundary |
+| --- | --- | --- |
+| PR64 | Bounded retry delay and fixed safe error/UNKNOWN projection | Previously verified 7/7 workflows green on the corrected head. Internal response acceptance precedes transport. |
+| PR65 | Historical Create configuration receipt, first 201 and replay 200 | Verified head `13ceeca`, with native replay after rename and timestamp/data equality. Health is obtained from current reads. |
+| PR66 | Opt-in current ADMIN/session-CSRF POST ingress | Head `174864b` verified 6/6 green. Native HTTP test uses a test coordinator. |
+| PR67 | Real TLS Vault/PostgreSQL coordinator harness, replay, competition and ambiguous completion recovery | Published `7914fb1`. Source includes actual external storage and durable receipt checks. This is direct integration evidence, with browser acceptance tracked separately. |
+| PR68 | V028 durable Create actor/key correlation and exact retained-reference observation | Published `7fa0afa`. Competing or uncertain preparations remain pinned unless positive evidence matches. Cleanup eligibility remains outside this evidence. |
+| PR69 | Authorized own Create receipt GET and secret-free recovery | Published `1771a5a`. Current actor/org scoping, explicit null and safe unavailable responses are implemented. |
+| PR70 | Responsive Create form and explicit receipt recovery | Published `73ffcb8`. Browser contracts exercise normal and UNKNOWN flows. Full real-browser integration follows in PR71. |
+| PR71 | Managed TLS Vault/key configuration, dedicated PostgreSQL writer datasource, restricted list reader, Tomcat upload timeout and real browser harness | Implementation head `e3b252e`: [live workflow 42342036360](https://github.com/giangnguyen3260/agent_os/actions/runs/42342036360) passed, including both direct TLS/restart phases and the real browser/HTTP acceptance (one test, no failures or skips). SQL foundation, guarded publication and options policy also passed. Matching Quality `42342036401` and Docker `42342036362` remain in progress. Initial head `6cc15af` passed Quality `42341519405` but failed browser acceptance. The corrected proxy sends malformed JSON only after backend completion; it does not establish TCP reset acceptance. |
+
+The Create receipt snapshot contract gap now has an implemented bounded
+configuration projection. Managed assembly uses distinct reader/writer database
+principals and preserves the list capability checks. The browser fault harness
+verifies a malformed response followed by explicit own-receipt recovery against
+real HTTP, PostgreSQL and TLS Vault. That integrated path passed on the implementation head above; this tracker
+update changes documentation only. Broader Quality/Docker results remain pending. Models-list checks, model discovery and
+live generation remain later provider/runtime work. These tests use synthetic
+credential values against the disposable secret manager.
+
+## Current next three actions
+
+1. Record completed Quality/Docker outcomes for PR71 and diagnose any failures.
+   Real-browser malformed-response recovery is now verified on `e3b252e`: one
+   Create, explicit secret-free lookup, durable correlated receipt/reference and
+   HMAC-verified Vault readback. Keep this bounded acceptance separate from the
+   remaining Create gates and broader AgentOS completion.
+2. Execute native upload-timeout/slot-release acceptance and the remaining Create
+   fault matrix. Distinguish idle upload timeout from total request deadline.
+   Preserve unresolved preparation pins, review reconciliation and restart/fault
+   evidence, and record actual deployment inputs before release readiness.
+3. Continue remaining provider lifecycle work and then runtime authority,
+   ledger/budget enforcement, planning, dispatch, execution and review according
+   to the ordered backlog. Keep overall AgentOS completion open until the real
+   Mission-to-reviewed-output/usage loop meets its acceptance criteria.
+
 ## PM mandate and continuity
 
 The PM agent tracks scope, dependencies, evidence, blockers and the next concrete
@@ -36,7 +82,7 @@ synthetic browser contracts have their own scope; none substitutes for runtime
 acceptance. Retain commit/run identity and distinguish newly executed checks from
 historical checkpoint reports. No completion percentage is inferred from PR count.
 
-## Current baseline
+## Historical baseline — 5 November 2026
 
 | Scope | Implemented | Tested evidence | Merged / deployed |
 | --- | --- | --- | --- |
@@ -56,7 +102,7 @@ been created. Each row is split into reviewable slices as its contract is frozen
 
 | Order / reference | Owner | Current state and dependencies | Required Done evidence |
 | --- | --- | --- | --- |
-| 1 — BA-03 Provider Create | BE, FE, QC | In progress; starts at local retry commit and existing internal boundaries | Matching Java21/PostgreSQL CI; safe public response and Retry-After; isolated authenticated ADMIN/session-CSRF POST; real configured dependencies, receipt recovery/reconciliation; responsive form; real-cookie happy/denied/stale/UNKNOWN/outage/concurrency tests with no secret rows/logs |
+| 1 — BA-03 Provider Create | BE, FE, QC | In progress at PR71 managed assembly and real browser acceptance | Matching Java21/PostgreSQL CI; safe public response and Retry-After; isolated authenticated ADMIN/session-CSRF POST; real configured dependencies, receipt recovery/reconciliation; responsive form; real-cookie happy/denied/stale/UNKNOWN/outage/concurrency tests with no secret rows/logs |
 | 2 — BA-03 remaining provider lifecycle | BE, FE, QC | Create foundation; all three provider types selected by user | Rename/rotate/disable/enable, access check and model discovery per frozen contracts; bounded network calls, explicit selected model, safe credentials and real UI/API evidence; no fabricated health |
 | 3 — BA-02/04 runtime authority and Skills/Tools | BA, SA, BE, FE, QC | Lifecycle document review exists; enforcement not delivered | Freeze applicable lifecycle/API semantics; version configuration and schemas; deny-by-default grants enforced on server; revocation and scoped harmless tool tests |
 | 4 — BA-07 and minimum BA-13 | SA, BE, FE, QC | Requires runtime contract and authority | Durable run/attempt/input versions and minimum read UI; pre-call budget reservation, rate/concurrency limits and actual usage settlement without double counting |
@@ -66,7 +112,7 @@ been created. Each row is split into reviewable slices as its contract is frozen
 | 8 — BA-15 Memory/Knowledge | BA, SA, BE, FE, QC | Requires authority and context provenance | Scoped/versioned context and retention, tenant isolation and inspectable input provenance; broader memory UI follows initial bounded context |
 | 9 — BA-16 release gate | SA, BE, FE, QC | Requires selected end-to-end loop | Reproducible Docker demo; migration/backup/restore/rollback evidence; security/secret/tenant checks, responsive accessibility, worker-failure/load tests; explicit merge/deploy status and environment |
 
-## Open constraints and blockers
+## Historical constraints — 5 November 2026
 
 - Public Create POST, command security chain, safe receipt DTO/Retry-After mapping,
   credential lifecycle resolution and the Create form remain incomplete.
@@ -86,7 +132,7 @@ been created. Each row is split into reviewable slices as its contract is frozen
 - Audit stacked PR integration order and tested source identities before any
   integration/release claim. Sonar remains paused, not passed.
 
-## Next three actions
+## Historical next actions — 5 November 2026
 
 1. Coordinator: obtain explicit authorization to push the reviewable code/tests/docs
    on `feature/provider-create-retry-after` to `giangnguyen3260/agent_os`, then open
@@ -114,7 +160,7 @@ been created. Each row is split into reviewable slices as its contract is frozen
    action. Keep one current next delivery and avoid unrelated hardening detours.
 5. On handoff, preserve the next three actions and source identity in this file.
 
-## Next-slice review — 5 November 2026
+## Historical next-slice review — 5 November 2026
 
 User authorization now includes PM coordination with other agents for ordinary
 implementation and review work, escalating only decisions that materially change

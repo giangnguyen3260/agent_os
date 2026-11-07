@@ -76,3 +76,38 @@ The disposable CI fixture/probe exercises operator commands and actual session
 HTTP behavior on CI PostgreSQL. It must never be pointed at user or production
 data. No migration, provisioning or deployment to the user's Mac is performed by
 this change. SonarQube remains paused.
+
+## Explicit managed Create assembly
+
+Create remains disabled unless `agentos.provider-create.enabled=true`. When no
+coordinator has been supplied by a test configuration, enabling it requires all
+of these `agentos.provider-vault.*` settings:
+
+| Setting | Required value |
+| --- | --- |
+| `url` | Trusted HTTPS Vault origin |
+| `mount` | Explicit KV v2 mount |
+| `ca-file` | Absolute readable deployment CA certificate bundle |
+| `app-token-file` | Absolute mounted file containing the application Vault token |
+| `hmac-token-file` | Separate absolute mounted file containing the HMAC token |
+| `credential-key-version` | Positive credential integrity key version |
+| `command-key-version` | Positive command receipt key version |
+| `writer-jdbc-url` | Explicit PostgreSQL JDBC URL for the writer role |
+| `writer-username` | Dedicated writer database username |
+| `writer-password-file` | Absolute mounted file containing the writer password |
+
+The normal application datasource must retain the restricted list runtime role.
+The managed coordinator creates separate writer transactions and annotation-aware
+receipt/connection service proxies; it never grants writer access to list reads.
+Provision the writer role and Vault policies explicitly before enabling Create.
+No root token, default secret, policy provisioning or production enablement is
+provided. Missing or invalid local settings stop startup with a fixed failure
+message. Mounted token files are reread for each Vault operation to support
+rotation; token files accept one trailing newline and otherwise visible ASCII.
+
+Managed Create configures Tomcat upload timeout enforcement with a 10-second
+socket read timeout during request body upload. This bounds an individual blocked
+upload read, rather than imposing a total deadline on a continuously progressing
+upload. Existing body size and concurrency limits still apply. Unknown Vault
+preparations remain pinned for explicit operator reconciliation; the managed
+assembly does not resolve or delete them automatically.
