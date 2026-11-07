@@ -45,7 +45,7 @@ source/CI evidence and must be recorded separately.
 Current delivery acceptance is R01–R11 only. Native and UI rows become acceptance
 criteria when their corresponding integration slices are implemented.
 
-## Execution checkpoint
+## Local and first-run checkpoint (historical)
 
 The Create/Rename body suites passed 16 standalone Java17 JUnit tests. The first
 focused Java21 run also passed both parser suites but found the missing empty
@@ -54,3 +54,14 @@ The common DTO now pins that property to include empty maps. Both Create/Rename
 response suites subsequently passed 14 standalone Java17 tests, including the
 all-operation rejection allowlist. No tests or error-shape assertions were relaxed.
 Corrected-head Java21 focused/native CI remains required before accepting R01–R11.
+
+## Corrected PR74 targeted acceptance
+
+R01–R11 isolated parser/projector/response acceptance is PASS on implementation
+`1c639dfbde44b6ab3275e27dd541e2f68c13bbab` in [focused Java21 run 42370723609](https://github.com/giangnguyen3260/agent_os/actions/runs/42370723609).
+All four Create/Rename body/response suites ran 30 targeted cases with no
+failures/errors/skips. [The consolidated QC checkpoint](PROVIDER_CREATE_BOUNDED_ACCEPTANCE.md#corrected-pr74-targeted-acceptance)
+records native PostgreSQL and Vault evidence, the single intentional H2
+compatibility skip in the larger suite, and pending Quality/Docker regression.
+This does not accept N01–N07 or U01–U04 as public Rename integration; coordinator,
+authenticated ingress, expanded own lookup and UI are subsequent work.

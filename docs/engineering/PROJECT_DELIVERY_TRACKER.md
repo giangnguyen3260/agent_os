@@ -7,10 +7,10 @@ Initial reviewed source: `c4622de9652f8c0a05a63d8c277147642d1d54df`, branch
 ## Current delivery checkpoint — 7 November 2026
 
 This checkpoint governs current delivery status. The dated historical sections
-below preserve earlier evidence and decisions. Reviewed implementation is local
-`ca4c97c`, published as PR71 implementation head
-`e3b252e3fb418d0cb2b9e995ea7195b3ac6f0fe4` on
-`feature/provider-create-managed-vault`. User authorization for publishing the
+below preserve earlier evidence and decisions. The latest reviewed implementation
+is PR74 head `1c639dfbde44b6ab3275e27dd541e2f68c13bbab` on
+`feature/provider-rename-transport`; later documentation-only checkpoints preserve
+that tested implementation. User authorization for publishing the
 reviewable project changes is resolved. The earlier push rejection is historical.
 The stacked PRs remain unmerged and deployment acceptance remains open.
 
@@ -118,18 +118,32 @@ The common error DTO now explicitly includes that property; global Jackson
 configuration and error mappings remain unchanged. Create/Rename response suites
 then passed 14 standalone Java17 tests locally, including all unsupported Rename
 operations. Together with the body suites this is 30 targeted local tests, with
-no skips or failures. Matching corrected-head CI is still required.
+no skips or failures. The corrected-head targeted Java21 results below supersede this earlier pending status.
 
-Only the strict-wire criterion is reopened pending the corrected-head CI.
-Existing auth, receipt, PostgreSQL, TLS Vault, upload and browser passes retain
-their exact historical evidence. Rename response cases and focused Java21/native
-regression must also complete before accepting this new transport slice.
+The strict-wire criterion and isolated Rename response acceptance now pass the
+targeted Java21 gate below. Existing auth, receipt, PostgreSQL, TLS Vault, upload
+and browser results retain their exact historical evidence. Quality/Docker
+regression for the corrective head remains pending.
+
+## Corrected PR74 targeted acceptance
+
+Implementation `1c639df` passed [focused Java21 run 42370723609](https://github.com/giangnguyen3260/agent_os/actions/runs/42370723609)
+and [Vault run 42370723601](https://github.com/giangnguyen3260/agent_os/actions/runs/42370723601).
+The focused suite ran 237 tests with no failures/errors and one intentional H2
+compatibility skip; all 30 targeted Create/Rename parser/response cases ran with
+no skips. Native PostgreSQL completion (73 cases), authenticated Create HTTP (two
+cases), both direct Vault phases and both managed browser/upload cases passed.
+Strict UTF-8 and isolated Rename R01–R11 acceptance are PASS. Quality/Docker remain
+pending. [The QC checkpoint](../qc/PROVIDER_CREATE_BOUNDED_ACCEPTANCE.md#corrected-pr74-targeted-acceptance)
+retains full run/job provenance and scope. Public Rename coordination, ingress,
+lookup routing and UI are still future work. No PR is merged or deployed.
 
 ## Current next three actions
 
-1. Review and publish the strict UTF-8 correction plus isolated Rename transport;
-   require matching Java21 focused completion, Quality and real Vault/native CI.
-   Close only the reopened strict-wire gate after those results pass.
+1. Review matching Quality/Docker completion for PR74 implementation `1c639df`.
+   Targeted strict UTF-8 and isolated Rename R01–R11 acceptance now pass, and Vault
+   workflow succeeded. Record broad regression outcomes at their actual head/run
+   identity before closing the PR74 regression checkpoint.
 2. Implement Rename command coordination using command-HMAC-only dependencies,
    receipt-first replay and the shared actor/org write namespace without Create's
    provider-enabled/capacity gates. Add isolated current-ADMIN/session-CSRF ingress

@@ -3,8 +3,8 @@
 Checkpoint: 2026-11-07. Independent source review plus coordinator-verified execution evidence.
 
 **Verdict:** the baseline bounded Create implementation and regression passed on PR73
-`e7760e1`. A concrete strict-UTF-8 defect discovered during Rename review reopens only
-that wire criterion until the corrected head passes matching CI. Deployment, the
+`e7760e1`. The strict-UTF-8 corrective criterion passed targeted Java21 acceptance on PR74
+`1c639df`. Broad Quality/Docker regression for that correction remains pending. Deployment, the
 remaining provider lifecycle and runtime acceptance remain open.
 
 ## Evidence and provenance
@@ -30,15 +30,38 @@ four alternate ASCII UTF-16/32 encodings before the fix and zero afterward. The
 isolated factory now disables detection and preserves one leading UTF-8 BOM.
 Regressions reject both endian forms with/without BOM and check erasure. The combined
 Create/Rename body suites passed 16 standalone Java17 JUnit tests locally; this does
-not replace matching Java21/native CI. That exact corrective gate remains HOLD until
-its new source is tested. Existing historical DB/Vault/security evidence is retained.
+not replace matching Java21/native CI. That earlier corrective HOLD is superseded by the targeted PASS below. Existing historical DB/Vault/security evidence is retained.
 
 The first focused Java21 run on the correction passed both body suites and actual
 Create HTTP cases but exposed an exact-error-envelope issue in the new Rename
 response tests: `NON_EMPTY` omitted the empty `details` map. A property-level
 `JsonInclude(ALWAYS)` on the common error DTO preserves the declared `{}` without
 changing global mapper settings. Both response suites then passed 14 standalone
-Java17 tests locally; this result is separate from the still-required new-head CI.
+Java17 tests locally; that local result preceded the matching Java21 pass below.
+
+## Corrected PR74 targeted acceptance
+
+Implementation head `1c639dfbde44b6ab3275e27dd541e2f68c13bbab` passed
+[focused Java21 run 42370723609, job 128398096431](https://github.com/giangnguyen3260/agent_os/actions/runs/42370723609/job/128398096431).
+The suite executed 237 tests with zero failures/errors and one intentional H2-only
+compatibility skip. Native PostgreSQL completion executed 73 cases and actual
+Create HTTP executed two cases successfully. The four Create/Rename body/response
+classes executed 30 targeted cases with zero failures/errors/skips. The strict
+UTF-8 corrective criterion is PASS. Rename R01–R11 isolated parser/projector/response
+acceptance is PASS.
+
+[Vault run 42370723601, job 128398096464](https://github.com/giangnguyen3260/agent_os/actions/runs/42370723601/job/128398096464) also succeeded.
+The coordinator read the matching log: both direct TLS/restart phases passed,
+and `ProviderCreateVaultHttpIT` ran both browser receipt-recovery and native idle
+upload/all-slot recovery cases with zero failures/errors/skips. SQL foundation,
+options and guarded publication also passed.
+Matching broad regression remains pending in [Quality 42370723622](https://github.com/giangnguyen3260/agent_os/actions/runs/42370723622)
+and [Docker 42370723586](https://github.com/giangnguyen3260/agent_os/actions/runs/42370723586).
+These results belong to the implementation head above. A later documentation-only
+checkpoint requires its own source identity and must not replace that attribution.
+Public Rename ingress, coordinator, Create-or-Rename lookup routing and UI remain
+subsequent work. Merge, deployment and overall provider/runtime completion remain
+open.
 
 ## Source-to-test mapping
 
