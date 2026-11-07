@@ -62,7 +62,10 @@ Only the first cycle accepts it; all eight second-cycle responses remain exactly
 400. Correction `3d977a5` then exposed a race: the malformed probe could occupy
 a slot before the eighth upload and cause that upload to receive 503. The
 source-reviewed `2b8eca7` fixes the test barrier with per-request on-read ACKs
-and one ninth-request probe. It requires matching CI before native acceptance.
+and one ninth-request probe. [Matching run 42364691052](https://github.com/giangnguyen3260/agent_os/actions/runs/42364691052)
+passed on `2b8eca7`: both direct TLS/restart phases and both real Spring/browser
+and native upload tests passed, with zero failures/errors/skips. The native
+idle-release acceptance is now verified; Quality/Docker remain separate gates.
 No production behavior changes or model calls occur.
 
 ### Known-rejection UI acceptance candidate
@@ -78,27 +81,27 @@ browser contract executions (33 new, 12 retained) passed locally with Playwright
 and disposable Chromium 153. Lint, formatting, production build, syntax and diff
 checks passed. These route-mocked contracts are UI evidence; real backend/Vault
 behavior is covered separately above. Independent source review found no blocker.
-Matching CI remains a publication gate; no full Create Done claim is made here.
+Published as Draft [PR73](https://github.com/giangnguyen3260/agent_os/pull/73).
+The same UI source is present in head `849831d`; its matching [Vault run
+42364778916](https://github.com/giangnguyen3260/agent_os/actions/runs/42364778916)
+passed both direct phases and both managed HTTP/native/browser cases with no
+failures/errors/skips. Quality `42364778889` and Docker `42364778979` remain in
+progress at this checkpoint. No full Create Done claim is made before those
+regression results are reviewed.
 
 ## Current next three actions
 
-1. Finish native idle-upload timeout and eight-slot release acceptance on the
-   managed real-Vault fixture, then review and publish matching CI. PR71 has all
-   six matching implementation workflows green. Real-browser malformed-response
-   recovery is verified on `e3b252e`: one
-   Create, explicit secret-free lookup, durable correlated receipt/reference and
-   HMAC-verified Vault readback. Keep this bounded acceptance separate from the
-   remaining Create gates and broader AgentOS completion.
-2. Complete browser known-rejection coverage for 429/401/403 at three viewports,
-   including bounded Retry-After messaging, cleared credential input, no UNKNOWN
-   recovery or automatic retry, and fresh-secret entry on an explicit resubmit.
-   Then consolidate bounded Create QC evidence; no unspecified backend fault
-   matrix is added after the existing direct/native/browser gates.
-   Preserve unresolved preparation pins, review reconciliation and restart/fault
-   evidence, and record actual deployment inputs before release readiness.
+1. Review matching PR72/PR73 regression results and fix any failures. Native
+   idle-upload/all-slot recovery and real browser receipt recovery passed on
+   `2b8eca7` and `849831d`; all 45 provider UI contracts passed locally. Keep exact run/source
+   identities and distinguish the later documentation-only checkpoint.
+2. Consolidate independent bounded Create QC over historical authenticated HTTP,
+   direct real coordinator, managed browser, upload and known-rejection evidence.
+   Close this milestone only after its remaining regression gates pass. Keep
+   unresolved preparations pinned and record deployment inputs separately.
 3. Continue remaining provider lifecycle work and then runtime authority,
    ledger/budget enforcement, planning, dispatch, execution and review according
-   to the ordered backlog. Keep overall AgentOS completion open until the real
+   to the ordered backlog. Overall AgentOS completion remains open until the real
    Mission-to-reviewed-output/usage loop meets its acceptance criteria.
 
 ## PM mandate and continuity
