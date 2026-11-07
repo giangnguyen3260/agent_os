@@ -21,6 +21,7 @@ import {
   normalizedName,
   providerMode,
   receiptFound,
+  retryAfterSeconds,
   validName,
   validWorkspace,
   verifyCreated,
@@ -326,7 +327,12 @@ export class ProviderCreateComponent {
         'Yêu cầu không hợp lệ. Vui lòng kiểm tra thông tin rồi thử lại.',
       );
     } else if (failure.status === 429 && code === 'RATE_LIMITED') {
-      this.error.set('Bạn đã gửi quá nhiều yêu cầu. Vui lòng thử lại sau.');
+      const seconds = retryAfterSeconds(failure.headers.get('Retry-After'));
+      this.error.set(
+        seconds === null
+          ? 'Bạn đã gửi quá nhiều yêu cầu. Vui lòng thử lại sau.'
+          : `Bạn đã gửi quá nhiều yêu cầu. Vui lòng thử lại sau ${seconds} giây.`,
+      );
     } else if (
       failure.status === 409 &&
       (code === 'PROVIDER_DISABLED' || code === 'CONNECTION_LIMIT')

@@ -23,7 +23,7 @@ The stacked PRs remain unmerged and deployment acceptance remains open.
 | PR68 | V028 durable Create actor/key correlation and exact retained-reference observation | Published `7fa0afa`. Competing or uncertain preparations remain pinned unless positive evidence matches. Cleanup eligibility remains outside this evidence. |
 | PR69 | Authorized own Create receipt GET and secret-free recovery | Published `1771a5a`. Current actor/org scoping, explicit null and safe unavailable responses are implemented. |
 | PR70 | Responsive Create form and explicit receipt recovery | Published `73ffcb8`. Browser contracts exercise normal and UNKNOWN flows. Full real-browser integration follows in PR71. |
-| PR71 | Managed TLS Vault/key configuration, dedicated PostgreSQL writer datasource, restricted list reader, Tomcat upload timeout and real browser harness | Implementation head `e3b252e`: [live workflow 42342036360](https://github.com/giangnguyen3260/agent_os/actions/runs/42342036360) passed, including both direct TLS/restart phases and the real browser/HTTP acceptance (one test, no failures or skips). SQL foundation, guarded publication and options policy also passed. Matching Quality [42342036401](https://github.com/giangnguyen3260/agent_os/actions/runs/42342036401) and Docker [42342036362](https://github.com/giangnguyen3260/agent_os/actions/runs/42342036362) also passed: all six workflows succeeded on this implementation head. The later documentation-only head `9819f56` passed five workflows, including Quality `42342324045` and Vault `42342324047`; Docker `42342324095` was still in progress when checked. Initial head `6cc15af` passed Quality `42341519405` but failed browser acceptance. The corrected proxy sends malformed JSON only after backend completion; it does not establish TCP reset acceptance. |
+| PR71 | Managed TLS Vault/key configuration, dedicated PostgreSQL writer datasource, restricted list reader, Tomcat upload timeout and real browser harness | Implementation head `e3b252e`: [live workflow 42342036360](https://github.com/giangnguyen3260/agent_os/actions/runs/42342036360) passed, including both direct TLS/restart phases and the real browser/HTTP acceptance (one test, no failures or skips). SQL foundation, guarded publication and options policy also passed. Matching Quality [42342036401](https://github.com/giangnguyen3260/agent_os/actions/runs/42342036401) and Docker [42342036362](https://github.com/giangnguyen3260/agent_os/actions/runs/42342036362) also passed: all six workflows succeeded on this implementation head. The later documentation-only head `9819f56` also passed all six workflows, including Quality `42342324045`, Vault `42342324047` and Docker `42342324095`. Initial head `6cc15af` passed Quality `42341519405` but failed browser acceptance. The corrected proxy sends malformed JSON only after backend completion; it does not establish TCP reset acceptance. |
 
 The Create receipt snapshot contract gap now has an implemented bounded
 configuration projection. Managed assembly uses distinct reader/writer database
@@ -40,17 +40,39 @@ credential values against the disposable secret manager.
 adds real socket coverage against the managed Spring/Tomcat fixture. An initial
 malformed request establishes authenticated parser access (400). Eight partial
 bodies then occupy admission; the same malformed probe must return 503. Each
-stalled socket must finish by server 400/EOF/reset within a shared 30-second
-budget; a client read timeout fails the test. A second eight-socket cycle must
+stalled socket must finish by server 400/403/408 or EOF/reset within a shared
+30-second budget, with at least eight seconds elapsed from opening; a client read
+timeout fails the test. A second eight-socket cycle must
 reach saturation and then return eight parser 400 responses when completed,
 proving all slots can be used again. Six scoped tables, including write admission,
 must remain empty before one real Create returns 201 and its retained credential
 passes Vault readback. This bounds idle-stall release, not total slow-trickle time.
 
-Implementation and independent source review are complete. Java formatting,
-imports and diff checks passed locally. Native runtime acceptance requires the
-matching CI run; authored assertions do not establish a pass. No production
-behavior changes or provider model calls are introduced by this test slice.
+Published as Draft [PR72](https://github.com/giangnguyen3260/agent_os/pull/72).
+The first run failed to observe saturation. Diagnostic head `124048c` proved the
+completed raw 400 baseline and 503 saturation, then observed 403 after the idle
+read timeout. Pinned Tomcat 10.1.31 `InputBuffer.handleReadException` marks
+`sendError(408)` even when application code catches the read failure; Boot 3.3.5
+forwards the resulting error to `/error`, which existing security can deny with
+403. This is a connector-abort outcome, not a guaranteed command 400 contract.
+Only the first cycle accepts it; all eight second-cycle responses remain exactly
+400. Source-reviewed correction `3d977a5` requires its matching CI outcome before
+claiming native acceptance. No production behavior changes or model calls occur.
+
+### Known-rejection UI acceptance candidate
+
+The isolated `feature/provider-create-known-rejections` change renders only
+canonical 1..60 delta-seconds from a known 429 response. Missing, malformed,
+noncanonical, excessive, date or arbitrary header values use the fixed generic
+message. This is advisory messaging; it adds no automatic timer, retry or lookup.
+Eleven synthetic browser cases exercise 429 and 401/403 on three viewports,
+including erasure during a held POST, explicit fresh-secret/new-key resubmission,
+denial unmounting and absence of secrets/keys from browser storage. All 45 provider
+browser contract executions (33 new, 12 retained) passed locally with Playwright
+and disposable Chromium 153. Lint, formatting, production build, syntax and diff
+checks passed. These route-mocked contracts are UI evidence; real backend/Vault
+behavior is covered separately above. Independent source review found no blocker.
+Matching CI remains a publication gate; no full Create Done claim is made here.
 
 ## Current next three actions
 
