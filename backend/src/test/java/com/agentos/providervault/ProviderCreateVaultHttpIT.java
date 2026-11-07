@@ -339,6 +339,7 @@ class ProviderCreateVaultHttpIT {
     // A 503 malformed-body probe is the observation barrier: with fewer than eight held
     // slots the exact same authenticated request reaches the parser and returns 400.
     var sockets = new ArrayList<Socket>();
+    long stalledAt = System.nanoTime();
     try {
       for (int index = 0; index < 8; index++) {
         UUID key = UUID.randomUUID();
@@ -351,13 +352,18 @@ class ProviderCreateVaultHttpIT {
         long remaining = TimeUnit.NANOSECONDS.toMillis(deadline - System.nanoTime());
         assertThat(remaining).as("idle uploads complete within bounded budget").isPositive();
         socket.setSoTimeout((int) remaining);
-        // Tomcat may close an aborted request instead of delivering the filter's safe 400.
+        // Tomcat 10.1.31 InputBuffer.handleReadException marks sendError(408), even
+        // when the parser catches it. Boot's /error dispatch can be denied with 403.
+        // This cycle observes connector abort, not a public command error contract.
         // SocketTimeoutException is deliberately not accepted as server-side completion.
         try {
-          assertThat(readStatus(socket)).isEqualTo(400);
+          assertThat(readStatus(socket)).isIn(400, 403, 408);
         } catch (EOFException | SocketException closed) {
           // A server-initiated EOF is a completed aborted upload, not a client timeout.
         }
+        assertThat(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - stalledAt))
+            .as("a stalled upload is not an immediate authentication or header rejection")
+            .isGreaterThanOrEqualTo(8000L);
       }
     } finally {
       closeUploads(sockets);
