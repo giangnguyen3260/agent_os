@@ -9,6 +9,8 @@ on:
       - backend/src/main/java/com/agentos/providercompletion/**
       - backend/src/main/java/com/agentos/providerconnections/**
       - backend/src/main/java/com/agentos/providercreation/**
+      - backend/src/main/java/com/agentos/provideradmission/**
+      - backend/src/main/java/com/agentos/providerrename/**
       - backend/src/main/java/com/agentos/providerreceipts/**
       - backend/src/main/java/com/agentos/providertransport/ProviderCreateBody.java
       - backend/pom.xml

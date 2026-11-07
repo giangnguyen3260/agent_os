@@ -126,7 +126,7 @@ public class ProviderReceiptService {
       Metadata prepared,
       UUID createId,
       CredentialBoundary.Metadata credential) {
-    return executeInternal(actor, org, key, command, prepared, createId, credential, false);
+    return executeInternal(actor, org, key, command, prepared, createId, credential, null);
   }
 
   public Result executeCreateGoverned(
@@ -137,7 +137,13 @@ public class ProviderReceiptService {
       Metadata prepared,
       UUID createId,
       CredentialBoundary.Metadata credential) {
-    return executeInternal(actor, org, key, command, prepared, createId, credential, true);
+    return executeInternal(
+        actor, org, key, command, prepared, createId, credential, Operation.CREATE);
+  }
+
+  public Result executeRenameGoverned(
+      HumanIdentity actor, UUID org, UUID key, Rename command, Metadata prepared) {
+    return executeInternal(actor, org, key, command, prepared, null, null, Operation.RENAME);
   }
 
   private Result executeInternal(
@@ -148,10 +154,10 @@ public class ProviderReceiptService {
       Metadata prepared,
       UUID createId,
       CredentialBoundary.Metadata credential,
-      boolean governed) {
+      Operation governance) {
     return safe(
         () -> {
-          var policy = authority(actor, org, true, governed);
+          var policy = authority(actor, org, true, governance != null);
           if (command == null || command instanceof CredentialCommand)
             throw fail(400, "INVALID_COMMAND");
           validKey(key);
@@ -164,7 +170,9 @@ public class ProviderReceiptService {
               throw fail(409, "IDEMPOTENCY_CONFLICT");
             return stored.result();
           }
-          if (governed) {
+          if (governance == Operation.RENAME && policy.size() != 1)
+            throw fail(503, "COMMAND_UNAVAILABLE");
+          if (governance == Operation.CREATE) {
             if (!(command instanceof Create create)) throw fail(400, "INVALID_COMMAND");
             if (policy.size() != 1) throw fail(503, "COMMAND_UNAVAILABLE");
             String enabled =

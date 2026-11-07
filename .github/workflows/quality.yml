@@ -89,7 +89,7 @@ jobs:
         # Default tests plus the explicit real-PostgreSQL suite, no silent skips.
         # Bound retained contexts so evicted Hikari pools close before native suites.
         # Per-context pool capacity and all test selections remain unchanged.
-        run: mvn --batch-mode --no-transfer-progress -f backend/pom.xml -Dspring.test.context.cache.maxSize=4 '-Dtest=*Test,TeamSettingsPostgresIT,TaskDraftEditPostgresIT,MissionIntakePostgresIT,MissionIntakeHistoryPostgresIT,TaskOwnerPostgresIT,TaskOwnerHistoryPostgresIT,TaskDependenciesPostgresIT,TaskDependencyHistoryPostgresIT,ProviderConnectionPostgresIT,ProviderReceiptPostgresIT,ProviderCompletionPostgresIT,ProviderPolicyPostgresIT,ProviderOptionsPostgresIT,ProviderEvidencePostgresIT,ProviderPublicationPostgresIT' verify
+        run: mvn --batch-mode --no-transfer-progress -f backend/pom.xml -Dspring.test.context.cache.maxSize=4 '-Dtest=*Test,TeamSettingsPostgresIT,TaskDraftEditPostgresIT,MissionIntakePostgresIT,MissionIntakeHistoryPostgresIT,TaskOwnerPostgresIT,TaskOwnerHistoryPostgresIT,TaskDependenciesPostgresIT,TaskDependencyHistoryPostgresIT,ProviderConnectionPostgresIT,ProviderReceiptPostgresIT,ProviderCompletionPostgresIT,ProviderRenamePostgresIT,ProviderPolicyPostgresIT,ProviderOptionsPostgresIT,ProviderEvidencePostgresIT,ProviderPublicationPostgresIT' verify
       - name: Frontend dependencies
         working-directory: frontend
         run: npm ci
