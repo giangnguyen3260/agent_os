@@ -2,9 +2,10 @@
 
 Checkpoint: 2026-11-07. Independent source review plus coordinator-verified execution evidence.
 
-**Verdict:** bounded implementation and targeted tests are complete. Overall Create QC acceptance
-awaits matching regression CI on PR73 head `849831d`. Deployment, the full provider lifecycle and
-runtime acceptance remain open. This document does not mark the project complete.
+**Verdict:** the baseline bounded Create implementation and regression passed on PR73
+`e7760e1`. A concrete strict-UTF-8 defect discovered during Rename review reopens only
+that wire criterion until the corrected head passes matching CI. Deployment, the
+remaining provider lifecycle and runtime acceptance remain open.
 
 ## Evidence and provenance
 
@@ -14,6 +15,23 @@ runtime acceptance remain open. This document does not mark the project complete
 | Focused UI browser contracts | Local UI `f085c04` / remote `217f541`: 45 cases passed using disposable Chromium 153, comprising 33 new and 12 retained cases; same UI included in `849831d` | Coordinator execution; synthetic API fixtures, distinct from the real backend browser test |
 | Managed integration baseline | PR71 documentation head `9819f56`: all six workflows green; [Vault 42342324047](https://github.com/giangnguyen3260/agent_os/actions/runs/42342324047), [Quality 42342324045](https://github.com/giangnguyen3260/agent_os/actions/runs/42342324045), [Docker 42342324095](https://github.com/giangnguyen3260/agent_os/actions/runs/42342324095) | Earlier accepted baseline, not a substitute for latest-head regression |
 | Latest matching regression | `849831d`: [Vault 42364778916 / job 128380425576](https://github.com/giangnguyen3260/agent_os/actions/runs/42364778916/job/128380425576) passed both direct TLS phases and 2 HTTP tests, zero failures/errors/skips; [Quality 42364778889](https://github.com/giangnguyen3260/agent_os/actions/runs/42364778889) and [Docker 42364778979](https://github.com/giangnguyen3260/agent_os/actions/runs/42364778979) pending | Coordinator read matching Vault log; remaining regression pending |
+
+## Completed baseline and corrective gate
+
+PR72 `2b8eca7` completed all six workflows, including Quality 42364691013 and Docker
+42364690941. PR73 `e7760e1` completed all three: [Quality 42365148382](https://github.com/giangnguyen3260/agent_os/actions/runs/42365148382),
+[Docker 42365148345](https://github.com/giangnguyen3260/agent_os/actions/runs/42365148345)
+and [Vault 42365148132](https://github.com/giangnguyen3260/agent_os/actions/runs/42365148132).
+Earlier pending rows below are historical checkpoints, not current failures.
+
+The UTF-8 decoder had discarded its checked characters before Jackson parsed the
+original bytes with charset detection enabled. A pinned Jackson 2.17.2 probe accepted
+four alternate ASCII UTF-16/32 encodings before the fix and zero afterward. The
+isolated factory now disables detection and preserves one leading UTF-8 BOM.
+Regressions reject both endian forms with/without BOM and check erasure. The combined
+Create/Rename body suites passed 16 standalone Java17 JUnit tests locally; this does
+not replace matching Java21/native CI. That exact corrective gate remains HOLD until
+its new source is tested. Existing historical DB/Vault/security evidence is retained.
 
 ## Source-to-test mapping
 

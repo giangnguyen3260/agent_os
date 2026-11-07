@@ -65,7 +65,8 @@ source-reviewed `2b8eca7` fixes the test barrier with per-request on-read ACKs
 and one ninth-request probe. [Matching run 42364691052](https://github.com/giangnguyen3260/agent_os/actions/runs/42364691052)
 passed on `2b8eca7`: both direct TLS/restart phases and both real Spring/browser
 and native upload tests passed, with zero failures/errors/skips. The native
-idle-release acceptance is now verified; Quality/Docker remain separate gates.
+idle-release acceptance is verified; matching Quality `42364691013` and Docker
+`42364690941` also passed, completing all six workflows on `2b8eca7`.
 No production behavior changes or model calls occur.
 
 ### Known-rejection UI acceptance candidate
@@ -85,24 +86,49 @@ Published as Draft [PR73](https://github.com/giangnguyen3260/agent_os/pull/73).
 The same UI source is present in head `849831d`; its matching [Vault run
 42364778916](https://github.com/giangnguyen3260/agent_os/actions/runs/42364778916)
 passed both direct phases and both managed HTTP/native/browser cases with no
-failures/errors/skips. Quality `42364778889` and Docker `42364778979` remain in
-progress at this checkpoint. No full Create Done claim is made before those
-regression results are reviewed.
+failures/errors/skips. The later documentation-only PR73 head `e7760e1` passed
+all three matching workflows: [Quality 42365148382](https://github.com/giangnguyen3260/agent_os/actions/runs/42365148382),
+[Docker 42365148345](https://github.com/giangnguyen3260/agent_os/actions/runs/42365148345)
+and [Vault 42365148132](https://github.com/giangnguyen3260/agent_os/actions/runs/42365148132).
+That closes the baseline Create implementation/regression milestone, with merge
+and deployment still explicitly open.
+
+### Rename transport and strict UTF-8 correction
+
+The next slice freezes [Rename transport](PROVIDER_RENAME_TRANSPORT_CONTRACT.md)
+and supplies only its bounded decoder, historical configuration-only receipt and
+response helpers. Public Rename ingress, coordinator, shared admission, expanded
+own-receipt routing and UI are subsequent concrete dependencies; they are not
+implemented by these pure helpers.
+
+During review, Create's preliminary UTF-8 validation was found insufficient:
+Jackson's byte parser independently auto-detected valid ASCII UTF-16/32 payloads.
+A compiled probe using Jackson 2.17.2 accepted all four BOM-less alternate
+encodings before the fix and zero after it. The isolated Create factory now
+turns off charset detection while explicitly preserving one leading UTF-8 BOM.
+New regressions reject UTF-16/32 LE/BE with or without BOM, clear owned buffers and
+retain UTF-8/BOM behavior. Standalone Java17 JUnit executed the Create and Rename
+body suites: 16 passed, none skipped or failed. This is a targeted local result,
+not matching Java21/native acceptance.
+
+Only the strict-wire criterion is reopened pending the corrected-head CI.
+Existing auth, receipt, PostgreSQL, TLS Vault, upload and browser passes retain
+their exact historical evidence. Rename response cases and focused Java21/native
+regression must also complete before accepting this new transport slice.
 
 ## Current next three actions
 
-1. Review matching PR72/PR73 regression results and fix any failures. Native
-   idle-upload/all-slot recovery and real browser receipt recovery passed on
-   `2b8eca7` and `849831d`; all 45 provider UI contracts passed locally. Keep exact run/source
-   identities and distinguish the later documentation-only checkpoint.
-2. Consolidate independent bounded Create QC over historical authenticated HTTP,
-   direct real coordinator, managed browser, upload and known-rejection evidence.
-   Close this milestone only after its remaining regression gates pass. Keep
-   unresolved preparations pinned and record deployment inputs separately.
-3. Continue remaining provider lifecycle work and then runtime authority,
-   ledger/budget enforcement, planning, dispatch, execution and review according
-   to the ordered backlog. Overall AgentOS completion remains open until the real
-   Mission-to-reviewed-output/usage loop meets its acceptance criteria.
+1. Review and publish the strict UTF-8 correction plus isolated Rename transport;
+   require matching Java21 focused completion, Quality and real Vault/native CI.
+   Close only the reopened strict-wire gate after those results pass.
+2. Implement Rename command coordination using command-HMAC-only dependencies,
+   receipt-first replay and the shared actor/org write namespace without Create's
+   provider-enabled/capacity gates. Add isolated current-ADMIN/session-CSRF ingress
+   and own-receipt recovery that safely supports both Create and Rename.
+3. Connect a reviewed Rename UI with current revisions, NO_CHANGE/stale/UNKNOWN
+   recovery and native persisted acceptance. Then continue the provider lifecycle
+   and runtime backlog. Overall AgentOS completion, merge and deployment remain
+   open until their own documented acceptance criteria are met.
 
 ## PM mandate and continuity
 

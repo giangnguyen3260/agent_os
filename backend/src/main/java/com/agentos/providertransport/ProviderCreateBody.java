@@ -19,7 +19,10 @@ import java.util.HashSet;
 @JsonIgnoreType
 public final class ProviderCreateBody implements AutoCloseable {
   private static final JsonFactory JSON =
-      JsonFactory.builder().enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION).build();
+      JsonFactory.builder()
+          .disable(JsonFactory.Feature.CHARSET_DETECTION)
+          .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
+          .build();
   private final Create command;
   private final byte[] key;
   private boolean closed;
@@ -66,7 +69,15 @@ public final class ProviderCreateBody implements AutoCloseable {
               .onUnmappableCharacter(CodingErrorAction.REPORT)
               .decode(ByteBuffer.wrap(body));
       if (decoded.hasArray()) Arrays.fill(decoded.array(), '\0');
-      try (JsonParser parser = JSON.createParser(body)) {
+      // Preserve the existing single UTF-8 BOM allowance without detecting other encodings.
+      int offset =
+          body.length >= 3
+                  && body[0] == (byte) 0xef
+                  && body[1] == (byte) 0xbb
+                  && body[2] == (byte) 0xbf
+              ? 3
+              : 0;
+      try (JsonParser parser = JSON.createParser(body, offset, body.length - offset)) {
         if (parser.nextToken() != JsonToken.START_OBJECT) throw invalid();
         var fields = new HashSet<String>();
         String provider = null;
