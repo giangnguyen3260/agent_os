@@ -1,9 +1,8 @@
 # Rename coordinator checkpoint
 
 7 November 2026. PR75 implementation
-`0596d7868002492a16f1b73237b287b8b5ec41b8` on
-`feature/provider-rename-coordinator`: targeted internal orchestration, shared
-quota and command-HMAC-only acceptance PASS; broad regression remains OPEN with the test-isolation follow-up below. Baseline PR74 head
+`2ce66c845d01f8a38d9f66748012715c7a4f79fc`: internal orchestration/shared quota/
+command-HMAC-only acceptance and Quality PASS; Docker pending. Baseline PR74 head
 `0cf54164f2719e41eb2e4b181d21ccdc7b4a346a` passed all seven workflows, as recorded
 with exact run links in [the delivery tracker](PROJECT_DELIVERY_TRACKER.md).
 Baseline green does not establish this candidate's acceptance.
@@ -142,3 +141,26 @@ Global policy and the old receipt fault test are unchanged. No production behavi
 changed. Formatting, imports, diff checks and Java17 subset compilation pass;
 corrected-head focused/native and full Quality execution remain required. Earlier
 targeted and managed passes retain their exact implementation attribution.
+
+## Latest executed checkpoint — scoped fixture cleanup
+
+Tested implementation `2ce66c845d01f8a38d9f66748012715c7a4f79fc` supersedes
+earlier pending/failed PR75 evidence. The next documentation-only commit preserves
+this tested implementation identity; earlier entries remain historical evidence.
+
+| Gate | Matching executed evidence | Result |
+| --- | --- | --- |
+| Quality | [42388783450/job128451743906](https://github.com/giangnguyen3260/agent_os/actions/runs/42388783450/job/128451743906) | 1,610 tests, zero failures/errors, one intentional compatibility skip. Previously affected ProviderReceiptPostgresIT: 44 passed, zero skips. |
+| Focused Java21 | [42388783389/job128451743520](https://github.com/giangnguyen3260/agent_os/actions/runs/42388783389/job/128451743520) | 264 tests, zero failures/errors, one intentional compatibility skip. |
+| Real Vault/PostgreSQL | [42388783391/job128451743588](https://github.com/giangnguyen3260/agent_os/actions/runs/42388783391/job/128451743588) | Both direct phases plus one managed command-only Rename and two retained Create tests passed, zero failures/errors/skips. |
+| Command receipts, options, SQL foundation, guarded publication | Matching-head conclusions verified by coordinating agent | SUCCESS. |
+| Docker | [42388783462](https://github.com/giangnguyen3260/agent_os/actions/runs/42388783462) | In progress at this checkpoint. |
+
+The fixture-isolation defect is closed: scoped cleanup removes receipts, events,
+connections, credential versions, admission and membership before the fixture's
+account and organization, respecting foreign keys. Production behavior, original
+global fault assertion and all rollback/quota comparisons remain unchanged.
+Internal Rename orchestration/shared quota/HMAC-only acceptance and Quality are
+PASS. Only Docker remains pending for this matching broad regression checkpoint.
+Public Rename HTTP, expanded own lookup and UI remain subsequent. No merge or
+deployment has occurred.

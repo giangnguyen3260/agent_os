@@ -9,9 +9,9 @@ Initial reviewed source: `c4622de9652f8c0a05a63d8c277147642d1d54df`, branch
 This checkpoint governs current delivery status. The dated historical sections
 below preserve earlier evidence and decisions. The latest verified baseline is PR74 head
 `0cf54164f2719e41eb2e4b181d21ccdc7b4a346a`, with all seven matching workflows
-successful. PR75 implementation `0596d7868002492a16f1b73237b287b8b5ec41b8` on
-`feature/provider-rename-coordinator` now passes targeted internal orchestration,
-shared quota and command-HMAC-only acceptance; broad regression is OPEN after a test-isolation failure described below. User authorization for publishing the
+successful. PR75 implementation `2ce66c845d01f8a38d9f66748012715c7a4f79fc`
+passes internal orchestration/shared quota/HMAC-only acceptance and Quality;
+Docker remains pending. User authorization for publishing the
 reviewable project changes is resolved. The earlier push rejection is historical.
 The stacked PRs remain unmerged and deployment acceptance remains open.
 
@@ -169,12 +169,28 @@ had a test-isolation failure / remains pending, respectively. Corrected-head Qua
 subsequent. See [the bounded checkpoint](PROVIDER_RENAME_COORDINATOR_CHECKPOINT.md).
 Later documentation-only commits must preserve this implementation/run attribution.
 
+## Latest executed checkpoint — scoped fixture cleanup
+
+Implementation `2ce66c845d01f8a38d9f66748012715c7a4f79fc` passed
+[Quality 42388783450](https://github.com/giangnguyen3260/agent_os/actions/runs/42388783450)
+with 1,610 tests, zero failures/errors and one intentional compatibility skip.
+Previously affected receipt PostgreSQL cases all passed (44, no skips).
+[Focused run 42388783389](https://github.com/giangnguyen3260/agent_os/actions/runs/42388783389)
+passed 264 cases with the same single intentional compatibility skip.
+[Vault run 42388783391](https://github.com/giangnguyen3260/agent_os/actions/runs/42388783391)
+passed both direct phases and all three managed cases, without skips or errors.
+The fixture-isolation defect is closed. Internal Rename orchestration, shared
+quota, command-HMAC-only wiring and Quality are PASS; [Docker 42388783462](https://github.com/giangnguyen3260/agent_os/actions/runs/42388783462)
+remains in progress. [The bounded checkpoint](PROVIDER_RENAME_COORDINATOR_CHECKPOINT.md#latest-executed-checkpoint--scoped-fixture-cleanup)
+retains exact job/run details. Later documentation-only commits preserve this
+implementation attribution. Public Rename HTTP, lookup expansion and UI remain
+future work; no merge or deployment has occurred.
+
 ## Current next three actions
 
-1. Verify scoped Rename fixture cleanup in matching focused/native and Quality
-   CI. The earlier Quality run found seed receipts leaking into an existing global
-   DB-fault test. Keep that test and production unchanged; close the broad gate
-   only after corrected-head Quality passes. Track Docker separately.
+1. Review matching Docker run `42388783462` on implementation
+   `2ce66c845d01f8a38d9f66748012715c7a4f79fc`; all other recorded gates pass.
+   Preserve tested implementation attribution in the next documentation-only commit.
 2. Add isolated current-ADMIN/session-CSRF Rename ingress and explicit Create-or-
    Rename own-receipt recovery, using the frozen parser and historical projector.
 3. Connect reviewed Rename UI confirmation, stale/NO_CHANGE and UNKNOWN recovery,
