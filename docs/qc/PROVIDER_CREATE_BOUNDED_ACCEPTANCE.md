@@ -33,6 +33,13 @@ Create/Rename body suites passed 16 standalone Java17 JUnit tests locally; this 
 not replace matching Java21/native CI. That exact corrective gate remains HOLD until
 its new source is tested. Existing historical DB/Vault/security evidence is retained.
 
+The first focused Java21 run on the correction passed both body suites and actual
+Create HTTP cases but exposed an exact-error-envelope issue in the new Rename
+response tests: `NON_EMPTY` omitted the empty `details` map. A property-level
+`JsonInclude(ALWAYS)` on the common error DTO preserves the declared `{}` without
+changing global mapper settings. Both response suites then passed 14 standalone
+Java17 tests locally; this result is separate from the still-required new-head CI.
+
 ## Source-to-test mapping
 
 - `VaultCredentialSecretsVaultIT::realCreateAndReplay` invokes the real journaled

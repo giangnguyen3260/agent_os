@@ -1,5 +1,6 @@
 package com.agentos.common.api;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import java.util.Map;
 
 public record ApiErrorResponse(ApiError error, ApiMeta meta) {
@@ -8,5 +9,8 @@ public record ApiErrorResponse(ApiError error, ApiMeta meta) {
     return new ApiErrorResponse(new ApiError(code, message, Map.of()), ApiMeta.current());
   }
 
-  public record ApiError(String code, String message, Map<String, Object> details) {}
+  public record ApiError(
+      String code,
+      String message,
+      @JsonInclude(JsonInclude.Include.ALWAYS) Map<String, Object> details) {}
 }

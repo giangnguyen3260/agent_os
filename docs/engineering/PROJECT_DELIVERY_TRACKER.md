@@ -111,6 +111,15 @@ retain UTF-8/BOM behavior. Standalone Java17 JUnit executed the Create and Renam
 body suites: 16 passed, none skipped or failed. This is a targeted local result,
 not matching Java21/native acceptance.
 
+The first Java21 focused run compiled the new slice and passed both parser suites
+and actual authenticated Create HTTP cases. It found three Rename response-test
+failures because mapper `NON_EMPTY` omitted the required empty `error.details`.
+The common error DTO now explicitly includes that property; global Jackson
+configuration and error mappings remain unchanged. Create/Rename response suites
+then passed 14 standalone Java17 tests locally, including all unsupported Rename
+operations. Together with the body suites this is 30 targeted local tests, with
+no skips or failures. Matching corrected-head CI is still required.
+
 Only the strict-wire criterion is reopened pending the corrected-head CI.
 Existing auth, receipt, PostgreSQL, TLS Vault, upload and browser passes retain
 their exact historical evidence. Rename response cases and focused Java21/native

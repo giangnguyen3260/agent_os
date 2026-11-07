@@ -191,7 +191,10 @@ class ProviderRenameResponsesTest {
     invalid.add(receipt(change(before, 8, 8L), change(after, 8, 8L)));
     invalid.add(receipt(change(before, 7, Long.MAX_VALUE), change(after, 7, Long.MIN_VALUE)));
     invalid.add(receipt(change(before, 10, time.minusNanos(1)), after));
-    invalid.add(new Receipt(org, id, Operation.CREATE, id, actor, time, before, after));
+    for (Operation operation : Operation.values()) {
+      if (operation != Operation.RENAME)
+        invalid.add(new Receipt(org, id, operation, id, actor, time, before, after));
+    }
     invalid.add(
         new Receipt(UUID.randomUUID(), id, Operation.RENAME, id, actor, time, before, after));
     invalid.add(new Receipt(org, new UUID(0, 0), Operation.RENAME, id, actor, time, before, after));

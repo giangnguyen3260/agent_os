@@ -44,3 +44,13 @@ source/CI evidence and must be recorded separately.
 
 Current delivery acceptance is R01–R11 only. Native and UI rows become acceptance
 criteria when their corresponding integration slices are implemented.
+
+## Execution checkpoint
+
+The Create/Rename body suites passed 16 standalone Java17 JUnit tests. The first
+focused Java21 run also passed both parser suites but found the missing empty
+`error.details` field under `NON_EMPTY` in three Rename response assertions.
+The common DTO now pins that property to include empty maps. Both Create/Rename
+response suites subsequently passed 14 standalone Java17 tests, including the
+all-operation rejection allowlist. No tests or error-shape assertions were relaxed.
+Corrected-head Java21 focused/native CI remains required before accepting R01–R11.
