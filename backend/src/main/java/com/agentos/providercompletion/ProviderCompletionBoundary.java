@@ -3,6 +3,8 @@ package com.agentos.providercompletion;
 import com.agentos.auth.HumanIdentity;
 import com.agentos.providercommands.CommandBoundary.Command;
 import com.agentos.providercommands.CommandBoundary.Metadata;
+import com.agentos.providercommands.CommandBoundary.Operation;
+import com.agentos.providercommands.CommandBoundary.Rename;
 import com.agentos.providercredentials.CredentialBoundary;
 import com.agentos.providerreceipts.ProviderReceiptFailure;
 import com.agentos.providerreceipts.ProviderReceiptService;
@@ -163,7 +165,7 @@ public final class ProviderCompletionBoundary {
       Metadata prepared,
       UUID createId,
       CredentialBoundary.Metadata credential) {
-    return executeWrite(actor, org, key, command, prepared, createId, credential, false);
+    return executeWrite(actor, org, key, command, prepared, createId, credential, null);
   }
 
   public WriteOutcome executeCreatePrepared(
@@ -174,7 +176,12 @@ public final class ProviderCompletionBoundary {
       Metadata prepared,
       UUID createId,
       CredentialBoundary.Metadata credential) {
-    return executeWrite(actor, org, key, command, prepared, createId, credential, true);
+    return executeWrite(actor, org, key, command, prepared, createId, credential, Operation.CREATE);
+  }
+
+  public WriteOutcome executeRenamePrepared(
+      HumanIdentity actor, UUID org, UUID key, Rename command, Metadata prepared) {
+    return executeWrite(actor, org, key, command, prepared, null, null, Operation.RENAME);
   }
 
   private WriteOutcome executeWrite(
@@ -185,7 +192,7 @@ public final class ProviderCompletionBoundary {
       Metadata prepared,
       UUID createId,
       CredentialBoundary.Metadata credential,
-      boolean governed) {
+      Operation governance) {
     Owned owned = begin(false);
     if (owned == null) return write(WriteState.UNAVAILABLE, Code.COMMAND_UNAVAILABLE);
     if (!owned.valid)
@@ -194,11 +201,15 @@ public final class ProviderCompletionBoundary {
           : write(WriteState.UNKNOWN, Code.COMMAND_OUTCOME_UNKNOWN);
     Result result;
     try {
-      result =
-          governed
-              ? receipts.executeCreateGoverned(
-                  actor, org, key, command, prepared, createId, credential)
-              : receipts.execute(actor, org, key, command, prepared, createId, credential);
+      if (governance == Operation.CREATE) {
+        result =
+            receipts.executeCreateGoverned(
+                actor, org, key, command, prepared, createId, credential);
+      } else if (governance == Operation.RENAME) {
+        result = receipts.executeRenameGoverned(actor, org, key, (Rename) command, prepared);
+      } else {
+        result = receipts.execute(actor, org, key, command, prepared, createId, credential);
+      }
     } catch (RuntimeException failure) {
       Code code = known(failure);
       return rollback(owned)

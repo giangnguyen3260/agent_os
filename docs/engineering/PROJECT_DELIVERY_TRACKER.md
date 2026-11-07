@@ -7,10 +7,10 @@ Initial reviewed source: `c4622de9652f8c0a05a63d8c277147642d1d54df`, branch
 ## Current delivery checkpoint — 7 November 2026
 
 This checkpoint governs current delivery status. The dated historical sections
-below preserve earlier evidence and decisions. The latest reviewed implementation
-is PR74 head `1c639dfbde44b6ab3275e27dd541e2f68c13bbab` on
-`feature/provider-rename-transport`; later documentation-only checkpoints preserve
-that tested implementation. User authorization for publishing the
+below preserve earlier evidence and decisions. The latest verified baseline is PR74 head
+`0cf54164f2719e41eb2e4b181d21ccdc7b4a346a`, with all seven matching workflows
+successful. The current uncommitted candidate is `feature/provider-rename-coordinator`;
+its authored tests have not yet established execution acceptance. User authorization for publishing the
 reviewable project changes is resolved. The earlier push rejection is historical.
 The stacked PRs remain unmerged and deployment acceptance remains open.
 
@@ -138,20 +138,37 @@ pending. [The QC checkpoint](../qc/PROVIDER_CREATE_BOUNDED_ACCEPTANCE.md#correct
 retains full run/job provenance and scope. Public Rename coordination, ingress,
 lookup routing and UI are still future work. No PR is merged or deployed.
 
+## Current Rename coordinator candidate — 7 November 2026
+
+PR74 baseline head `0cf54164f2719e41eb2e4b181d21ccdc7b4a346a` passed all seven
+workflows, verified by the coordinating agent: [Quality 42371166981](https://github.com/giangnguyen3260/agent_os/actions/runs/42371166981),
+[Docker 42371166833](https://github.com/giangnguyen3260/agent_os/actions/runs/42371166833),
+[Vault 42371166814](https://github.com/giangnguyen3260/agent_os/actions/runs/42371166814)
+and [focused Java21 42371166837](https://github.com/giangnguyen3260/agent_os/actions/runs/42371166837).
+This supersedes the earlier PR74 pending regression statements above. SQL
+foundation, options policy and guarded publication also passed. Earlier head/run
+counts remain historical evidence, not newly attributed test totals.
+
+The uncommitted coordinator candidate implements shared durable Create/Rename
+write admission, the compatible Create admission facade, governed Rename
+receipt/completion orchestration and independently enabled command-HMAC-only
+managed wiring with a private writer datasource. Test sources cover wrapper
+behavior, native contention/replay/rollback/UNKNOWN and managed command-only Vault
+integration; **execution and matching CI remain pending**. No candidate PASS,
+public Rename route, expanded own lookup or Rename UI completion is claimed.
+See [the bounded checkpoint](PROVIDER_RENAME_COORDINATOR_CHECKPOINT.md) for exact
+admission semantics, dependency boundaries and evidence requirements.
+
 ## Current next three actions
 
-1. Review matching Quality/Docker completion for PR74 implementation `1c639df`.
-   Targeted strict UTF-8 and isolated Rename R01–R11 acceptance now pass, and Vault
-   workflow succeeded. Record broad regression outcomes at their actual head/run
-   identity before closing the PR74 regression checkpoint.
-2. Implement Rename command coordination using command-HMAC-only dependencies,
-   receipt-first replay and the shared actor/org write namespace without Create's
-   provider-enabled/capacity gates. Add isolated current-ADMIN/session-CSRF ingress
-   and own-receipt recovery that safely supports both Create and Rename.
-3. Connect a reviewed Rename UI with current revisions, NO_CHANGE/stale/UNKNOWN
-   recovery and native persisted acceptance. Then continue the provider lifecycle
-   and runtime backlog. Overall AgentOS completion, merge and deployment remain
-   open until their own documented acceptance criteria are met.
+1. Review and execute the coordinator candidate's focused, native PostgreSQL and
+   managed command-only Vault suites; record exact candidate head/run results and
+   matching regression before accepting this bounded internal slice.
+2. Add isolated current-ADMIN/session-CSRF Rename ingress and explicit Create-or-
+   Rename own-receipt recovery, using the frozen parser and historical projector.
+3. Connect reviewed Rename UI confirmation, stale/NO_CHANGE and UNKNOWN recovery,
+   then native persisted browser acceptance. Continue remaining provider lifecycle
+   and runtime work from the backlog. Merge and deployment remain open.
 
 ## PM mandate and continuity
 

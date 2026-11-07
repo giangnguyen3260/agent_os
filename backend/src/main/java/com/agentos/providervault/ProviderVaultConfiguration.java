@@ -151,7 +151,7 @@ public class ProviderVaultConfiguration {
     return Integer.parseInt(value);
   }
 
-  private static SSLSocketFactory tls(Path ca) throws Exception {
+  static SSLSocketFactory tls(Path ca) throws Exception {
     byte[] encoded;
     try (var input = Files.newInputStream(ca)) {
       encoded = input.readNBytes(1_048_577);

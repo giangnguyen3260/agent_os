@@ -111,3 +111,51 @@ upload read, rather than imposing a total deadline on a continuously progressing
 upload. Existing body size and concurrency limits still apply. Unknown Vault
 preparations remain pinned for explicit operator reconciliation; the managed
 assembly does not resolve or delete them automatically.
+
+## Independent internal Rename assembly
+
+`agentos.provider-rename.enabled=true` constructs the internal Rename coordinator
+only. It does not register a public Rename route or change own-receipt HTTP routing.
+Create may remain disabled with all `agentos.provider-vault.*` settings absent.
+Rename requires these explicit `agentos.provider-rename.*` settings:
+
+| Setting | Required value |
+| --- | --- |
+| `url`, `mount` | Trusted HTTPS command-key Vault origin and explicit KV v2 mount |
+| `ca-file` | Absolute readable CA certificate bundle for that origin |
+| `command-token-file` | Absolute mounted command-key reader token file |
+| `command-key-version` | Positive retained command HMAC key version |
+| `writer-jdbc-url` | PostgreSQL URL for the same application database |
+| `writer-username` | Explicit dedicated Rename writer principal |
+| `writer-password-file` | Absolute mounted file containing its password |
+
+The command token can use `docker/vault/provider-command-reader.hcl`. It needs only
+read access to the command-receipts key, not provider credential values or
+credential-integrity keys. Historical command key versions must remain available
+for replay. No credential application token, credential key version, secret store,
+health observer or provider client is constructed for Rename. If the credential
+store fails while the command HMAC service remains available, that failure does
+not introduce a Rename dependency. Failure of the command service still denies
+completion safely. Mounted token reads are fresh and bounded; local startup
+failures use the fixed `PROVIDER_RENAME_CONFIGURATION_UNAVAILABLE` message.
+
+The writer datasource is private to its transactional services and does not
+replace the normal application reader. Provision its explicit table privileges
+before enabling the internal feature. It reads retained credential metadata for
+existing persistence validation, but does not insert, update or delete credential
+versions. Metadata mutation, immutable event and receipt use one owned completion
+transaction. External command-key access occurs after authority/admission commit
+and before the completion transaction, never under database locks. The governed
+transaction rechecks current authority and the receipt before business mutation.
+
+Create and Rename share the durable actor/organization 30-request rolling
+60-second admission row. Historical receipt replay bypasses fresh admission;
+current authority and historical command-HMAC comparison are still required.
+Fresh Rename commits admission before HMAC and current target/revision/no-change
+checks, so an admitted stale/no-change/zero-revision or dependency-failed attempt
+retains its slot. A quota rejection supplies the existing bounded Retry-After.
+Create's provider-enabled/capacity preflight is preserved and is not applied to
+Rename. Fresh Rename still requires the deployment-policy singleton to exist.
+Provider-disabled and disabled-connection metadata can be renamed. Same name at
+maximum revision yields NO_CHANGE; a different name requiring increment yields
+REVISION_EXHAUSTED. These configuration operations grant no runtime eligibility.

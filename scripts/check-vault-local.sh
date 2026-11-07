@@ -91,6 +91,16 @@ request 403 POST agentos/data/hmac-keys/credential-integrity -H "@$scratch/hmac.
 request 403 GET agentos/data/provider-credentials/fixture -H "@$scratch/hmac.headers"
 export AGENTOS_TEST_HMAC_TOKEN_FILE="$scratch/hmac.token"
 export AGENTOS_TEST_HMAC_FIXTURE_DIR="$scratch"
+# A Rename-only identity can read command keys, never credential keys or values.
+jq -Rs '{policy:.}' docker/vault/provider-command-reader.hcl > "$scratch/command-policy.json"
+request 204 PUT sys/policies/acl/agentos-command-reader -H "@$scratch/root.headers" --data-binary "@$scratch/command-policy.json"
+request 200 POST auth/token/create -H "@$scratch/root.headers" --data '{"policies":["agentos-command-reader"],"no_default_policy":true,"ttl":"10m"}'
+jq -er '.auth.client_token' "$scratch/response" > "$scratch/rename-command.token"
+jq -er '"X-Vault-Token: "+.auth.client_token' "$scratch/response" > "$scratch/rename-command.headers"
+export AGENTOS_TEST_RENAME_COMMAND_TOKEN_FILE="$scratch/rename-command.token"
+request 403 GET agentos/data/hmac-keys/credential-integrity -H "@$scratch/rename-command.headers"
+request 403 GET agentos/data/provider-credentials/fixture -H "@$scratch/rename-command.headers"
+request 403 POST agentos/data/hmac-keys/command-receipts -H "@$scratch/rename-command.headers" --data '{}'
 java_probe prepare
 # The only credential value here is an explicitly synthetic CI sentinel.
 request 200 POST agentos/data/provider-credentials/fixture -H "@$scratch/app.headers" --data '{"options":{"cas":0},"data":{"credential":"synthetic-vault-ci-only"}}'
@@ -122,5 +132,5 @@ request 200 PUT sys/unseal --data-binary "@$scratch/unseal.json"
 request 200 GET 'agentos/data/provider-credentials/fixture?version=1' -H "@$scratch/app.headers"
 jq -e '.data.data.credential=="synthetic-vault-ci-only" and .data.metadata.version==1' "$scratch/response" >/dev/null
 java_probe restart
-mvn -B -ntp -f backend/pom.xml -Dtest=ProviderCreateVaultHttpIT test
-echo "Disposable Vault TLS, KV policy, Java adapter and restart checks passed"
+mvn -B -ntp -f backend/pom.xml -Dtest=ProviderCreateVaultHttpIT,ProviderRenameVaultIT test
+echo "Disposable Vault TLS, credential Create, command-only Rename and restart checks passed"
