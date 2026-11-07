@@ -23,26 +23,49 @@ The stacked PRs remain unmerged and deployment acceptance remains open.
 | PR68 | V028 durable Create actor/key correlation and exact retained-reference observation | Published `7fa0afa`. Competing or uncertain preparations remain pinned unless positive evidence matches. Cleanup eligibility remains outside this evidence. |
 | PR69 | Authorized own Create receipt GET and secret-free recovery | Published `1771a5a`. Current actor/org scoping, explicit null and safe unavailable responses are implemented. |
 | PR70 | Responsive Create form and explicit receipt recovery | Published `73ffcb8`. Browser contracts exercise normal and UNKNOWN flows. Full real-browser integration follows in PR71. |
-| PR71 | Managed TLS Vault/key configuration, dedicated PostgreSQL writer datasource, restricted list reader, Tomcat upload timeout and real browser harness | Implementation head `e3b252e`: [live workflow 42342036360](https://github.com/giangnguyen3260/agent_os/actions/runs/42342036360) passed, including both direct TLS/restart phases and the real browser/HTTP acceptance (one test, no failures or skips). SQL foundation, guarded publication and options policy also passed. Matching Quality `42342036401` and Docker `42342036362` remain in progress. Initial head `6cc15af` passed Quality `42341519405` but failed browser acceptance. The corrected proxy sends malformed JSON only after backend completion; it does not establish TCP reset acceptance. |
+| PR71 | Managed TLS Vault/key configuration, dedicated PostgreSQL writer datasource, restricted list reader, Tomcat upload timeout and real browser harness | Implementation head `e3b252e`: [live workflow 42342036360](https://github.com/giangnguyen3260/agent_os/actions/runs/42342036360) passed, including both direct TLS/restart phases and the real browser/HTTP acceptance (one test, no failures or skips). SQL foundation, guarded publication and options policy also passed. Matching Quality [42342036401](https://github.com/giangnguyen3260/agent_os/actions/runs/42342036401) and Docker [42342036362](https://github.com/giangnguyen3260/agent_os/actions/runs/42342036362) also passed: all six workflows succeeded on this implementation head. The later documentation-only head `9819f56` passed five workflows, including Quality `42342324045` and Vault `42342324047`; Docker `42342324095` was still in progress when checked. Initial head `6cc15af` passed Quality `42341519405` but failed browser acceptance. The corrected proxy sends malformed JSON only after backend completion; it does not establish TCP reset acceptance. |
 
 The Create receipt snapshot contract gap now has an implemented bounded
 configuration projection. Managed assembly uses distinct reader/writer database
 principals and preserves the list capability checks. The browser fault harness
 verifies a malformed response followed by explicit own-receipt recovery against
-real HTTP, PostgreSQL and TLS Vault. That integrated path passed on the implementation head above; this tracker
-update changes documentation only. Broader Quality/Docker results remain pending. Models-list checks, model discovery and
+real HTTP, PostgreSQL and TLS Vault. All six matching workflows passed on the
+implementation head above. Models-list checks, model discovery and
 live generation remain later provider/runtime work. These tests use synthetic
 credential values against the disposable secret manager.
 
+### Native upload acceptance candidate
+
+`ProviderCreateVaultHttpIT.idleUploadsTimeOutAndReleaseEveryCreateAdmissionSlot`
+adds real socket coverage against the managed Spring/Tomcat fixture. An initial
+malformed request establishes authenticated parser access (400). Eight partial
+bodies then occupy admission; the same malformed probe must return 503. Each
+stalled socket must finish by server 400/EOF/reset within a shared 30-second
+budget; a client read timeout fails the test. A second eight-socket cycle must
+reach saturation and then return eight parser 400 responses when completed,
+proving all slots can be used again. Six scoped tables, including write admission,
+must remain empty before one real Create returns 201 and its retained credential
+passes Vault readback. This bounds idle-stall release, not total slow-trickle time.
+
+Implementation and independent source review are complete. Java formatting,
+imports and diff checks passed locally. Native runtime acceptance requires the
+matching CI run; authored assertions do not establish a pass. No production
+behavior changes or provider model calls are introduced by this test slice.
+
 ## Current next three actions
 
-1. Record completed Quality/Docker outcomes for PR71 and diagnose any failures.
-   Real-browser malformed-response recovery is now verified on `e3b252e`: one
+1. Finish native idle-upload timeout and eight-slot release acceptance on the
+   managed real-Vault fixture, then review and publish matching CI. PR71 has all
+   six matching implementation workflows green. Real-browser malformed-response
+   recovery is verified on `e3b252e`: one
    Create, explicit secret-free lookup, durable correlated receipt/reference and
    HMAC-verified Vault readback. Keep this bounded acceptance separate from the
    remaining Create gates and broader AgentOS completion.
-2. Execute native upload-timeout/slot-release acceptance and the remaining Create
-   fault matrix. Distinguish idle upload timeout from total request deadline.
+2. Complete browser known-rejection coverage for 429/401/403 at three viewports,
+   including bounded Retry-After messaging, cleared credential input, no UNKNOWN
+   recovery or automatic retry, and fresh-secret entry on an explicit resubmit.
+   Then consolidate bounded Create QC evidence; no unspecified backend fault
+   matrix is added after the existing direct/native/browser gates.
    Preserve unresolved preparation pins, review reconciliation and restart/fault
    evidence, and record actual deployment inputs before release readiness.
 3. Continue remaining provider lifecycle work and then runtime authority,
