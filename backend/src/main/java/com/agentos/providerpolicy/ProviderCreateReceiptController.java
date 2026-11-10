@@ -1,16 +1,22 @@
 package com.agentos.providerpolicy;
 
 import com.agentos.auth.HumanIdentity;
+import com.agentos.providercommands.CommandBoundary.Operation;
 import com.agentos.providercompletion.ProviderCompletionBoundary;
 import com.agentos.providercompletion.ProviderCompletionBoundary.Code;
+import com.agentos.providercompletion.ProviderCompletionBoundary.Failure;
+import com.agentos.providercompletion.ProviderCompletionBoundary.LookupOutcome;
+import com.agentos.providercompletion.ProviderCompletionBoundary.LookupState;
 import com.agentos.providerreceipts.ProviderReceiptService;
 import com.agentos.providertransport.ProviderCreateResponses;
+import com.agentos.providertransport.ProviderRenameResponses;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.UUID;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -20,21 +26,25 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@ConditionalOnProperty(name = "agentos.provider-create.enabled", havingValue = "true")
+@ConditionalOnExpression(
+    "${agentos.provider-create.enabled:false} or ${agentos.provider-rename.http-enabled:false}")
 public class ProviderCreateReceiptController {
   private static final String ORGANIZATIONS = "/api/v1/organizations/";
   private static final String RECEIPTS = "/provider-connections/receipts/";
 
   private final ProviderCompletionBoundary completion;
   private final ObjectMapper json;
+  private final boolean renameEnabled;
 
   ProviderCreateReceiptController(
       PlatformTransactionManager manager,
       JdbcTemplate jdbc,
       ProviderReceiptService receipts,
-      ObjectMapper json) {
+      ObjectMapper json,
+      @Value("${agentos.provider-rename.http-enabled:false}") boolean renameEnabled) {
     this.completion = new ProviderCompletionBoundary(manager, jdbc, receipts);
     this.json = json;
+    this.renameEnabled = renameEnabled;
   }
 
   @GetMapping(ORGANIZATIONS + "{organizationId}" + RECEIPTS + "{key}")
@@ -60,6 +70,24 @@ public class ProviderCreateReceiptController {
       if (session != null) session.invalidate();
       SecurityContextHolder.clearContext();
     }
-    ProviderCreateResponses.writeLookup(json, response, result);
+    writeLookup(json, response, result, renameEnabled);
+  }
+
+  /** Dispatch only the explicitly supported historical configuration receipt operations. */
+  static void writeLookup(
+      ObjectMapper json, HttpServletResponse response, LookupOutcome result, boolean renameEnabled)
+      throws IOException {
+    if (result == null || result.state() != LookupState.FOUND) {
+      ProviderCreateResponses.writeLookup(json, response, result);
+      return;
+    }
+    var operation = result.receipt() == null ? null : result.receipt().operation();
+    if (operation == Operation.CREATE) {
+      ProviderCreateResponses.writeLookup(json, response, result);
+    } else if (operation == Operation.RENAME && renameEnabled) {
+      ProviderRenameResponses.writeLookup(json, response, result);
+    } else {
+      ProviderCreateResponses.error(json, response, new Failure(Code.RECEIPT_UNAVAILABLE));
+    }
   }
 }

@@ -9,7 +9,9 @@ on:
       - 'backend/src/main/java/com/agentos/providervault/ProviderCommandRuntime.java'
       - 'backend/src/main/java/com/agentos/providervault/ProviderVaultConfiguration.java'
       - 'backend/src/test/java/com/agentos/providervault/Provider*VaultConfigurationTest.java'
-      - 'backend/src/main/java/com/agentos/providerpolicy/ProviderCreate*.java'
+      - 'backend/src/main/java/com/agentos/providerpolicy/**'
+      - 'backend/src/test/java/com/agentos/providerpolicy/Provider*Receipt*Test.java'
+      - 'backend/src/test/java/com/agentos/providerpolicy/ProviderRename*.java'
       - 'backend/src/test/java/com/agentos/providerpolicy/ProviderCreateHttpPostgresIT.java'
       - 'backend/src/main/java/com/agentos/providertransport/**'
       - 'backend/src/main/java/com/agentos/providercompletion/**'
@@ -52,7 +54,7 @@ jobs:
           TASK_EDIT_TEST_JDBC_URL: jdbc:postgresql://127.0.0.1:15432/agentos_test
           TASK_EDIT_TEST_DB_USER: agentos
           TASK_EDIT_TEST_DB_PASSWORD: agentos_ci_only
-        run: mvn --batch-mode --no-transfer-progress -f backend/pom.xml '-Dtest=ProviderCreateResponsesTest,ProviderCreateBodyTest,ProviderRenameBodyTest,ProviderRenameResponsesTest,ProviderCsrfHandlerTest,ProviderCreateRequestTest,CredentialBoundaryTest,CommandBoundaryTest,ProviderCompletion*Test,ProviderCompletionPostgresIT,ProviderRenameCoordinatorTest,ProviderRenamePostgresIT,ProviderRenameVaultConfigurationTest,ProviderVaultConfigurationTest,ProviderCreateHttpPostgresIT' verify
+        run: mvn --batch-mode --no-transfer-progress -f backend/pom.xml '-Dtest=ProviderCreateResponsesTest,ProviderCreateBodyTest,ProviderRenameBodyTest,ProviderRenameResponsesTest,ProviderCsrfHandlerTest,ProviderCreateRequestTest,CredentialBoundaryTest,CommandBoundaryTest,ProviderCompletion*Test,ProviderCompletionPostgresIT,ProviderRenameCoordinatorTest,ProviderRenamePostgresIT,ProviderRenameVaultConfigurationTest,ProviderVaultConfigurationTest,ProviderRenameRequestTest,ProviderRenameHttpConfigurationTest,ProviderOwnReceiptDispatchTest,ProviderOwnReceiptFeatureTest,ProviderRenameHttpPostgresIT,ProviderCreateHttpPostgresIT' verify
       - uses: actions/upload-artifact@v4
         if: always()
         with:

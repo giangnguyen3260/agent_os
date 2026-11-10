@@ -5,7 +5,9 @@ and response writer slice. This extends the configuration snapshot amendment in
 [the Create receipt contract](PROVIDER_CREATE_RECEIPT_CONTRACT.md) to `RENAME` only.
 It supersedes the original API proposal's use of health-bearing `Connection`
 snapshots within Rename receipts. Implementation acceptance follows completed
-matching tests. Route, lookup, coordinator and UI delivery are subsequent slices.
+matching tests. Coordinator delivery is recorded in the coordinator checkpoint; public HTTP and
+lookup delivery is tracked in [the HTTP checkpoint](PROVIDER_RENAME_HTTP_CHECKPOINT.md).
+UI delivery remains a subsequent slice.
 
 ## Request boundary
 
