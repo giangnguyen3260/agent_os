@@ -605,7 +605,7 @@ class ProviderRenameVaultIT {
 
   private Session login(UUID actor) throws Exception {
     var session = client();
-    var token = data(send(session.client(), request("/api/v1/auth/csrf").GET()));
+    var token = csrf(session);
     var login =
         request("/api/v1/auth/login")
             .header("X-CSRF-TOKEN", token.path("token").asText())
@@ -614,9 +614,17 @@ class ProviderRenameVaultIT {
                 HttpRequest.BodyPublishers.ofString(
                     "username=" + actor + "%40example.test&password=" + PASSWORD));
     assertThat(send(session.client(), login).statusCode()).isEqualTo(200);
-    token = data(send(session.client(), request("/api/v1/auth/csrf").GET()));
+    token = csrf(session);
     assertThat(token.path("headerName").asText()).isEqualTo("X-CSRF-TOKEN");
     return new Session(session.client(), session.cookies(), token.path("token").asText());
+  }
+
+  private JsonNode csrf(Session session) throws Exception {
+    var response = send(session.client(), request("/api/v1/auth/csrf").GET());
+    assertThat(response.statusCode()).isEqualTo(200);
+    // Auth uses Spring Security's composite cache header; provider responses retain exact checks.
+    assertThat(response.headers().firstValue("Cache-Control").orElseThrow()).contains("no-store");
+    return json.readTree(response.body()).path("data");
   }
 
   private HttpRequest.Builder request(String path) {

@@ -54,3 +54,16 @@ head. Preserve existing exact error envelope and safe no-store responses.
 This slice completes backend ingress/lookup only when those matching tests pass.
 UI confirmation, responsive states and persisted browser Rename remain subsequent
 work. No merge, deployment or overall provider lifecycle completion is claimed.
+
+## First native CI and helper correction
+
+Implementation `155d00a2` passed focused Java21/PostgreSQL run
+[42830637891](https://github.com/giangnguyen3260/agent_os/actions/runs/42830637891):
+279 tests, zero failures/errors, one retained intentional H2 compatibility skip.
+Both new Rename HTTP tests and both retained Create HTTP tests passed.
+Vault run 42830637976 passed both direct TLS phases and retained Create tests,
+but both new HTTP cases stopped in the shared login helper: the auth CSRF endpoint
+correctly returns Spring Security's composite cache header, while the provider
+helper required exactly `no-store`. A separate auth-CSRF helper checks that its
+cache header contains `no-store`; provider success/error checks remain exact.
+This test-only correction needs its own managed runtime result.
