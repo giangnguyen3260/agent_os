@@ -12,7 +12,9 @@ below preserve earlier evidence and decisions. The latest verified baseline is P
 successful. PR75 final head `339083fad7c559eeeacc60f244323f9a3833ae26`
 passed all eight workflows, including Docker, Quality and Vault. This closes the
 internal Rename baseline and supersedes earlier pending Docker status. The next
-Rename HTTP/receipt candidate has no matching CI acceptance yet. User authorization for publishing the
+Rename HTTP/receipt implementation now passes focused native and managed Vault
+acceptance at `01ff76694d30dc6a8ff74197f55a44f17ed03432`; matching corrected-head
+Quality/Docker remain pending. User authorization for publishing the
 reviewable project changes is resolved. The earlier push rejection is historical.
 The stacked PRs remain unmerged and deployment acceptance remains open.
 
@@ -200,15 +202,39 @@ checks do not establish native or matching CI PASS.
 [The HTTP checkpoint](PROVIDER_RENAME_HTTP_CHECKPOINT.md) defines the scope.
 Rename UI remains unimplemented. No merge/deployment is claimed.
 
+## PR76 executed native HTTP acceptance — 10 November 2026
+
+Corrected implementation `01ff76694d30dc6a8ff74197f55a44f17ed03432`, tree
+`ab13082`, passed [focused Java21 42831769011](https://github.com/giangnguyen3260/agent_os/actions/runs/42831769011):
+279 tests, zero failures/errors and one retained intentional H2 compatibility skip.
+[Vault 42831768792/job129883369384](https://github.com/giangnguyen3260/agent_os/actions/runs/42831768792/job/129883369384)
+passed both direct TLS phases, all three managed Rename cases and both retained
+Create cases, with zero failures/errors/skips. This establishes the new native
+Rename ingress/own-receipt and managed timeout/slot-release acceptance. Production
+behavior is unchanged from initial PR76 head `155d00a2`; the correction only fixes
+the auth-CSRF test helper's cache-header expectation.
+
+Initial [Quality 42830638542](https://github.com/giangnguyen3260/agent_os/actions/runs/42830638542)
+passed 1,623 tests, zero failures/errors and one intentional compatibility skip.
+Matching corrected-head [Quality 42831768844](https://github.com/giangnguyen3260/agent_os/actions/runs/42831768844)
+also passed all 1,623 tests with zero failures/errors and the retained skip, plus
+frontend style/build checks. [Docker 42831769004](https://github.com/giangnguyen3260/agent_os/actions/runs/42831769004)
+remains running; do not infer all seven workflows green from targeted acceptance.
+The final documentation-only checkpoint preserves this tested implementation/run
+identity. No merge/deployment or Rename UI acceptance is established.
+
 ## Current next three actions
 
-1. Publish the reviewed backend Rename HTTP/receipt candidate as a stacked Draft
-   PR; preserve Rename-only activation and the scoped native acceptance fixtures.
-2. Execute focused and matching regression CI for the final candidate head;
-   attribute results to actual implementation before accepting backend HTTP/lookup.
-3. Connect reviewed Rename UI confirmation, stale/NO_CHANGE and UNKNOWN recovery,
-   then native persisted browser acceptance. Continue remaining provider lifecycle
-   and runtime work from the backlog. Merge and deployment remain open.
+1. Review matching corrected-head Quality/Docker completion for PR76 and record
+   exact results; the native backend/managed acceptance above already passes.
+2. Freeze the bounded Rename UI: explicit capability discovery (proposed
+   X-Provider-Rename-Enabled header, not implemented), selected current revision,
+   normalized name edit and before/after review; allow disabled adapters/connections.
+3. Implement strict Rename historical receipt validation and scoped states for
+   NO_CHANGE/stale/429/authority loss/UNKNOWN. Explicit own GET or permitted exact
+   metadata resend retains reviewed body/key; changed revision/name requires new
+   review/key. Verify responsive browser contracts and one persisted real Rename.
+   Overall lifecycle/runtime, merge and deployment remain open.
 
 ## PM mandate and continuity
 

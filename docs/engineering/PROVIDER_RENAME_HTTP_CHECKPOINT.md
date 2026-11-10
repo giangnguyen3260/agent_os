@@ -41,8 +41,8 @@ Vault HTTP/socket tests are authored. The managed fixture retains its direct
 coordinator test, disables Create/list, checks current session/CSRF and own
 historical receipt recovery during a command-key outage, and exercises both
 eight-slot saturation/idle-release cycles before a real successful Rename.
-Source compilation and independent review pass. Execution awaits CI; no
-candidate CI PASS is claimed.
+Source compilation and independent review pass. The initial pending statement is superseded by corrected-head native runtime
+evidence below.
 
 Acceptance requires actual session HTTP and PostgreSQL evidence for Rename-only
 and combined activation, auth/CSRF before body access, canonical raw path/header/
@@ -66,4 +66,40 @@ but both new HTTP cases stopped in the shared login helper: the auth CSRF endpoi
 correctly returns Spring Security's composite cache header, while the provider
 helper required exactly `no-store`. A separate auth-CSRF helper checks that its
 cache header contains `no-store`; provider success/error checks remain exact.
-This test-only correction needs its own managed runtime result.
+This test-only correction passed its managed runtime result below.
+
+## PR76 executed native HTTP acceptance — 10 November 2026
+
+Corrected implementation `01ff76694d30dc6a8ff74197f55a44f17ed03432`, tree
+`ab13082`, passed [focused Java21 42831769011](https://github.com/giangnguyen3260/agent_os/actions/runs/42831769011):
+279 tests, zero failures/errors and one retained intentional H2 compatibility skip.
+[Vault 42831768792/job129883369384](https://github.com/giangnguyen3260/agent_os/actions/runs/42831768792/job/129883369384)
+passed both direct TLS phases, all three managed Rename cases and both retained
+Create cases, with zero failures/errors/skips. This establishes the new native
+Rename ingress/own-receipt and managed timeout/slot-release acceptance. Production
+behavior is unchanged from initial PR76 head `155d00a2`; the correction only fixes
+the auth-CSRF test helper's cache-header expectation.
+
+Initial [Quality 42830638542](https://github.com/giangnguyen3260/agent_os/actions/runs/42830638542)
+passed 1,623 tests, zero failures/errors and one intentional compatibility skip.
+Matching corrected-head [Quality 42831768844](https://github.com/giangnguyen3260/agent_os/actions/runs/42831768844)
+also passed all 1,623 tests with zero failures/errors and the retained skip, plus
+frontend style/build checks. [Docker 42831769004](https://github.com/giangnguyen3260/agent_os/actions/runs/42831769004)
+remains running; do not infer all seven workflows green from targeted acceptance.
+The final documentation-only checkpoint preserves this tested implementation/run
+identity. No merge/deployment or Rename UI acceptance is established.
+
+## Next bounded UI deliverable
+
+No Rename UI is implemented here. Reuse the list's actual configuration revision
+and scoped reload, plus existing CSRF/name/error helpers. Add an explicit Rename
+capability signal; X-Provider-Rename-Enabled is proposed and not implemented.
+Create availability and adapter enabled flags cannot determine Rename eligibility.
+
+Add per-connection normalized name edit, before/after confirmation and a strict
+Rename receipt parser; retain Create-only validation independently. Model stale,
+NO_CHANGE, canonical Retry-After and authority loss explicitly. UNKNOWN permits
+explicit own receipt recovery and, where offered, exact metadata resend using the
+same reviewed body/key; changed name/revision requires fresh review/key. No automatic
+retry. Responsive contracts and one real HTTP/PostgreSQL persisted Rename remain
+required UI evidence; native backend passes do not substitute for them.
