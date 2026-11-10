@@ -159,3 +159,21 @@ Rename. Fresh Rename still requires the deployment-policy singleton to exist.
 Provider-disabled and disabled-connection metadata can be renamed. Same name at
 maximum revision yields NO_CHANGE; a different name requiring increment yields
 REVISION_EXHAUSTED. These configuration operations grant no runtime eligibility.
+
+
+## Opt-in Rename HTTP candidate
+
+The backend HTTP candidate separately uses
+`agentos.provider-rename.http-enabled=true` (default false). Supply the explicit
+Rename coordinator; managed assembly additionally requires
+`agentos.provider-rename.enabled=true` and the command-only settings above.
+Rename-only activation does not require Create or provider credential configuration.
+The flag enables the narrow Rename POST and historical Rename projection on own
+receipt GET; that GET is present when Create OR Rename HTTP is enabled.
+
+The Rename HTTP Tomcat customizer enforces a 10-second idle upload read timeout
+independently of Create. It does not impose a total slow-trickle deadline. Eight
+nonqueued per-instance permits bound Rename body/coordinator work, separately from
+the shared durable 30/minute write quota. Reverse-proxy limits remain operational
+configuration, not evidence of application acceptance. Native managed tests and
+matching CI are pending for this candidate; UI is not implemented by this flag.

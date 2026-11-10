@@ -15,38 +15,79 @@ import com.agentos.providercompletion.ProviderCompletionBoundary.WriteState;
 import com.agentos.providercreation.ProviderCreateCoordinator;
 import com.agentos.providercredentials.CredentialBoundary;
 import com.agentos.providerrename.ProviderRenameCoordinator;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.EOFException;
+import java.io.IOException;
+import java.net.CookieManager;
+import java.net.CookiePolicy;
+import java.net.InetSocketAddress;
+import java.net.Socket;
+import java.net.SocketException;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.security.MessageDigest;
+import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import javax.sql.DataSource;
+import org.apache.coyote.http11.AbstractHttp11Protocol;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.boot.web.embedded.tomcat.TomcatServletWebServerFactory;
+import org.springframework.boot.web.server.WebServerFactoryCustomizer;
 import org.springframework.context.ApplicationContext;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
 import org.springframework.core.env.Environment;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
 /** Managed Rename with real PostgreSQL/TLS command HMAC and no credential-store configuration. */
 @SpringBootTest(
+    webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
     properties = {
       "agentos.provider-rename.enabled=true",
+      "agentos.provider-rename.http-enabled=true",
       "agentos.provider-create.enabled=false",
       "agentos.provider-list.enabled=false"
     })
 @ActiveProfiles("test")
+@Import(ProviderRenameVaultIT.UploadReadContinue.class)
 @EnabledIfEnvironmentVariable(named = "AGENTOS_TEST_VAULT_URL", matches = "https://.*")
 class ProviderRenameVaultIT {
+  @TestConfiguration(proxyBeanMethods = false)
+  static class UploadReadContinue {
+    @Bean
+    WebServerFactoryCustomizer<TomcatServletWebServerFactory> acknowledgeRenameBodyRead() {
+      // Observe the existing production permit acquisition without changing its timeout.
+      return factory ->
+          factory.addConnectorCustomizers(
+              connector ->
+                  ((AbstractHttp11Protocol<?>) connector.getProtocolHandler())
+                      .setContinueResponseTiming("onRead"));
+    }
+  }
+
+  private static final String PASSWORD = "Rename-http-fixture-93847";
   private static final String READER = "vault_rename_web";
   private static final String WRITER = "vault_rename_writer";
   private static final String READER_PASSWORD = UUID.randomUUID().toString();
@@ -58,6 +99,9 @@ class ProviderRenameVaultIT {
   @Autowired JdbcTemplate reader;
   @Autowired Environment environment;
   @Autowired ApplicationContext context;
+  @Autowired ObjectMapper json;
+  @Autowired PasswordEncoder passwords;
+  @LocalServerPort int port;
 
   @DynamicPropertySource
   static void configuration(DynamicPropertyRegistry properties) {
@@ -245,6 +289,486 @@ class ProviderRenameVaultIT {
     }
   }
 
+  @Test
+  void renameHttpUsesRealSessionCsrfAndReturnsOnlyOwnHistoricalReceipts() throws Exception {
+    var fixture = seedHttpFixture();
+    String path = renamePath(fixture);
+    String receiptRoot =
+        "/api/v1/organizations/" + fixture.org() + "/provider-connections/receipts/";
+    byte[] retained = fingerprint(fixture.org(), "provider_credential_versions");
+    byte[] before = businessFingerprint(fixture.org());
+    var anonymous = client();
+    var denied = send(anonymous.client(), post(path, UUID.randomUUID(), "not-json", null));
+    error(denied, 401, "UNAUTHORIZED");
+    assertThat(denied.headers().allValues("Set-Cookie")).isEmpty();
+    try (Socket socket = partialUpload(path, null, UUID.randomUUID(), false)) {
+      assertThat(readStatus(socket))
+          .as("anonymous authority gate does not await the body")
+          .isEqualTo(401);
+    }
+    var session = login(fixture.actor());
+    String body = "{\"expectedRevision\":\"1\",\"name\":\" HTTP renamed \"}";
+    error(send(session.client(), post(path, UUID.randomUUID(), body, null)), 403, "FORBIDDEN");
+    error(
+        send(session.client(), post(path, UUID.randomUUID(), body, "foreign-csrf")),
+        403,
+        "FORBIDDEN");
+    for (String invalid :
+        new String[] {
+          "{malformed",
+          "{}",
+          "{\"expectedRevision\":1,\"name\":\"HTTP renamed\"}",
+          "{\"expectedRevision\":\"1\",\"name\":\"HTTP"
+              + " renamed\",\"apiKey\":\"synthetic-forbidden-key\"}",
+          "x".repeat(8193)
+        }) {
+      error(
+          send(session.client(), post(path, UUID.randomUUID(), invalid, session.csrf())),
+          400,
+          "BAD_REQUEST");
+    }
+    error(
+        send(
+            session.client(),
+            post(path + "?unexpected=1", UUID.randomUUID(), body, session.csrf())),
+        400,
+        "BAD_REQUEST");
+    error(
+        send(
+            session.client(),
+            post(
+                path.replace(fixture.connection().toString(), "invalid-target"),
+                UUID.randomUUID(),
+                body,
+                session.csrf())),
+        400,
+        "BAD_REQUEST");
+    assertThat(Arrays.equals(before, businessFingerprint(fixture.org()))).isTrue();
+    assertThat(writeAdmissionRows(fixture.org())).isZero();
+
+    UUID key = UUID.randomUUID();
+    var first = send(session.client(), post(path, key, body, session.csrf()));
+    assertThat(first.statusCode()).isEqualTo(201);
+    var firstData = data(first);
+    assertThat(firstData.path("operation").asText()).isEqualTo("RENAME");
+    assertThat(firstData.at("/before/name").asText()).isEqualTo("Before HTTP");
+    assertThat(firstData.at("/after/name").asText()).isEqualTo("HTTP renamed");
+    assertThat(firstData.at("/after/revision").asText()).isEqualTo("2");
+    assertThat(firstData.at("/after/credentialRevision").asText()).isEqualTo("1");
+    var replay = send(session.client(), post(path, key, body, session.csrf()));
+    assertThat(replay.statusCode()).isEqualTo(200);
+    assertThat(data(replay)).isEqualTo(firstData);
+    String laterBody = "{\"expectedRevision\":\"2\",\"name\":\"Later HTTP\"}";
+    assertThat(
+            send(session.client(), post(path, UUID.randomUUID(), laterBody, session.csrf()))
+                .statusCode())
+        .isEqualTo(201);
+    var historical = send(session.client(), request(receiptRoot + key).GET());
+    assertThat(historical.statusCode()).isEqualTo(200);
+    assertThat(data(historical).path("receipt")).isEqualTo(firstData);
+    var replayAfterLater = send(session.client(), post(path, key, body, session.csrf()));
+    assertThat(replayAfterLater.statusCode()).isEqualTo(200);
+    assertThat(data(replayAfterLater)).isEqualTo(firstData);
+    assertThat(
+            data(send(session.client(), request(receiptRoot + UUID.randomUUID()).GET()))
+                .path("receipt")
+                .isNull())
+        .isTrue();
+    assertThat(
+            admin.queryForObject(
+                "select name from provider_connections where organization_id=? and id=?",
+                String.class,
+                fixture.org(),
+                fixture.connection()))
+        .isEqualTo("Later HTTP");
+
+    UUID otherActor = seedHttpAdmin(fixture.org());
+    var otherSession = login(otherActor);
+    var notOwned = send(otherSession.client(), request(receiptRoot + key).GET());
+    assertThat(notOwned.statusCode()).isEqualTo(200);
+    assertThat(data(notOwned).path("receipt").isNull()).isTrue();
+    byte[] beforeKeyOutage = businessFingerprint(fixture.org());
+    byte[] token = Files.readAllBytes(commandTokenFile);
+    try {
+      Files.delete(commandTokenFile);
+      error(
+          send(
+              session.client(),
+              post(
+                  path,
+                  UUID.randomUUID(),
+                  "{\"expectedRevision\":\"3\",\"name\":\"No HMAC write\"}",
+                  session.csrf())),
+          503,
+          "PROVIDER_CONNECTION_UNAVAILABLE");
+      var duringOutage = send(session.client(), request(receiptRoot + key).GET());
+      assertThat(duringOutage.statusCode()).isEqualTo(200);
+      assertThat(data(duringOutage).path("receipt")).isEqualTo(firstData);
+      assertThat(Arrays.equals(beforeKeyOutage, businessFingerprint(fixture.org()))).isTrue();
+    } finally {
+      restoreCommandToken(token);
+    }
+
+    byte[] beforeRevocation = businessFingerprint(fixture.org());
+    String samplesBeforeRevocation = samples(fixture.org(), fixture.actor());
+    admin.update(
+        "update organization_memberships set role='MEMBER' where organization_id=? and"
+            + " account_id=?",
+        fixture.org(),
+        fixture.actor());
+    try (Socket socket = partialUpload(path, session, UUID.randomUUID(), false)) {
+      assertThat(readStatus(socket))
+          .as("current role denial does not await the body")
+          .isEqualTo(403);
+    }
+    error(
+        send(session.client(), post(path, UUID.randomUUID(), "not-json", session.csrf())),
+        403,
+        "FORBIDDEN");
+    error(send(session.client(), request(receiptRoot + key).GET()), 403, "FORBIDDEN");
+    assertThat(Arrays.equals(beforeRevocation, businessFingerprint(fixture.org()))).isTrue();
+    assertThat(samples(fixture.org(), fixture.actor())).isEqualTo(samplesBeforeRevocation);
+    admin.update(
+        "update organization_memberships set role='ADMIN' where organization_id=? and account_id=?",
+        fixture.org(),
+        fixture.actor());
+    error(
+        send(session.client(), post(path, UUID.randomUUID(), body, session.csrf())),
+        409,
+        "REVISION_CONFLICT");
+    error(
+        send(
+            session.client(),
+            post(
+                path,
+                UUID.randomUUID(),
+                "{\"expectedRevision\":\"3\",\"name\":\"Later HTTP\"}",
+                session.csrf())),
+        409,
+        "NO_CHANGE");
+    assertThat(Arrays.equals(retained, fingerprint(fixture.org(), "provider_credential_versions")))
+        .isTrue();
+    assertThat(
+            admin.queryForObject(
+                "select count(*) from provider_secret_preparations where organization_id=?",
+                Long.class,
+                fixture.org()))
+        .isZero();
+    admin.update(
+        "update human_accounts set credential_version=credential_version+1 where id=?",
+        fixture.actor());
+    error(
+        send(session.client(), post(path, UUID.randomUUID(), body, session.csrf())),
+        401,
+        "UNAUTHORIZED");
+    assertThat(send(session.client(), request("/api/v1/auth/session").GET()).statusCode())
+        .isEqualTo(401);
+  }
+
+  @Test
+  void renameIdleUploadsReleaseAndReoccupyAllEightSlotsWithoutCreateEnabled() throws Exception {
+    var fixture = seedHttpFixture();
+    var session = login(fixture.actor());
+    String path = renamePath(fixture);
+    byte[] before = businessFingerprint(fixture.org());
+    var sockets = new ArrayList<Socket>();
+    long started = System.nanoTime();
+    try {
+      for (int index = 0; index < 8; index++)
+        sockets.add(partialUpload(path, session, UUID.randomUUID(), true));
+      error(
+          send(session.client(), post(path, UUID.randomUUID(), "{}", session.csrf())),
+          503,
+          "PROVIDER_CONNECTION_UNAVAILABLE");
+      long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
+      for (Socket socket : sockets) {
+        setRemainingTimeout(socket, deadline);
+        try {
+          assertThat(readStatus(socket)).isIn(400, 403, 408);
+        } catch (EOFException | SocketException aborted) {
+          // A server close is allowed. Client SocketTimeoutException is deliberately not caught.
+        }
+        assertThat(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started))
+            .isGreaterThanOrEqualTo(8000L);
+      }
+    } finally {
+      closeUploads(sockets);
+    }
+    sockets.clear();
+    try {
+      for (int index = 0; index < 8; index++)
+        sockets.add(partialUpload(path, session, UUID.randomUUID(), true));
+      error(
+          send(session.client(), post(path, UUID.randomUUID(), "{}", session.csrf())),
+          503,
+          "PROVIDER_CONNECTION_UNAVAILABLE");
+      for (Socket socket : sockets) {
+        socket.getOutputStream().write('}');
+        socket.getOutputStream().flush();
+      }
+      long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
+      for (Socket socket : sockets) {
+        setRemainingTimeout(socket, deadline);
+        assertThat(readStatus(socket)).isEqualTo(400);
+      }
+    } finally {
+      closeUploads(sockets);
+    }
+    assertThat(Arrays.equals(before, businessFingerprint(fixture.org()))).isTrue();
+    assertThat(writeAdmissionRows(fixture.org())).isZero();
+    var created =
+        send(
+            session.client(),
+            post(
+                path,
+                UUID.randomUUID(),
+                "{\"expectedRevision\":\"1\",\"name\":\"After idle Rename\"}",
+                session.csrf()));
+    assertThat(created.statusCode()).isEqualTo(201);
+    assertThat(data(created).at("/after/revision").asText()).isEqualTo("2");
+    assertThat(data(created).at("/after/name").asText()).isEqualTo("After idle Rename");
+    assertThat(
+            admin.queryForObject(
+                "select count(*) from provider_secret_preparations where organization_id=?",
+                Long.class,
+                fixture.org()))
+        .isZero();
+  }
+
+  private record HttpFixture(UUID org, UUID actor, UUID connection) {}
+
+  private record Session(HttpClient client, CookieManager cookies, String csrf) {}
+
+  private HttpFixture seedHttpFixture() {
+    UUID org = UUID.randomUUID(), connection = UUID.randomUUID();
+    admin.update(
+        "insert into organizations(id,name,slug,status,created_at,updated_at) values (?,'Rename"
+            + " HTTP',?,'ACTIVE',current_timestamp,current_timestamp)",
+        org,
+        org.toString());
+    UUID actor = seedHttpAdmin(org);
+    var human = new HumanIdentity(actor, actor + "@example.test", "Rename HTTP", 0);
+    var scope =
+        new CredentialBoundary.Scope(org, connection, CredentialBoundary.Provider.OPENAI, 1);
+    String digest = Base64.getEncoder().encodeToString(new byte[32]);
+    var metadata =
+        new CredentialBoundary.Metadata(
+            scope,
+            "fixture-v1",
+            new CredentialBoundary.Reference(scope, "not-a-live-http-credential", "1"),
+            digest);
+    var prepared =
+        new CommandBoundary.Metadata(CommandBoundary.DIGEST_VERSION, "fixture-v1", digest);
+    assertThat(
+            ProviderCommandRuntime.assemble(administrator())
+                .completion()
+                .executePrepared(
+                    human,
+                    org,
+                    UUID.randomUUID(),
+                    new Create(Provider.OPENAI, CredentialMode.OPENAI_API_KEY, "Before HTTP", null),
+                    prepared,
+                    connection,
+                    metadata)
+                .state())
+        .isEqualTo(WriteState.COMMITTED);
+    return new HttpFixture(org, actor, connection);
+  }
+
+  private UUID seedHttpAdmin(UUID org) {
+    UUID actor = UUID.randomUUID();
+    admin.update(
+        "insert into human_accounts(id,email,display_name,password_hash) values (?,?,'Rename"
+            + " HTTP',?)",
+        actor,
+        actor + "@example.test",
+        passwords.encode(PASSWORD));
+    admin.update(
+        "insert into organization_memberships(account_id,organization_id,role) values"
+            + " (?,?,'ADMIN')",
+        actor,
+        org);
+    return actor;
+  }
+
+  private Session client() {
+    var cookies = new CookieManager(null, CookiePolicy.ACCEPT_ALL);
+    return new Session(
+        HttpClient.newBuilder()
+            .cookieHandler(cookies)
+            .version(HttpClient.Version.HTTP_1_1)
+            .connectTimeout(Duration.ofSeconds(5))
+            .build(),
+        cookies,
+        null);
+  }
+
+  private Session login(UUID actor) throws Exception {
+    var session = client();
+    var token = data(send(session.client(), request("/api/v1/auth/csrf").GET()));
+    var login =
+        request("/api/v1/auth/login")
+            .header("X-CSRF-TOKEN", token.path("token").asText())
+            .header("Content-Type", "application/x-www-form-urlencoded")
+            .POST(
+                HttpRequest.BodyPublishers.ofString(
+                    "username=" + actor + "%40example.test&password=" + PASSWORD));
+    assertThat(send(session.client(), login).statusCode()).isEqualTo(200);
+    token = data(send(session.client(), request("/api/v1/auth/csrf").GET()));
+    assertThat(token.path("headerName").asText()).isEqualTo("X-CSRF-TOKEN");
+    return new Session(session.client(), session.cookies(), token.path("token").asText());
+  }
+
+  private HttpRequest.Builder request(String path) {
+    return HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + path))
+        .timeout(Duration.ofSeconds(20))
+        .header("Accept", "application/json");
+  }
+
+  private HttpRequest.Builder post(String path, UUID key, String body, String csrf) {
+    var request =
+        request(path)
+            .header("Content-Type", "application/json")
+            .header("Idempotency-Key", key.toString())
+            .POST(HttpRequest.BodyPublishers.ofString(body));
+    return csrf == null ? request : request.header("X-CSRF-TOKEN", csrf);
+  }
+
+  private HttpResponse<String> send(HttpClient client, HttpRequest.Builder request)
+      throws Exception {
+    return client.send(request.build(), HttpResponse.BodyHandlers.ofString());
+  }
+
+  private JsonNode data(HttpResponse<String> response) throws Exception {
+    assertThat(response.statusCode()).isIn(200, 201);
+    assertThat(response.headers().firstValue("Cache-Control")).contains("no-store");
+    return json.readTree(response.body()).path("data");
+  }
+
+  private void error(HttpResponse<String> response, int status, String code) throws Exception {
+    assertThat(response.statusCode()).isEqualTo(status);
+    assertThat(response.headers().firstValue("Cache-Control")).contains("no-store");
+    var body = json.readTree(response.body());
+    assertThat(body.properties())
+        .extracting(Map.Entry::getKey)
+        .containsExactlyInAnyOrder("error", "meta");
+    assertThat(body.at("/error/code").asText()).isEqualTo(code);
+    assertThat(body.path("error").properties())
+        .extracting(Map.Entry::getKey)
+        .containsExactlyInAnyOrder("code", "message", "details");
+    assertThat(body.at("/error/details").isEmpty()).isTrue();
+  }
+
+  private String renamePath(HttpFixture fixture) {
+    return "/api/v1/organizations/"
+        + fixture.org()
+        + "/provider-connections/"
+        + fixture.connection()
+        + "/rename";
+  }
+
+  private long writeAdmissionRows(UUID org) {
+    return admin.queryForObject(
+        "select count(*) from provider_write_admission where organization_id=?", Long.class, org);
+  }
+
+  private void restoreCommandToken(byte[] token) throws Exception {
+    try {
+      if (!Files.exists(commandTokenFile))
+        Files.createFile(
+            commandTokenFile,
+            PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")));
+      Files.write(commandTokenFile, token);
+    } finally {
+      Arrays.fill(token, (byte) 0);
+    }
+  }
+
+  private Socket partialUpload(String path, Session session, UUID key, boolean acknowledge)
+      throws Exception {
+    var socket = new Socket();
+    try {
+      socket.connect(new InetSocketAddress("127.0.0.1", port), 3000);
+      socket.setSoTimeout(5000);
+      String auth = "";
+      if (session != null) {
+        String cookie =
+            String.join(
+                "; ",
+                session.cookies().getCookieStore().getCookies().stream()
+                    .map(value -> value.getName() + "=" + value.getValue())
+                    .toList());
+        auth = "Cookie: " + cookie + "\r\nX-CSRF-TOKEN: " + session.csrf() + "\r\n";
+      }
+      String headers =
+          "POST "
+              + path
+              + " HTTP/1.1\r\nHost: 127.0.0.1:"
+              + port
+              + "\r\n"
+              + auth
+              + "Idempotency-Key: "
+              + key
+              + "\r\n"
+              + "Accept: application/json\r\n"
+              + "Content-Type: application/json\r\n"
+              + "Connection: close\r\n"
+              + "Content-Length: 2\r\n"
+              + (acknowledge ? "Expect: 100-continue\r\n" : "")
+              + "\r\n{";
+      socket.getOutputStream().write(headers.getBytes(StandardCharsets.US_ASCII));
+      socket.getOutputStream().flush();
+      if (acknowledge) {
+        assertThat(readStatus(socket)).isEqualTo(100);
+        assertThat(socket.getInputStream().read()).isEqualTo((int) '\r');
+        assertThat(socket.getInputStream().read()).isEqualTo((int) '\n');
+      }
+      return socket;
+    } catch (Exception | Error failure) {
+      try {
+        socket.close();
+      } catch (IOException close) {
+        failure.addSuppressed(close);
+      }
+      throw failure;
+    }
+  }
+
+  private static int readStatus(Socket socket) throws IOException {
+    var input = socket.getInputStream();
+    var status = new StringBuilder();
+    for (int index = 0; index < 1024; index++) {
+      int next = input.read();
+      if (next == -1) throw new EOFException();
+      if (next == '\n') {
+        String line = status.toString();
+        if (!line.matches("HTTP/1[.][01] [0-9]{3} .*\\r"))
+          throw new IOException("Invalid disposable Rename HTTP status");
+        return Integer.parseInt(line.substring(9, 12));
+      }
+      status.append((char) next);
+    }
+    throw new IOException("Oversized disposable Rename HTTP status");
+  }
+
+  private static void setRemainingTimeout(Socket socket, long deadline) throws IOException {
+    long remaining = TimeUnit.NANOSECONDS.toMillis(deadline - System.nanoTime());
+    assertThat(remaining).as("Rename uploads complete within shared budget").isPositive();
+    socket.setSoTimeout((int) remaining);
+  }
+
+  private static void closeUploads(Iterable<Socket> sockets) throws IOException {
+    IOException failure = null;
+    for (Socket socket : sockets) {
+      try {
+        socket.close();
+      } catch (IOException closed) {
+        failure = closed;
+      }
+    }
+    if (failure != null) throw failure;
+  }
+
   private boolean privilege(String role, String operation) {
     return Boolean.TRUE.equals(
         admin.queryForObject(
@@ -333,6 +857,21 @@ class ProviderRenameVaultIT {
               + password
               + "'");
       statement.execute("grant usage on schema public to " + READER + "," + WRITER);
+      statement.execute(
+          "grant select on public.organizations,public.human_accounts,"
+              + "public.organization_memberships,public.provider_connection_events,"
+              + "public.provider_command_receipts to "
+              + READER);
+      statement.execute("grant update(id) on public.human_accounts to " + READER);
+      statement.execute(
+          "grant select,insert,update on public.authentication_attempts,"
+              + "public.provider_read_admission to "
+              + READER);
+      statement.execute("grant insert on public.authentication_audit to " + READER);
+      statement.execute(
+          "grant select,insert,update,delete on public.spring_session,"
+              + "public.spring_session_attributes to "
+              + READER);
       statement.execute(
           "grant select on public.organizations,public.human_accounts,"
               + "public.organization_memberships,public.provider_deployment_policy,"

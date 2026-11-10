@@ -12,7 +12,8 @@ on:
       - backend/src/main/java/com/agentos/provideradmission/**
       - backend/src/main/java/com/agentos/providerrename/**
       - backend/src/main/java/com/agentos/providerreceipts/**
-      - backend/src/main/java/com/agentos/providertransport/ProviderCreateBody.java
+      - backend/src/main/java/com/agentos/providertransport/**
+      - backend/src/main/java/com/agentos/providerpolicy/**
       - backend/pom.xml
       - backend/src/main/java/com/agentos/providerpreparation/**
       - backend/src/main/resources/db/migration/**

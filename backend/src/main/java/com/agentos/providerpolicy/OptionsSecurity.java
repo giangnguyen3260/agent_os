@@ -21,11 +21,10 @@ public class OptionsSecurity {
       AdmissionService admission,
       ObjectMapper json,
       @Value("${agentos.provider-list.enabled:false}") boolean listEnabled,
-      @Value("${agentos.provider-create.enabled:false}") boolean createEnabled)
+      @Value("${agentos.provider-create.enabled:false}") boolean createEnabled,
+      @Value("${agentos.provider-rename.http-enabled:false}") boolean renameEnabled)
       throws Exception {
-    String suffix = listEnabled ? "(?:/options)?" : "/options";
-    if (createEnabled) suffix = "(?:" + suffix + "|/receipts/[^/]+)";
-    var paths = Pattern.compile("/api/v1/organizations/[^/]+/provider-connections" + suffix);
+    var paths = paths(listEnabled, createEnabled, renameEnabled);
     http.securityMatcher(
             request ->
                 paths
@@ -40,5 +39,11 @@ public class OptionsSecurity {
             new OptionsGate(authority, admission, json), SecurityContextHolderFilter.class)
         .authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
     return http.build();
+  }
+
+  static Pattern paths(boolean listEnabled, boolean createEnabled, boolean renameEnabled) {
+    String suffix = listEnabled ? "(?:/options)?" : "/options";
+    if (createEnabled || renameEnabled) suffix = "(?:" + suffix + "|/receipts/[^/]+)";
+    return Pattern.compile("/api/v1/organizations/[^/]+/provider-connections" + suffix);
   }
 }
