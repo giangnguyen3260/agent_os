@@ -53,6 +53,13 @@ public final class ProviderMetadataCoordinator {
     return execute(actor, organization, key, command);
   }
 
+  public WriteOutcome enable(
+      HumanIdentity actor, UUID organization, UUID key, RevisionCommand command) {
+    if (command == null || command.operation() != Operation.ENABLE)
+      return new WriteOutcome(WriteState.REJECTED, null, new Failure(Code.INVALID_COMMAND));
+    return execute(actor, organization, key, command);
+  }
+
   /** Command key access occurs outside transactions and does not require credential storage. */
   private WriteOutcome execute(HumanIdentity actor, UUID organization, UUID key, Command command) {
     boolean committing = false;
@@ -105,8 +112,10 @@ public final class ProviderMetadataCoordinator {
       HumanIdentity actor, UUID organization, UUID key, Command command, Metadata digest) {
     if (command instanceof Rename rename)
       return completion.executeRenamePrepared(actor, organization, key, rename, digest);
-    return completion.executeDisablePrepared(
-        actor, organization, key, (RevisionCommand) command, digest);
+    var stateChange = (RevisionCommand) command;
+    return stateChange.operation() == Operation.ENABLE
+        ? completion.executeEnablePrepared(actor, organization, key, stateChange, digest)
+        : completion.executeDisablePrepared(actor, organization, key, stateChange, digest);
   }
 
   private static WriteOutcome unavailable() {

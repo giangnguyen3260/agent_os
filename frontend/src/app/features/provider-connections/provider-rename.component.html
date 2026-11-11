@@ -1,33 +1,16 @@
-@if (enabled() || disableEnabled() || error()) {
-  <section
-    class="provider-rename"
-    [attr.aria-label]="
-      review()?.operation === 'disable' ||
-      pending()?.review?.operation === 'disable' ||
-      (!enabled() && disableEnabled())
-        ? 'Tắt kết nối'
-        : 'Đổi tên kết nối'
-    "
-  >
+@if (enabled() || disableEnabled() || enableVisible() || error()) {
+  <section class="provider-rename" [attr.aria-label]="panelLabel()">
     @if (error()) {
       <p role="alert">{{ error() }}</p>
     }
     @if (pending(); as attempt) {
       <div
-        [attr.data-testid]="
-          attempt.review.operation === 'rename'
-            ? 'provider-rename-unknown'
-            : 'provider-disable-unknown'
-        "
+        [attr.data-testid]="'provider-' + attempt.review.operation + '-unknown'"
       >
         <p role="status">
-          @if (attempt.review.operation === 'rename') {
-            Chưa xác nhận được kết quả đổi tên. Hãy kiểm tra biên nhận trước khi
-            gửi yêu cầu khác.
-          } @else {
-            Chưa xác nhận được kết quả tắt kết nối. Hãy kiểm tra biên nhận trước
-            khi gửi yêu cầu khác.
-          }
+          Chưa xác nhận được kết quả
+          {{ operationNames[attempt.review.operation] }}. Hãy kiểm tra biên nhận
+          trước khi gửi yêu cầu khác.
         </p>
         <button type="button" [disabled]="busy()" (click)="checkReceipt()">
           Kiểm tra kết quả
@@ -40,21 +23,23 @@
       <button type="button" (click)="refreshRequested.emit()">
         Tải lại kết nối
       </button>
-    } @else if (enabled() || disableEnabled()) {
+    } @else if (enabled() || disableEnabled() || enableVisible()) {
       @if (review(); as change) {
-        @if (change.operation === 'disable') {
+        @if (change.operation !== 'rename') {
           <div
-            data-testid="provider-disable-review"
+            [attr.data-testid]="'provider-' + change.operation + '-review'"
             role="region"
-            aria-label="Xem lại thao tác tắt kết nối"
+            [attr.aria-label]="
+              'Xem lại thao tác ' + operationNames[change.operation]
+            "
           >
-            <h3>Xem lại thao tác tắt kết nối</h3>
+            <h3>Xem lại thao tác {{ operationNames[change.operation] }}</h3>
             <p>
               Kết nối: <strong>{{ change.name }}</strong>
             </p>
             <p>Phiên bản cấu hình: {{ change.expectedRevision }}</p>
             <button type="button" [disabled]="busy()" (click)="confirm()">
-              Xác nhận tắt kết nối
+              Xác nhận {{ operationNames[change.operation] }}
             </button>
             <button type="button" [disabled]="busy()" (click)="edit()">
               Hủy
@@ -107,6 +92,18 @@
         }
         @if (disableEnabled()) {
           <button type="button" (click)="prepareDisable()">Tắt kết nối</button>
+        }
+        @if (enableVisible()) {
+          <button
+            type="button"
+            [disabled]="!!enableUnavailable()"
+            (click)="prepareEnable()"
+          >
+            Bật lại kết nối
+          </button>
+          @if (enableUnavailable()) {
+            <p role="status">{{ enableUnavailable() }}</p>
+          }
         }
       }
     }

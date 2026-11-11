@@ -19,8 +19,20 @@ export interface ReviewedDisable {
   name: string;
 }
 
-type MetadataOperation = 'RENAME' | 'DISABLE';
-type ReviewedCommand = ReviewedRename | ReviewedDisable;
+export interface ReviewedEnable {
+  connectionId: string;
+  expectedRevision: string;
+  /** The reviewed connection name must remain unchanged. */
+  name: string;
+}
+
+const operationLabels = {
+  RENAME: 'Rename',
+  DISABLE: 'Disable',
+  ENABLE: 'Enable',
+} as const;
+type MetadataOperation = keyof typeof operationLabels;
+type ReviewedCommand = ReviewedRename | ReviewedDisable | ReviewedEnable;
 
 interface HistoricalSnapshot {
   organizationId: string;
@@ -142,8 +154,8 @@ function receiptMatches(
     after.updatedAt <= value['committedAt'] &&
     (operation === 'RENAME'
       ? before.state === after.state && before.name !== after.name
-      : before.state === 'ENABLED' &&
-        after.state === 'DISABLED' &&
+      : before.state !== after.state &&
+        after.state === (operation === 'ENABLE' ? 'ENABLED' : 'DISABLED') &&
         before.name === after.name)
   );
 }
@@ -180,6 +192,17 @@ export function verifyDisabled(
     throw new Error('Invalid Disable receipt');
 }
 
+/** An Enable receipt confirms the reviewed connection and its unchanged name. */
+export function verifyEnabled(
+  value: unknown,
+  org: string,
+  actor: string,
+  submitted: ReviewedEnable,
+): void {
+  if (!receiptMatches(data(value, 'Enable'), org, actor, submitted, 'ENABLE'))
+    throw new Error('Invalid Enable receipt');
+}
+
 function receiptFound(
   value: unknown,
   org: string,
@@ -188,7 +211,7 @@ function receiptFound(
   expectedCommand: ReviewedCommand,
   operation: MetadataOperation,
 ): boolean {
-  const label = operation === 'RENAME' ? 'Rename' : 'Disable';
+  const label = operationLabels[operation];
   const lookup = data(value, label);
   if (
     !uuid(org) ||
@@ -224,4 +247,14 @@ export function receiptFoundDisable(
   expectedCommand: ReviewedDisable,
 ): boolean {
   return receiptFound(value, org, actor, target, expectedCommand, 'DISABLE');
+}
+
+export function receiptFoundEnable(
+  value: unknown,
+  org: string,
+  actor: string,
+  target: string,
+  expectedCommand: ReviewedEnable,
+): boolean {
+  return receiptFound(value, org, actor, target, expectedCommand, 'ENABLE');
 }

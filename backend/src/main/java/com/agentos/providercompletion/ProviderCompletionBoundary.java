@@ -40,6 +40,7 @@ public final class ProviderCompletionBoundary {
     REVISION_EXHAUSTED(409),
     CONNECTION_CONFLICT(409),
     PROVIDER_DISABLED(409),
+    CREDENTIAL_UNAVAILABLE(409),
     CONNECTION_LIMIT(409),
     RATE_LIMITED(429),
     PREPARATION_REQUIRED(409),
@@ -190,6 +191,11 @@ public final class ProviderCompletionBoundary {
     return executeWrite(actor, org, key, command, prepared, null, null, Operation.DISABLE);
   }
 
+  public WriteOutcome executeEnablePrepared(
+      HumanIdentity actor, UUID org, UUID key, RevisionCommand command, Metadata prepared) {
+    return executeWrite(actor, org, key, command, prepared, null, null, Operation.ENABLE);
+  }
+
   private WriteOutcome executeWrite(
       HumanIdentity actor,
       UUID org,
@@ -216,6 +222,9 @@ public final class ProviderCompletionBoundary {
       } else if (governance == Operation.DISABLE) {
         result =
             receipts.executeDisableGoverned(actor, org, key, (RevisionCommand) command, prepared);
+      } else if (governance == Operation.ENABLE) {
+        result =
+            receipts.executeEnableGoverned(actor, org, key, (RevisionCommand) command, prepared);
       } else {
         result = receipts.execute(actor, org, key, command, prepared, createId, credential);
       }

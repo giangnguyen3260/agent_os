@@ -37,8 +37,14 @@ function load(file) {
   );
   return mod.exports;
 }
-const {verifyRenamed, receiptFoundRename, verifyDisabled, receiptFoundDisable} =
-  load(path.join(directory, 'provider-rename-wire.ts'));
+const {
+  verifyRenamed,
+  receiptFoundRename,
+  verifyDisabled,
+  receiptFoundDisable,
+  verifyEnabled,
+  receiptFoundEnable,
+} = load(path.join(directory, 'provider-rename-wire.ts'));
 const {verifyCreated} = load(path.join(directory, 'provider-create-wire.ts'));
 const org = '11111111-1111-4111-8111-111111111111';
 const actor = '22222222-2222-4222-8222-222222222222';
@@ -554,6 +560,145 @@ test('Disable lookup distinguishes explicit absence and binds every found receip
     receiptFoundDisable(lookup(disableFixture()), org, actor, target, {
       ...reviewedDisable,
       name: 'Other valid name',
+    }),
+  );
+});
+
+function enableFixture(provider = 'OPENAI', workspace = null) {
+  const value = disableFixture(provider, workspace);
+  value.data.operation = 'ENABLE';
+  value.data.before.state = 'DISABLED';
+  value.data.after.state = 'ENABLED';
+  return value;
+}
+
+test('Enable confirms the reviewed unchanged name and exact state transition', () => {
+  for (const [provider, workspace] of [
+    ['OPENAI', null],
+    ['GOOGLE_GEMINI', null],
+    ['ANTHROPIC', null],
+    ['ANTHROPIC', 'wrkspc_Reviewed1'],
+  ]) {
+    const value = enableFixture(provider, workspace);
+    verifyEnabled(value, org, actor, reviewedDisable);
+    assert.equal(
+      receiptFoundEnable(lookup(value), org, actor, target, reviewedDisable),
+      true,
+    );
+  }
+  const max = enableFixture();
+  max.data.before.revision = '9223372036854775806';
+  max.data.after.revision = '9223372036854775807';
+  verifyEnabled(max, org, actor, {
+    ...reviewedDisable,
+    expectedRevision: max.data.before.revision,
+  });
+});
+
+test('Enable fails closed for wrong operation, state, review, scope or immutable metadata', () => {
+  for (const mutate of [
+    value => {
+      value.data.operation = 'DISABLE';
+    },
+    value => {
+      value.data.operation = 'RENAME';
+    },
+    value => {
+      value.data.before.state = 'ENABLED';
+    },
+    value => {
+      value.data.after.state = 'DISABLED';
+    },
+    value => {
+      value.data.before.name = 'Other name';
+    },
+    value => {
+      value.data.after.name = 'Other name';
+    },
+    value => {
+      value.data.before.name = value.data.after.name = 'Other name';
+    },
+    value => {
+      value.data.connectionId = foreign;
+    },
+    value => {
+      value.data.actorId = foreign;
+    },
+    value => {
+      value.data.organizationId = foreign;
+    },
+    value => {
+      value.data.after.id = foreign;
+    },
+    value => {
+      value.data.after.revision = '9';
+    },
+    value => {
+      value.data.after.credentialRevision = '4';
+    },
+    value => {
+      value.data.after.updatedAt = '2026-11-10T01:02:03.000001Z';
+    },
+    value => {
+      value.data.after.options = {secret: 'synthetic'};
+    },
+  ]) {
+    const value = enableFixture();
+    mutate(value);
+    assert.throws(
+      () => verifyEnabled(value, org, actor, reviewedDisable),
+      /Invalid Enable receipt/,
+    );
+  }
+  assert.throws(() =>
+    verifyEnabled(enableFixture(), org, actor, {
+      ...reviewedDisable,
+      expectedRevision: '6',
+    }),
+  );
+  assert.throws(
+    () => verifyDisabled(enableFixture(), org, actor, reviewedDisable),
+    /Invalid Disable receipt/,
+  );
+});
+
+test('Enable lookup only accepts absence or a receipt bound to the reviewed command', () => {
+  const absent = {data: {receipt: null}, meta: {requestId: foreign}};
+  assert.equal(
+    receiptFoundEnable(absent, org, actor, target, reviewedDisable),
+    false,
+  );
+  assert.throws(() =>
+    receiptFoundEnable(
+      {...absent, data: {}},
+      org,
+      actor,
+      target,
+      reviewedDisable,
+    ),
+  );
+  assert.throws(() =>
+    receiptFoundEnable(
+      lookup(disableFixture()),
+      org,
+      actor,
+      target,
+      reviewedDisable,
+    ),
+  );
+  assert.throws(() =>
+    receiptFoundEnable(
+      lookup(enableFixture()),
+      org,
+      actor,
+      foreign,
+      reviewedDisable,
+    ),
+  );
+  assert.throws(() =>
+    receiptFoundEnable(lookup(enableFixture()), org, actor, target, {
+      ...reviewedDisable,
+      name: 'Other name',
     }),
   );
 });

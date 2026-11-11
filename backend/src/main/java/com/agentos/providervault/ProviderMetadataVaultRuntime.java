@@ -7,12 +7,18 @@ import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.function.Supplier;
 import org.springframework.core.env.Environment;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
 /** Assembles a writer and command HMAC boundary for a metadata operation. */
 record ProviderMetadataVaultRuntime(ProviderCommandRuntime runtime, CommandBoundary commands) {
   static ProviderMetadataVaultRuntime assemble(Environment environment, String prefix)
       throws Exception {
+    return assemble(environment, prefix, false);
+  }
+
+  static ProviderMetadataVaultRuntime assemble(
+      Environment environment, String prefix, boolean requiresEvidence) throws Exception {
     URI origin = URI.create(required(environment, prefix, "url"));
     String mount = required(environment, prefix, "mount");
     var tls = ProviderVaultConfiguration.tls(file(environment, prefix, "ca-file"));
@@ -41,6 +47,16 @@ record ProviderMetadataVaultRuntime(ProviderCommandRuntime runtime, CommandBound
       writer.setPassword(new String(password));
     } finally {
       Arrays.fill(password, '\0');
+    }
+    if (requiresEvidence) {
+      // A null target must yield false. This validates the installed Boolean capability
+      // through the writer's own permissions without looking up a real credential.
+      Boolean probe =
+          new JdbcTemplate(writer)
+              .queryForObject(
+                  "select agentos_list_read.credential_available(null::uuid,null::uuid)",
+                  Boolean.class);
+      if (!Boolean.FALSE.equals(probe)) throw unavailable();
     }
     return new ProviderMetadataVaultRuntime(
         ProviderCommandRuntime.assemble(writer), new CommandBoundary(keys));

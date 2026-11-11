@@ -1,6 +1,7 @@
 import {HttpClient, HttpErrorResponse} from '@angular/common/http';
 import {
   Component,
+  computed,
   DestroyRef,
   effect,
   inject,
@@ -23,10 +24,13 @@ import {
 import {ProviderConnectionItem} from './provider-list-wire';
 import {
   receiptFoundDisable,
+  receiptFoundEnable,
   receiptFoundRename,
   ReviewedDisable,
+  ReviewedEnable,
   ReviewedRename,
   verifyDisabled,
+  verifyEnabled,
   verifyRenamed,
 } from './provider-rename-wire';
 
@@ -38,13 +42,29 @@ interface Scope {
 }
 type Review =
   | (ReviewedRename & {operation: 'rename'; beforeName: string})
-  | (ReviewedDisable & {operation: 'disable'});
+  | (ReviewedDisable & {operation: 'disable'})
+  | (ReviewedEnable & {operation: 'enable'});
 interface Pending {
   key: string;
   review: Review;
 }
 const headers = {Accept: 'application/json'};
 const readTimeout = 15_000;
+const operationNames = {
+  rename: 'đổi tên',
+  disable: 'tắt kết nối',
+  enable: 'bật lại kết nối',
+} as const;
+const verifyReceipt = {
+  rename: verifyRenamed,
+  disable: verifyDisabled,
+  enable: verifyEnabled,
+};
+const findReceipt = {
+  rename: receiptFoundRename,
+  disable: receiptFoundDisable,
+  enable: receiptFoundEnable,
+};
 
 @Component({
   selector: 'app-provider-rename',
@@ -61,9 +81,12 @@ export class ProviderRenameComponent {
   readonly connection = input.required<ProviderConnectionItem>();
   readonly renamed = output<void>();
   readonly disabled = output<void>();
+  readonly reenabled = output<void>();
   readonly refreshRequested = output<void>();
   readonly enabled = signal(false);
   readonly disableEnabled = signal(false);
+  readonly enableVisible = signal(false);
+  readonly enableUnavailable = signal('');
   readonly editing = signal(false);
   readonly name = signal('');
   readonly review = signal<Review | null>(null);
@@ -72,6 +95,22 @@ export class ProviderRenameComponent {
   readonly error = signal('');
   readonly needsRefresh = signal(false);
   readonly receiptMessage = signal('');
+  readonly operationNames = operationNames;
+  readonly panelLabel = computed(() => {
+    const operation =
+      this.pending()?.review.operation ?? this.review()?.operation;
+    if (
+      operation === 'disable' ||
+      (!operation && !this.enabled() && this.disableEnabled())
+    )
+      return 'Tắt kết nối';
+    if (
+      operation === 'enable' ||
+      (!operation && !this.enabled() && this.enableVisible())
+    )
+      return 'Bật lại kết nối';
+    return 'Đổi tên kết nối';
+  });
 
   constructor() {
     effect(onCleanup => {
@@ -110,8 +149,10 @@ export class ProviderRenameComponent {
           next: response => {
             if (!this.current(scope) || response.status !== 200) return;
             try {
-              // Validate options without applying enabled-provider gates to metadata Rename.
-              enabledProviders(response.body, organization);
+              const availableProviders = enabledProviders(
+                response.body,
+                organization,
+              );
               this.enabled.set(
                 response.headers.get('X-Provider-Rename-Enabled') === 'true',
               );
@@ -119,13 +160,21 @@ export class ProviderRenameComponent {
                 connection.state === 'ENABLED' &&
                   response.headers.get('X-Provider-Disable-Enabled') === 'true',
               );
+              const offerEnable =
+                connection.state === 'DISABLED' &&
+                response.headers.get('X-Provider-Enable-Enabled') === 'true';
+              this.enableVisible.set(offerEnable);
+              this.enableUnavailable.set(
+                offerEnable
+                  ? this.unavailableEnableReason(connection, availableProviders)
+                  : '',
+              );
             } catch {
-              this.enabled.set(false);
+              this.clearOptions();
             }
           },
           error: failure => {
-            if (this.current(scope) && !this.deny(failure))
-              this.enabled.set(false);
+            if (this.current(scope) && !this.deny(failure)) this.clearOptions();
           },
         });
     });
@@ -182,11 +231,19 @@ export class ProviderRenameComponent {
   }
 
   prepareDisable(): void {
+    this.prepareStateReview('disable');
+  }
+
+  prepareEnable(): void {
+    this.prepareStateReview('enable');
+  }
+
+  private prepareStateReview(operation: 'disable' | 'enable'): void {
     const scope = this.scope;
     if (
       !scope ||
       !this.current(scope) ||
-      !this.disableEnabled() ||
+      !this.operationAvailable(operation) ||
       this.editing() ||
       this.review() ||
       this.busy() ||
@@ -196,7 +253,7 @@ export class ProviderRenameComponent {
       return;
     this.error.set('');
     this.review.set({
-      operation: 'disable',
+      operation,
       connectionId: scope.connection.id,
       expectedRevision: scope.connection.revision,
       name: scope.connection.name,
@@ -216,9 +273,7 @@ export class ProviderRenameComponent {
       !scope ||
       !review ||
       !this.current(scope) ||
-      !(review.operation === 'rename'
-        ? this.enabled()
-        : this.disableEnabled()) ||
+      !this.operationAvailable(review.operation) ||
       this.busy() ||
       this.pending() ||
       this.needsRefresh()
@@ -264,29 +319,19 @@ export class ProviderRenameComponent {
       if (!this.current(scope)) return;
       if (response.status !== 201 && response.status !== 200)
         throw new Error('Invalid metadata response');
-      if (review.operation === 'rename')
-        verifyRenamed(
-          response.body,
-          scope.organization,
-          scope.actor.id,
-          review,
-        );
-      else
-        verifyDisabled(
-          response.body,
-          scope.organization,
-          scope.actor.id,
-          review,
-        );
+      verifyReceipt[review.operation](
+        response.body,
+        scope.organization,
+        scope.actor.id,
+        review,
+      );
       this.complete(review.operation);
     } catch (failure) {
       if (!this.current(scope) || this.deny(failure)) return;
       if (!sent || !key) {
         this.review.set(null);
         this.error.set(
-          review.operation === 'rename'
-            ? 'Chưa gửi yêu cầu đổi tên. Vui lòng xem lại và thử lại.'
-            : 'Chưa gửi yêu cầu tắt kết nối. Vui lòng xem lại và thử lại.',
+          `Chưa gửi yêu cầu ${operationNames[review.operation]}. Vui lòng xem lại và thử lại.`,
         );
       } else if (!this.knownRejection(failure, review.operation)) {
         this.pending.set({key, review});
@@ -318,22 +363,13 @@ export class ProviderRenameComponent {
       if (response.status !== 200)
         throw new Error('Invalid metadata receipt response');
       const review = pending.review;
-      const found =
-        review.operation === 'rename'
-          ? receiptFoundRename(
-              response.body,
-              scope.organization,
-              scope.actor.id,
-              scope.connection.id,
-              review,
-            )
-          : receiptFoundDisable(
-              response.body,
-              scope.organization,
-              scope.actor.id,
-              scope.connection.id,
-              review,
-            );
+      const found = findReceipt[review.operation](
+        response.body,
+        scope.organization,
+        scope.actor.id,
+        scope.connection.id,
+        review,
+      );
       if (found) this.complete(review.operation);
       else
         this.receiptMessage.set(
@@ -355,39 +391,51 @@ export class ProviderRenameComponent {
   ): boolean {
     if (!(failure instanceof HttpErrorResponse)) return false;
     const code = createErrorCode(failure.error);
+    const action = operationNames[operation];
     let message: string;
     if (failure.status === 400 && code === 'BAD_REQUEST')
       message =
         operation === 'rename'
           ? 'Yêu cầu đổi tên không hợp lệ. Vui lòng kiểm tra tên rồi xem lại.'
-          : 'Yêu cầu tắt kết nối không hợp lệ. Vui lòng xem lại.';
+          : `Yêu cầu ${action} không hợp lệ. Vui lòng xem lại.`;
     else if (failure.status === 404 && code === 'NOT_FOUND') {
       message = 'Không tìm thấy kết nối. Vui lòng tải lại kết nối.';
       this.needsRefresh.set(true);
     } else if (failure.status === 409 && code === 'REVISION_CONFLICT') {
-      message =
-        operation === 'rename'
-          ? 'Kết nối đã thay đổi. Vui lòng tải lại kết nối và xem lại tên mới.'
-          : 'Kết nối đã thay đổi. Vui lòng tải lại kết nối trước khi tắt.';
+      const next = {
+        rename: 'và xem lại tên mới.',
+        disable: 'trước khi tắt.',
+        enable: 'trước khi bật lại.',
+      };
+      message = `Kết nối đã thay đổi. Vui lòng tải lại kết nối ${next[operation]}`;
       this.needsRefresh.set(true);
     } else if (failure.status === 409 && code === 'NO_CHANGE') {
-      message =
-        operation === 'rename'
-          ? 'Tên kết nối không thay đổi. Vui lòng tải lại kết nối.'
-          : 'Kết nối đã tắt. Vui lòng tải lại kết nối.';
+      const state = {
+        rename: 'Tên kết nối không thay đổi.',
+        disable: 'Kết nối đã tắt.',
+        enable: 'Kết nối đã được bật.',
+      };
+      message = `${state[operation]} Vui lòng tải lại kết nối.`;
       this.needsRefresh.set(true);
     } else if (failure.status === 409 && code === 'REVISION_EXHAUSTED') {
-      message =
-        operation === 'rename'
-          ? 'Không thể đổi tên ở phiên bản hiện tại. Vui lòng tải lại kết nối.'
-          : 'Không thể tắt kết nối ở phiên bản hiện tại. Vui lòng tải lại kết nối.';
+      message = `Không thể ${action} ở phiên bản hiện tại. Vui lòng tải lại kết nối.`;
       this.needsRefresh.set(true);
     } else if (failure.status === 409 && code === 'IDEMPOTENCY_CONFLICT')
       message =
         operation === 'rename'
           ? 'Yêu cầu đổi tên bị xung đột. Vui lòng kiểm tra tên rồi xem lại.'
-          : 'Yêu cầu tắt kết nối bị xung đột. Vui lòng xem lại.';
-    else if (failure.status === 429 && code === 'RATE_LIMITED') {
+          : `Yêu cầu ${action} bị xung đột. Vui lòng xem lại.`;
+    else if (
+      operation === 'enable' &&
+      failure.status === 409 &&
+      (code === 'CREDENTIAL_UNAVAILABLE' || code === 'PROVIDER_DISABLED')
+    ) {
+      message =
+        code === 'PROVIDER_DISABLED'
+          ? 'Nhà cung cấp đang bị tắt. Vui lòng tải lại kết nối.'
+          : 'Chưa có bằng chứng lưu trữ khóa hợp lệ. Vui lòng tải lại kết nối để kiểm tra trạng thái khóa.';
+      this.needsRefresh.set(true);
+    } else if (failure.status === 429 && code === 'RATE_LIMITED') {
       const seconds = retryAfterSeconds(failure.headers.get('Retry-After'));
       message =
         seconds === null
@@ -428,9 +476,29 @@ export class ProviderRenameComponent {
       '/api/v1/organizations/' + scope.organization + '/provider-connections'
     );
   }
-  private reset(): void {
+  private unavailableEnableReason(
+    connection: ProviderConnectionItem,
+    availableProviders: ProviderConnectionItem['provider'][],
+  ): string {
+    if (!availableProviders.includes(connection.provider))
+      return 'Nhà cung cấp đang bị tắt.';
+    if (connection.credentialState !== 'PRESENT')
+      return 'Chưa có bằng chứng lưu trữ khóa hợp lệ.';
+    return '';
+  }
+  private operationAvailable(operation: Review['operation']): boolean {
+    if (operation === 'rename') return this.enabled();
+    if (operation === 'disable') return this.disableEnabled();
+    return this.enableVisible() && !this.enableUnavailable();
+  }
+  private clearOptions(): void {
     this.enabled.set(false);
     this.disableEnabled.set(false);
+    this.enableVisible.set(false);
+    this.enableUnavailable.set('');
+  }
+  private reset(): void {
+    this.clearOptions();
     this.editing.set(false);
     this.name.set('');
     this.review.set(null);
@@ -446,6 +514,7 @@ export class ProviderRenameComponent {
     this.name.set('');
     this.receiptMessage.set('');
     if (operation === 'rename') this.renamed.emit();
-    else this.disabled.emit();
+    else if (operation === 'disable') this.disabled.emit();
+    else this.reenabled.emit();
   }
 }

@@ -194,3 +194,22 @@ session, header-only CSRF, a canonical UUID idempotency key and a JSON string
 `expectedRevision`. A committed result and its own-receipt lookup contain the
 historical configuration transition. The connector uses the same 10-second idle
 upload timeout as Rename, with eight simultaneous Disable requests per instance.
+
+## Opt-in Enable HTTP
+
+Enable uses the metadata writer and command HMAC settings in the Rename table
+under `agentos.provider-enable.*`. Set `agentos.provider-enable.enabled=true`
+to assemble the coordinator and `agentos.provider-enable.http-enabled=true`
+to register `POST /api/v1/organizations/{org}/provider-connections/{connection}/enable`.
+Both flags default to false. The options response advertises the HTTP flag as
+`X-Provider-Enable-Enabled`.
+
+Install the guarded evidence and list-reader SQL before enabling this feature.
+The trusted Enable writer needs the existing metadata privileges and permission
+to call `agentos_list_read.credential_available(uuid,uuid)`. The scalar function
+is the evidence read boundary. Startup checks it with a null target using the
+writer's own login and requires a false result. Fresh Enable checks the current
+adapter policy and positive credential evidence after locking the connection.
+An unavailable credential returns `409 CREDENTIAL_UNAVAILABLE`. The UI can
+reload the list to show current eligibility. Enable uses the same ADMIN/CSRF,
+revision, receipt, and upload controls as Disable.

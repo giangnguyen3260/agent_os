@@ -34,6 +34,12 @@ class ProviderOwnReceiptFeatureTest {
           assertThat(running).hasNotFailed();
           assertThat(running).doesNotHaveBean(ProviderCreateReceiptController.class);
         });
+    context
+        .withPropertyValues("agentos.provider-enable.http-enabled=true")
+        .run(running -> assertThat(running).hasSingleBean(ProviderCreateReceiptController.class));
+    context
+        .withPropertyValues("agentos.provider-enable.enabled=true")
+        .run(running -> assertThat(running).doesNotHaveBean(ProviderCreateReceiptController.class));
     for (boolean create : new boolean[] {false, true}) {
       for (boolean renameHttp : new boolean[] {false, true}) {
         for (boolean disableHttp : new boolean[] {false, true}) {
@@ -59,11 +65,16 @@ class ProviderOwnReceiptFeatureTest {
   @Test
   void receiptSecurityMatcherUsesPublicFeatureFlagsWithoutWideningOtherPaths() {
     String collection = "/api/v1/organizations/" + UUID.randomUUID() + "/provider-connections";
+    assertThat(
+            OptionsSecurity.paths(false, false, false, false, true)
+                .matcher(collection + "/receipts/" + UUID.randomUUID())
+                .matches())
+        .isTrue();
     for (boolean list : new boolean[] {false, true}) {
       for (boolean create : new boolean[] {false, true}) {
         for (boolean rename : new boolean[] {false, true}) {
           for (boolean disable : new boolean[] {false, true}) {
-            var pattern = OptionsSecurity.paths(list, create, rename, disable);
+            var pattern = OptionsSecurity.paths(list, create, rename, disable, false);
             assertThat(pattern.matcher(collection + "/options").matches()).isTrue();
             assertThat(pattern.matcher(collection).matches()).isEqualTo(list);
             assertThat(pattern.matcher(collection + "/receipts/" + UUID.randomUUID()).matches())
@@ -78,7 +89,8 @@ class ProviderOwnReceiptFeatureTest {
                   "/receipts/a/",
                   "/other",
                   "/" + UUID.randomUUID() + "/rename",
-                  "/" + UUID.randomUUID() + "/disable"
+                  "/" + UUID.randomUUID() + "/disable",
+                  "/" + UUID.randomUUID() + "/enable"
                 }) assertThat(pattern.matcher(collection + suffix).matches()).isFalse();
           }
         }

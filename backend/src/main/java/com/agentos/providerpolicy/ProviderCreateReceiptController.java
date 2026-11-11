@@ -10,6 +10,7 @@ import com.agentos.providercompletion.ProviderCompletionBoundary.LookupState;
 import com.agentos.providerreceipts.ProviderReceiptService;
 import com.agentos.providertransport.ProviderCreateResponses;
 import com.agentos.providertransport.ProviderDisableResponses;
+import com.agentos.providertransport.ProviderEnableResponses;
 import com.agentos.providertransport.ProviderRenameResponses;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
@@ -29,7 +30,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @ConditionalOnExpression(
     "${agentos.provider-create.enabled:false} or ${agentos.provider-rename.http-enabled:false}"
-        + " or ${agentos.provider-disable.http-enabled:false}")
+        + " or ${agentos.provider-disable.http-enabled:false}"
+        + " or ${agentos.provider-enable.http-enabled:false}")
 public class ProviderCreateReceiptController {
   private static final String ORGANIZATIONS = "/api/v1/organizations/";
   private static final String RECEIPTS = "/provider-connections/receipts/";
@@ -38,6 +40,7 @@ public class ProviderCreateReceiptController {
   private final ObjectMapper json;
   private final boolean renameEnabled;
   private final boolean disableEnabled;
+  private final boolean enableEnabled;
 
   ProviderCreateReceiptController(
       PlatformTransactionManager manager,
@@ -45,11 +48,13 @@ public class ProviderCreateReceiptController {
       ProviderReceiptService receipts,
       ObjectMapper json,
       @Value("${agentos.provider-rename.http-enabled:false}") boolean renameEnabled,
-      @Value("${agentos.provider-disable.http-enabled:false}") boolean disableEnabled) {
+      @Value("${agentos.provider-disable.http-enabled:false}") boolean disableEnabled,
+      @Value("${agentos.provider-enable.http-enabled:false}") boolean enableEnabled) {
     this.completion = new ProviderCompletionBoundary(manager, jdbc, receipts);
     this.json = json;
     this.renameEnabled = renameEnabled;
     this.disableEnabled = disableEnabled;
+    this.enableEnabled = enableEnabled;
   }
 
   @GetMapping(ORGANIZATIONS + "{organizationId}" + RECEIPTS + "{key}")
@@ -75,7 +80,7 @@ public class ProviderCreateReceiptController {
       if (session != null) session.invalidate();
       SecurityContextHolder.clearContext();
     }
-    writeLookup(json, response, result, renameEnabled, disableEnabled);
+    writeLookup(json, response, result, renameEnabled, disableEnabled, enableEnabled);
   }
 
   /** Dispatch only the explicitly supported historical configuration receipt operations. */
@@ -84,7 +89,8 @@ public class ProviderCreateReceiptController {
       HttpServletResponse response,
       LookupOutcome result,
       boolean renameEnabled,
-      boolean disableEnabled)
+      boolean disableEnabled,
+      boolean enableEnabled)
       throws IOException {
     if (result == null || result.state() != LookupState.FOUND) {
       ProviderCreateResponses.writeLookup(json, response, result);
@@ -97,6 +103,8 @@ public class ProviderCreateReceiptController {
       ProviderRenameResponses.writeLookup(json, response, result);
     } else if (operation == Operation.DISABLE && disableEnabled) {
       ProviderDisableResponses.writeLookup(json, response, result);
+    } else if (operation == Operation.ENABLE && enableEnabled) {
+      ProviderEnableResponses.writeLookup(json, response, result);
     } else {
       ProviderCreateResponses.error(json, response, new Failure(Code.RECEIPT_UNAVAILABLE));
     }

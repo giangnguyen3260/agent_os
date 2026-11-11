@@ -151,6 +151,11 @@ public class ProviderReceiptService {
     return executeInternal(actor, org, key, command, prepared, null, null, Operation.DISABLE);
   }
 
+  public Result executeEnableGoverned(
+      HumanIdentity actor, UUID org, UUID key, RevisionCommand command, Metadata prepared) {
+    return executeInternal(actor, org, key, command, prepared, null, null, Operation.ENABLE);
+  }
+
   private Result executeInternal(
       HumanIdentity actor,
       UUID org,
@@ -165,14 +170,13 @@ public class ProviderReceiptService {
           var policy = authority(actor, org, true, governance != null);
           if (command == null
               || command instanceof CredentialCommand
-              || (governance == Operation.DISABLE && command.operation() != Operation.DISABLE))
+              || (stateCommand(governance) && command.operation() != governance))
             throw fail(400, "INVALID_COMMAND");
           validKey(key);
           if (prepared == null) throw fail(400, "INVALID_PREPARATION");
           Probe stored = own(org, actor.id(), key);
           if (stored != null) {
-            if (governance == Operation.DISABLE
-                && stored.result().receipt().operation() != Operation.DISABLE)
+            if (stateCommand(governance) && stored.result().receipt().operation() != governance)
               throw fail(409, "IDEMPOTENCY_CONFLICT");
             if (!stored.metadata().keyVersion().equals(prepared.keyVersion()))
               throw fail(409, "PREPARATION_REQUIRED");
@@ -180,19 +184,11 @@ public class ProviderReceiptService {
               throw fail(409, "IDEMPOTENCY_CONFLICT");
             return stored.result();
           }
-          if ((governance == Operation.RENAME || governance == Operation.DISABLE)
-              && policy.size() != 1) throw fail(503, "COMMAND_UNAVAILABLE");
+          if (governance == Operation.CREATE && !(command instanceof Create))
+            throw fail(400, "INVALID_COMMAND");
+          if (governance != null && policy.size() != 1) throw fail(503, "COMMAND_UNAVAILABLE");
           if (governance == Operation.CREATE) {
-            if (!(command instanceof Create create)) throw fail(400, "INVALID_COMMAND");
-            if (policy.size() != 1) throw fail(503, "COMMAND_UNAVAILABLE");
-            String enabled =
-                switch (create.provider()) {
-                  case OPENAI -> "openai_enabled";
-                  case ANTHROPIC -> "anthropic_enabled";
-                  case GOOGLE_GEMINI -> "gemini_enabled";
-                };
-            if (!Boolean.TRUE.equals(policy.get(0).get(enabled)))
-              throw fail(409, "PROVIDER_DISABLED");
+            requireProviderEnabled(policy.get(0), ((Create) command).provider());
             Long count =
                 jdbc.queryForObject(
                     "select count(*) from provider_connections where organization_id=?",
@@ -243,6 +239,8 @@ public class ProviderReceiptService {
                     && historical.credentialRevision() == parent.credentialRevision()
                     && historical.createdAt().toInstant().equals(parent.createdAt().toInstant())
                     && historical.updatedAt().toInstant().equals(parent.updatedAt().toInstant()));
+            if (governance == Operation.ENABLE)
+              checkEnable(policy.get(0), parent, (RevisionCommand) command);
           }
           ProviderConnectionService.Connection changed;
           if (command instanceof Create c) {
@@ -373,6 +371,39 @@ public class ProviderReceiptService {
             key);
     require(rows.size() <= 1);
     return rows.isEmpty() ? null : rows.get(0);
+  }
+
+  private static boolean stateCommand(Operation operation) {
+    return operation == Operation.DISABLE || operation == Operation.ENABLE;
+  }
+
+  private static void requireProviderEnabled(Map<String, Object> policy, Provider provider) {
+    String enabled =
+        switch (provider) {
+          case OPENAI -> "openai_enabled";
+          case ANTHROPIC -> "anthropic_enabled";
+          case GOOGLE_GEMINI -> "gemini_enabled";
+        };
+    if (!Boolean.TRUE.equals(policy.get(enabled))) throw fail(409, "PROVIDER_DISABLED");
+  }
+
+  private void checkEnable(
+      Map<String, Object> policy, Configuration parent, RevisionCommand command) {
+    if (command.expectedRevision() < 1) throw fail(400, "INVALID_COMMAND");
+    if (parent.revision() != command.expectedRevision()) throw fail(409, "REVISION_CONFLICT");
+    if ("ENABLED".equals(parent.state())) throw fail(409, "NO_CHANGE");
+    if (parent.revision() == Long.MAX_VALUE) throw fail(409, "REVISION_EXHAUSTED");
+    requireProviderEnabled(policy, parent.provider());
+    // Publication locks the parent before changing credential evidence. Read the same
+    // scoped evidence as List in a fresh statement after taking that lock.
+    Boolean available =
+        jdbc.queryForObject(
+            "select agentos_list_read.credential_available(?::uuid,?::uuid)",
+            Boolean.class,
+            parent.organizationId(),
+            parent.id());
+    if (available == null) throw unavailable();
+    if (!available) throw fail(409, "CREDENTIAL_UNAVAILABLE");
   }
 
   private Receipt receipt(

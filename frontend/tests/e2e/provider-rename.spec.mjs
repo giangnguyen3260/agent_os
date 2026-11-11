@@ -50,7 +50,12 @@ const failure = code => ({
 async function fixture(
   page,
   enabled = 'true',
-  {disable = 'false', initial = row()} = {},
+  {
+    disable = 'false',
+    enable = 'false',
+    adapterEnabled = false,
+    initial = row(),
+  } = {},
 ) {
   let current = initial;
   const requests = [];
@@ -73,6 +78,7 @@ async function fixture(
       headers: {
         'X-Provider-Rename-Enabled': enabled,
         'X-Provider-Disable-Enabled': disable,
+        'X-Provider-Enable-Enabled': enable,
         'X-Provider-Create-Enabled': 'false',
       },
       json: envelope({
@@ -82,7 +88,7 @@ async function fixture(
           {
             provider: 'OPENAI',
             credentialMode: 'OPENAI_API_KEY',
-            enabled: false,
+            enabled: adapterEnabled,
             optionsSchema: 'EMPTY',
           },
           {
@@ -537,4 +543,136 @@ test('Disable requires a fresh list revision after a known conflict', async ({
     {expectedRevision: '9007199254740993'},
     {expectedRevision: '9007199254740994'},
   ]);
+});
+
+const availableDisabledRow = () => ({
+  ...row(),
+  credentialState: 'PRESENT',
+  credentialMask: '••••••••',
+});
+const enableReceipt = before => {
+  const result = receipt(before, before.name);
+  return {
+    ...result,
+    operation: 'ENABLE',
+    after: {...result.after, state: 'ENABLED'},
+  };
+};
+const enablePath = `**${base}/${target}/enable`;
+const enableAction = page =>
+  page.getByRole('button', {name: 'Bật lại kết nối', exact: true});
+const confirmEnable = page =>
+  page
+    .getByRole('button', {name: 'Xác nhận bật lại kết nối', exact: true})
+    .click();
+
+test('Enable requires a separate capability and confirmation', async ({
+  page,
+}) => {
+  const before = availableDisabledRow();
+  const state = await fixture(page, 'false', {
+    enable: 'true',
+    adapterEnabled: true,
+    initial: before,
+  });
+  const posts = [];
+  await page.route(enablePath, async route => {
+    posts.push(route.request());
+    const result = enableReceipt(before);
+    state.update({...before, ...result.after});
+    await route.fulfill({status: 201, json: envelope(result)});
+  });
+  await enableAction(page).click();
+  await expect(page.getByTestId('provider-enable-review')).toContainText(
+    before.name,
+  );
+  expect(posts).toHaveLength(0);
+  await confirmEnable(page);
+  await expect(page.getByText('Đã bật lại kết nối provider.')).toBeVisible();
+  await expect(page.getByText('Đang bật', {exact: true})).toBeVisible();
+  expect(posts).toHaveLength(1);
+  expect(posts[0].postDataJSON()).toEqual({expectedRevision: before.revision});
+  expect(posts[0].headers()['x-csrf-token']).toBe('fixture-csrf-token');
+});
+
+for (const [label, adapterEnabled, initial] of [
+  ['adapter disabled', false, availableDisabledRow()],
+  ['credential evidence unavailable', true, row()],
+]) {
+  test(`Enable action is blocked with ${label}`, async ({page}) => {
+    await fixture(page, 'false', {enable: 'true', adapterEnabled, initial});
+    await expect(enableAction(page)).toBeDisabled();
+    await expect(page.getByTestId('provider-enable-review')).toHaveCount(0);
+  });
+}
+
+for (const code of ['CREDENTIAL_UNAVAILABLE', 'PROVIDER_DISABLED']) {
+  test(`Enable requires refresh after ${code}`, async ({page}) => {
+    const before = availableDisabledRow();
+    await fixture(page, 'false', {
+      enable: 'true',
+      adapterEnabled: true,
+      initial: before,
+    });
+    let posts = 0;
+    await page.route(enablePath, async route => {
+      posts++;
+      await route.fulfill({status: 409, json: failure(code)});
+    });
+    await enableAction(page).click();
+    await confirmEnable(page);
+    await expect(
+      page.getByRole('button', {name: 'Tải lại kết nối', exact: true}),
+    ).toBeVisible();
+    await expect(page.getByTestId('provider-enable-unknown')).toHaveCount(0);
+    await expect(enableAction(page)).toHaveCount(0);
+    expect(posts).toBe(1);
+  });
+}
+
+test('Enable recovers an uncertain result from its own receipt without repeating the command', async ({
+  page,
+}) => {
+  const before = availableDisabledRow();
+  const state = await fixture(page, 'true', {
+    enable: 'true',
+    adapterEnabled: true,
+    initial: before,
+  });
+  const result = enableReceipt(before);
+  let posts = 0;
+  let lookups = 0;
+  let key;
+  await page.route(enablePath, async route => {
+    posts++;
+    key = route.request().headers()['idempotency-key'];
+    await route.fulfill({
+      status: 201,
+      contentType: 'application/json',
+      body: '{',
+    });
+  });
+  await page.route(`**${base}/receipts/*`, async route => {
+    lookups++;
+    expect(route.request().method()).toBe('GET');
+    expect(new URL(route.request().url()).pathname).toBe(
+      `${base}/receipts/${key}`,
+    );
+    state.update({...before, ...result.after});
+    await route.fulfill({json: envelope({receipt: result})});
+  });
+  await enableAction(page).click();
+  await confirmEnable(page);
+  const unknown = page.getByTestId('provider-enable-unknown');
+  await expect(unknown).toBeVisible();
+  await expect(
+    page.getByRole('button', {name: 'Đổi tên', exact: true}),
+  ).toHaveCount(0);
+  expect(lookups).toBe(0);
+  await unknown
+    .getByRole('button', {name: 'Kiểm tra kết quả', exact: true})
+    .click();
+  await expect(page.getByText('Đã bật lại kết nối provider.')).toBeVisible();
+  expect(posts).toBe(1);
+  expect(lookups).toBe(1);
 });

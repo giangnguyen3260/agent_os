@@ -18,16 +18,19 @@ public class OptionsController {
   private final boolean createEnabled;
   private final boolean renameEnabled;
   private final boolean disableEnabled;
+  private final boolean enableEnabled;
 
   public OptionsController(
       PolicyService policies,
       @Value("${agentos.provider-create.enabled:false}") boolean createEnabled,
       @Value("${agentos.provider-rename.http-enabled:false}") boolean renameEnabled,
-      @Value("${agentos.provider-disable.http-enabled:false}") boolean disableEnabled) {
+      @Value("${agentos.provider-disable.http-enabled:false}") boolean disableEnabled,
+      @Value("${agentos.provider-enable.http-enabled:false}") boolean enableEnabled) {
     this.policies = policies;
     this.createEnabled = createEnabled;
     this.renameEnabled = renameEnabled;
     this.disableEnabled = disableEnabled;
+    this.enableEnabled = enableEnabled;
   }
 
   @GetMapping("/api/v1/organizations/{organizationId}/provider-connections/options")
@@ -50,6 +53,7 @@ public class OptionsController {
         .header("X-Provider-Create-Enabled", Boolean.toString(createEnabled))
         .header("X-Provider-Rename-Enabled", Boolean.toString(renameEnabled))
         .header("X-Provider-Disable-Enabled", Boolean.toString(disableEnabled))
+        .header("X-Provider-Enable-Enabled", Boolean.toString(enableEnabled))
         .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
         .body(ApiResponse.ok(result));
   }

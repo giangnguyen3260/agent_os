@@ -106,6 +106,7 @@ public final class ProviderCreateResponses {
       case NO_CHANGE -> conflict("NO_CHANGE");
       case REVISION_EXHAUSTED -> conflict("REVISION_EXHAUSTED");
       case PROVIDER_DISABLED -> conflict("PROVIDER_DISABLED");
+      case CREDENTIAL_UNAVAILABLE -> conflict("CREDENTIAL_UNAVAILABLE");
       case CONNECTION_LIMIT -> conflict("CONNECTION_LIMIT");
       case RATE_LIMITED ->
           failure.retryAfter() >= 1

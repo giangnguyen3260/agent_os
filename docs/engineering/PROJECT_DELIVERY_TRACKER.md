@@ -250,12 +250,25 @@ suites passed 102 cases across desktop, tablet and mobile, including Disable
 confirmation, revision conflict and explicit receipt recovery. The native HTTP
 fixture uses PostgreSQL and a command-only Vault token and awaits CI execution.
 
+The internal Enable command requires a current enabled adapter and a positive
+result from the installed PostgreSQL credential-evidence function. The evidence
+read occurs after the locked connection revision and state checks. Missing or
+expired evidence denies the new command. A committed historical receipt can
+still replay after authority revalidation. Enable HTTP and UI use a separate
+opt-in capability. The UI shows the blocked reason when the adapter or credential
+is unavailable and offers explicit receipt recovery after an uncertain response.
+Startup verifies the Enable writer can call the installed evidence function.
+
+Local compilation and 47 backend tests passed. Frontend build, lint, formatting
+and 19 receipt validator groups passed. The route-mocked browser suites passed
+120 cases across desktop, tablet and mobile. The native ingress and guarded
+evidence scenarios await PostgreSQL CI.
+
 ## Current next actions
 
 1. Run native PostgreSQL/Vault acceptance for the Disable API.
-2. Implement Enable with locked adapter policy and current credential evidence
-   before exposing its command. Credential rotation and model discovery follow
-   their separate contracts.
+2. Execute the native Enable test with real guarded evidence publication.
+3. Continue credential rotation and model discovery under their separate contracts.
 
 ## PM mandate and continuity
 

@@ -6,9 +6,9 @@ import com.agentos.providertransport.ProviderCreateReceipt.Snapshot;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import java.util.UUID;
 
-/** Historical Disable configuration only; no current health or credential metadata reads. */
+/** Historical state change configuration only; no current health or credential metadata reads. */
 @JsonInclude(JsonInclude.Include.ALWAYS)
-record ProviderDisableReceipt(
+record ProviderStateChangeReceipt(
     UUID organizationId,
     UUID commandId,
     Operation operation,
@@ -18,16 +18,17 @@ record ProviderDisableReceipt(
     Snapshot before,
     Snapshot after,
     UUID checkId) {
-  static ProviderDisableReceipt from(Receipt receipt) {
+  static ProviderStateChangeReceipt from(Receipt receipt, Operation operation) {
+    boolean enabling = operation == Operation.ENABLE;
     if (!ProviderHistoricalConfiguration.validTransition(receipt)
-        || receipt.operation() != Operation.DISABLE
-        || !"ENABLED".equals(receipt.before().state())
-        || !"DISABLED".equals(receipt.after().state())
+        || receipt.operation() != operation
+        || !(enabling ? "DISABLED" : "ENABLED").equals(receipt.before().state())
+        || !(enabling ? "ENABLED" : "DISABLED").equals(receipt.after().state())
         || !receipt.before().name().equals(receipt.after().name())) return null;
-    return new ProviderDisableReceipt(
+    return new ProviderStateChangeReceipt(
         receipt.org(),
         receipt.commandId(),
-        Operation.DISABLE,
+        operation,
         receipt.connectionId(),
         receipt.actorId(),
         ProviderHistoricalConfiguration.time(receipt.recordedAt()),

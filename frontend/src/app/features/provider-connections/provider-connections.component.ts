@@ -48,7 +48,7 @@ export class ProviderConnectionsComponent {
   private readonly completion = signal<{
     org: string;
     actor: string;
-    operation: 'create' | 'rename' | 'disable';
+    operation: 'create' | 'rename' | 'disable' | 'enable';
   } | null>(null);
   readonly completedHere = computed(() => {
     const result = this.completion();
@@ -140,7 +140,9 @@ export class ProviderConnectionsComponent {
     this.refresh.next();
   }
 
-  commandCompleted(operation: 'create' | 'rename' | 'disable'): void {
+  commandCompleted(
+    operation: 'create' | 'rename' | 'disable' | 'enable',
+  ): void {
     const actor = this.auth.user()?.id;
     if (actor)
       this.completion.set({org: this.organization(), actor, operation});

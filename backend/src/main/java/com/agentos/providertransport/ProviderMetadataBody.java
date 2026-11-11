@@ -1,5 +1,7 @@
 package com.agentos.providertransport;
 
+import com.agentos.providercommands.CommandBoundary.Operation;
+import com.agentos.providercommands.CommandBoundary.RevisionCommand;
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonToken;
@@ -10,6 +12,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.UUID;
 
 final class ProviderMetadataBody {
   private static final JsonFactory JSON =
@@ -70,6 +73,19 @@ final class ProviderMetadataBody {
       if (body != null) Arrays.fill(body, (byte) 0);
       if (decoded != null) Arrays.fill(decoded, '\0');
     }
+  }
+
+  static RevisionCommand readRevisionCommand(UUID target, InputStream input, Operation operation) {
+    return read(
+        input,
+        parser -> {
+          if (parser.nextToken() != JsonToken.FIELD_NAME
+              || !"expectedRevision".equals(parser.currentName())
+              || parser.nextToken() != JsonToken.VALUE_STRING) throw invalid();
+          long revision = revision(parser.getText());
+          if (parser.nextToken() != JsonToken.END_OBJECT) throw invalid();
+          return new RevisionCommand(operation, target, revision);
+        });
   }
 
   static long revision(String value) {

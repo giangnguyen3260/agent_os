@@ -5,7 +5,9 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
-/** Header-only Rename validation after current ADMIN and actual session CSRF verification. */
+/**
+ * Header-only metadata command validation after current ADMIN and actual session CSRF verification.
+ */
 public final class ProviderRenameRequest {
   private static final Pattern UUID_WIRE =
       Pattern.compile("[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}");
@@ -21,6 +23,11 @@ public final class ProviderRenameRequest {
   public static UUID validateDisable(
       HttpServletRequest request, String organization, String target, String csrfHeaderName) {
     return validate(request, organization, target, csrfHeaderName, "disable");
+  }
+
+  public static UUID validateEnable(
+      HttpServletRequest request, String organization, String target, String csrfHeaderName) {
+    return validate(request, organization, target, csrfHeaderName, "enable");
   }
 
   private static UUID validate(

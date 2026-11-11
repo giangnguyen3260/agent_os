@@ -3,6 +3,16 @@ package com.agentos.providerpublication;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.agentos.AgentOsApplication;
+import com.agentos.auth.HumanIdentity;
+import com.agentos.providercommands.CommandBoundary;
+import com.agentos.providercommands.CommandBoundary.Operation;
+import com.agentos.providercommands.CommandBoundary.RevisionCommand;
+import com.agentos.providercompletion.ProviderCompletionBoundary;
+import com.agentos.providercompletion.ProviderCompletionBoundary.Code;
+import com.agentos.providercompletion.ProviderCompletionBoundary.LookupState;
+import com.agentos.providercompletion.ProviderCompletionBoundary.WriteState;
+import com.agentos.providerconnections.ProviderConnectionService;
+import com.agentos.providerreceipts.ProviderReceiptService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
@@ -18,6 +28,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.Key;
 import java.security.MessageDigest;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -30,16 +41,22 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import javax.crypto.spec.SecretKeySpec;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
+import org.springframework.aop.framework.ProxyFactory;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.boot.web.servlet.context.ServletWebServerApplicationContext;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.transaction.annotation.AnnotationTransactionAttributeSource;
+import org.springframework.transaction.interceptor.TransactionInterceptor;
 
 /**
  * Native guarded-protocol fixtures, not observer validity. Requires a fresh disposable PostgreSQL
@@ -1682,6 +1699,233 @@ class ProviderPublicationPostgresIT {
             + " where publisher_id=?",
         publication.value().publisherId());
     assertThat(listEvidence(scope)).isFalse();
+  }
+
+  @Test
+  void governedEnableRequiresCurrentPolicyAndRealPublishedCredentialEvidence() throws Exception {
+    var scope = seed();
+    UUID org = scope.organizationId(), target = scope.connectionId(), actorId = UUID.randomUUID();
+    var actor = new HumanIdentity(actorId, actorId + "@example.test", "Enable fixture");
+    update(
+        "insert into public.human_accounts(id,email,display_name,password_hash)"
+            + " values (?,?,'Enable fixture','unused')",
+        actorId,
+        actor.email());
+    update(
+        "insert into public.organization_memberships(account_id,organization_id,role)"
+            + " values (?,?,'ADMIN')",
+        actorId,
+        org);
+    update(
+        """
+        insert into public.provider_connection_events
+          (id,organization_id,connection_id,configuration_revision,credential_revision,
+           kind,provider,mode,name,workspace,state,actor_id,created_at)
+        select ?,organization_id,id,configuration_revision,credential_revision,
+           'CREATE',provider,mode,name,workspace,state,?,created_at
+        from public.provider_connections where organization_id=? and id=?
+        """,
+        UUID.randomUUID(),
+        actorId,
+        org,
+        target);
+    var completion = enableWriter();
+    var commands =
+        new CommandBoundary(
+            new CommandBoundary.Keys() {
+              public String currentVersion() {
+                return "enable-fixture-v1";
+              }
+
+              public Key key(String version) {
+                assertThat(version).isEqualTo("enable-fixture-v1");
+                return new SecretKeySpec(new byte[32], "HmacSHA256");
+              }
+            });
+    var commandScope = new CommandBoundary.Scope(org, actorId);
+    var disable = new RevisionCommand(Operation.DISABLE, target, 1);
+    var enable = new RevisionCommand(Operation.ENABLE, target, 2);
+    var prepared = commands.prepareCurrent(commandScope, enable, null);
+    update(
+        """
+        insert into public.provider_deployment_policy
+          (id,revision,openai_enabled,anthropic_enabled,gemini_enabled,created_at,updated_at)
+        values (1,1,true,true,false,statement_timestamp(),statement_timestamp())
+        """);
+    try {
+      var disabled =
+          completion.executeDisablePrepared(
+              actor,
+              org,
+              UUID.randomUUID(),
+              disable,
+              commands.prepareCurrent(commandScope, disable, null));
+      assertThat(disabled.state()).isEqualTo(WriteState.COMMITTED);
+      assertThat(disabled.result().receipt().after().state()).isEqualTo("DISABLED");
+
+      UUID key = UUID.randomUUID();
+      assertThat(listEvidence(scope)).isFalse();
+      var rejected = completion.executeEnablePrepared(actor, org, key, enable, prepared);
+      assertThat(rejected.state()).isEqualTo(WriteState.REJECTED);
+      assertThat(rejected.failure().code()).isEqualTo(Code.CREDENTIAL_UNAVAILABLE);
+      assertThat(completion.lookupOwn(actor, org, key).state()).isEqualTo(LookupState.ABSENT);
+      assertEnableState(scope, "DISABLED", 2, 2, 1);
+
+      var health = checkedCapture("health", scope, "HEALTH").value();
+      var publication =
+          client("health")
+              .publishHealth(
+                  health.attemptId(), ProviderPublicationClient.HealthOutcome.USABLE, false, null);
+      assertThat(publication.status()).isEqualTo(ProviderPublicationClient.Status.ACCEPTED);
+      assertThat(listEvidence(scope)).isFalse();
+      var preparation = checkedCapture("prepare", scope, "PREPARE").value();
+      assertThat(client("prepare").assertPrepared(preparation.attemptId()).status())
+          .isEqualTo(ProviderPublicationClient.Status.ACCEPTED);
+      assertThat(listEvidence(scope)).isTrue();
+
+      update("update public.provider_deployment_policy set openai_enabled=false where id=1");
+      var policyDenied = completion.executeEnablePrepared(actor, org, key, enable, prepared);
+      assertThat(policyDenied.state()).isEqualTo(WriteState.REJECTED);
+      assertThat(policyDenied.failure().code()).isEqualTo(Code.PROVIDER_DISABLED);
+      assertThat(completion.lookupOwn(actor, org, key).state()).isEqualTo(LookupState.ABSENT);
+      assertEnableState(scope, "DISABLED", 2, 2, 1);
+
+      update("update public.provider_deployment_policy set openai_enabled=true where id=1");
+      var committed = completion.executeEnablePrepared(actor, org, key, enable, prepared);
+      assertThat(committed.state()).isEqualTo(WriteState.COMMITTED);
+      assertThat(committed.result().replayed()).isFalse();
+      var receipt = committed.result().receipt();
+      assertThat(receipt.operation()).isEqualTo(Operation.ENABLE);
+      assertThat(receipt.before().state()).isEqualTo("DISABLED");
+      assertThat(receipt.after().state()).isEqualTo("ENABLED");
+      assertThat(receipt.before().revision()).isEqualTo(2);
+      assertThat(receipt.after().revision()).isEqualTo(3);
+      assertThat(receipt.after().credentialRevision()).isEqualTo(1);
+      assertThat(receipt.after().name()).isEqualTo(receipt.before().name());
+      assertEnableState(scope, "ENABLED", 3, 3, 2);
+
+      update("update public.provider_deployment_policy set openai_enabled=false where id=1");
+      update(
+          "update public.provider_evidence_publishers set publisher_epoch=publisher_epoch+1"
+              + " where publisher_id=?",
+          publication.value().publisherId());
+      assertThat(listEvidence(scope)).isFalse();
+      var replay = completion.executeEnablePrepared(actor, org, key, enable, prepared);
+      assertThat(replay.state()).isEqualTo(WriteState.COMMITTED);
+      assertThat(replay.result().replayed()).isTrue();
+      assertThat(replay.result().receipt()).isEqualTo(receipt);
+      assertEnableState(scope, "ENABLED", 3, 3, 2);
+    } finally {
+      update("delete from public.provider_deployment_policy where id=1");
+    }
+  }
+
+  private ProviderCompletionBoundary enableWriter() throws Exception {
+    String role = login("enable");
+    try (var operator = admin(databaseUrl);
+        var statement = operator.createStatement()) {
+      statement.execute(
+          "create role "
+              + role
+              + " login nosuperuser nocreatedb nocreaterole inherit noreplication nobypassrls"
+              + " password '"
+              + password("web")
+              + "'");
+      createdRoles.add(role);
+      statement.execute("grant agentos_provider_list_evidence to " + role);
+      statement.execute(
+          "grant select on public.organizations,public.organization_memberships,"
+              + "public.human_accounts,public.provider_deployment_policy,public.provider_connections,public.provider_credential_versions,public.provider_connection_events,public.provider_command_receipts"
+              + " to "
+              + role);
+      statement.execute(
+          "grant update(id) on public.organizations,public.human_accounts,"
+              + "public.provider_deployment_policy to "
+              + role);
+      statement.execute("grant update(account_id) on public.organization_memberships to " + role);
+      statement.execute("grant update on public.provider_connections to " + role);
+      statement.execute(
+          "grant insert on public.provider_connection_events,public.provider_command_receipts to "
+              + role);
+    } catch (SQLException failure) {
+      throw safeSqlFailure("Enable writer provisioning failed", failure);
+    }
+    var datasource = new DriverManagerDataSource(databaseUrl, role, password("web"));
+    var jdbc = new JdbcTemplate(datasource);
+    assertThat(jdbc.queryForObject("select current_user", String.class)).isEqualTo(role);
+    for (String privilege : List.of("INSERT", "UPDATE", "DELETE")) {
+      assertThat(
+              jdbc.queryForObject(
+                  "select has_table_privilege(current_user, 'public.provider_credential_versions',"
+                      + " ?)",
+                  Boolean.class,
+                  privilege))
+          .isFalse();
+    }
+    for (String table : List.of("provider_credential_integrity", "provider_credential_health")) {
+      assertThat(
+              jdbc.queryForObject(
+                  "select has_table_privilege(current_user, ?, 'SELECT')",
+                  Boolean.class,
+                  "public." + table))
+          .isFalse();
+    }
+    var manager = new DataSourceTransactionManager(datasource);
+    var attributes = new AnnotationTransactionAttributeSource();
+    var connections = new ProxyFactory(new ProviderConnectionService(jdbc));
+    connections.setProxyTargetClass(true);
+    connections.addAdvice(new TransactionInterceptor(manager, attributes));
+    var receipts =
+        new ProxyFactory(
+            new ProviderReceiptService(jdbc, (ProviderConnectionService) connections.getProxy()));
+    receipts.setProxyTargetClass(true);
+    receipts.addAdvice(new TransactionInterceptor(manager, attributes));
+    return new ProviderCompletionBoundary(
+        manager, jdbc, (ProviderReceiptService) receipts.getProxy());
+  }
+
+  private void assertEnableState(
+      ProviderPublicationClient.Scope scope,
+      String state,
+      long revision,
+      long events,
+      long receipts) {
+    var jdbc =
+        new JdbcTemplate(
+            new DriverManagerDataSource(databaseUrl, required("ADMIN_USER"), password("admin")));
+    assertThat(
+            jdbc.queryForObject(
+                "select state from provider_connections where organization_id=? and id=?",
+                String.class,
+                scope.organizationId(),
+                scope.connectionId()))
+        .isEqualTo(state);
+    assertThat(
+            jdbc.queryForObject(
+                "select configuration_revision from provider_connections where organization_id=?"
+                    + " and id=?",
+                Long.class,
+                scope.organizationId(),
+                scope.connectionId()))
+        .isEqualTo(revision);
+    assertThat(
+            jdbc.queryForObject(
+                "select count(*) from provider_connection_events where organization_id=?",
+                Long.class,
+                scope.organizationId()))
+        .isEqualTo(events);
+    assertThat(
+            jdbc.queryForObject(
+                "select count(*) from provider_command_receipts where organization_id=?",
+                Long.class,
+                scope.organizationId()))
+        .isEqualTo(receipts);
+    assertThat(
+            jdbc.queryForObject(
+                "select count(*) from provider_credential_versions where organization_id=?",
+                Long.class,
+                scope.organizationId()))
+        .isEqualTo(1L);
   }
 
   private boolean listEvidence(ProviderPublicationClient.Scope scope) throws Exception {

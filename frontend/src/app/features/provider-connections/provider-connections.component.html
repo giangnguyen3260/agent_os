@@ -47,6 +47,9 @@
     @if (completedHere() === 'disable') {
       <p role="status">Đã tắt kết nối provider.</p>
     }
+    @if (completedHere() === 'enable') {
+      <p role="status">Đã bật lại kết nối provider.</p>
+    }
     @if (loading()) {
       <p role="status">Đang tải kết nối…</p>
     } @else if (error()) {
@@ -106,6 +109,7 @@
                   [connection]="connection"
                   (renamed)="commandCompleted('rename')"
                   (disabled)="commandCompleted('disable')"
+                  (reenabled)="commandCompleted('enable')"
                   (refreshRequested)="reload()"
                 />
               </div>
