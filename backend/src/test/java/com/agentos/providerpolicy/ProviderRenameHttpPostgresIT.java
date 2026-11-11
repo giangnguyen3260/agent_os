@@ -112,6 +112,23 @@ class ProviderRenameHttpPostgresIT {
     error(anonymous, 401, "UNAUTHORIZED");
     assertThat(anonymous.headers().allValues("set-cookie")).isEmpty();
     login(client, actor);
+    int policyAdded =
+        jdbc.update(
+            "insert into provider_deployment_policy"
+                + " (id,revision,openai_enabled,anthropic_enabled,gemini_enabled,created_at,updated_at)"
+                + " values (1,1,true,false,false,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP) on conflict"
+                + " (id) do nothing");
+    try {
+      var options =
+          send(
+              client,
+              request("/api/v1/organizations/" + org + "/provider-connections/options").GET());
+      assertThat(options.statusCode()).isEqualTo(200);
+      assertThat(options.headers().firstValue("X-Provider-Rename-Enabled")).contains("true");
+      assertThat(options.headers().firstValue("X-Provider-Create-Enabled")).contains("false");
+    } finally {
+      if (policyAdded == 1) jdbc.update("delete from provider_deployment_policy where id=1");
+    }
     var token = csrf(client);
     String header = token.path("headerName").asText(), value = token.path("token").asText();
     String foreign = csrf(client()).path("token").asText();

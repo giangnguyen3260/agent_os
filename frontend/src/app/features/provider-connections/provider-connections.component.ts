@@ -16,12 +16,18 @@ import {
 import {AuthService} from '../../core/auth/auth.service';
 import {uuid} from '../task-dependencies/task-dependencies-validation';
 import {ProviderCreateComponent} from './provider-create.component';
+import {ProviderRenameComponent} from './provider-rename.component';
 import {parseProviderPage, ProviderPage} from './provider-list-wire';
 
 @Component({
   selector: 'app-provider-connections',
   standalone: true,
-  imports: [RouterLink, NgTemplateOutlet, ProviderCreateComponent],
+  imports: [
+    RouterLink,
+    NgTemplateOutlet,
+    ProviderCreateComponent,
+    ProviderRenameComponent,
+  ],
   templateUrl: './provider-connections.component.html',
   styleUrls: [
     '../dashboard/dashboard-page.component.css',
@@ -44,6 +50,17 @@ export class ProviderConnectionsComponent {
   );
   readonly createdHere = computed(() => {
     const scope = this.createdScope();
+    return (
+      scope !== null &&
+      scope.org === this.organization() &&
+      scope.actor === this.auth.user()?.id
+    );
+  });
+  private readonly renamedScope = signal<{org: string; actor: string} | null>(
+    null,
+  );
+  readonly renamedHere = computed(() => {
+    const scope = this.renamedScope();
     return (
       scope !== null &&
       scope.org === this.organization() &&
@@ -75,6 +92,9 @@ export class ProviderConnectionsComponent {
           const notice = this.createdScope();
           if (!notice || org !== notice.org || actor !== notice.actor)
             this.createdScope.set(null);
+          const renamed = this.renamedScope();
+          if (!renamed || org !== renamed.org || actor !== renamed.actor)
+            this.renamedScope.set(null);
           this.organization.set(org ?? '');
           const raw = query.get('page') ?? '0';
           if (!actor) {
@@ -133,7 +153,14 @@ export class ProviderConnectionsComponent {
     this.refresh.next();
   }
 
+  renameCompleted() {
+    const actor = this.auth.user()?.id;
+    if (actor) this.renamedScope.set({org: this.organization(), actor});
+    this.createdScope.set(null);
+    this.reload();
+  }
   createCompleted() {
+    this.renamedScope.set(null);
     const actor = this.auth.user()?.id;
     if (actor) this.createdScope.set({org: this.organization(), actor});
     this.reload();

@@ -156,6 +156,7 @@ abstract class ProviderOptionsHttpFixture {
     assertThat(response.statusCode()).isEqualTo(200);
     assertThat(response.headers().firstValue("Cache-Control")).contains("no-store");
     assertThat(response.headers().firstValue("X-Provider-Create-Enabled")).contains("false");
+    assertThat(response.headers().firstValue("X-Provider-Rename-Enabled")).contains("false");
     var data = json.readTree(response.body()).get("data");
     assertThat(data.size()).isEqualTo(3);
     assertThat(data.get("organizationId").asText()).isEqualTo(org.toString());

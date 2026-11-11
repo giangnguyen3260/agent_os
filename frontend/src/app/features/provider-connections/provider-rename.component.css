@@ -1,0 +1,35 @@
+.provider-rename {
+  border-top: 1px solid var(--border, #d9e0da);
+  margin-block: 1rem;
+  padding-block: 1rem;
+  overflow-wrap: anywhere;
+}
+.provider-rename form,
+.provider-rename label {
+  display: grid;
+  gap: 0.5rem;
+}
+.provider-rename input,
+.provider-rename button {
+  min-height: 2.5rem;
+  max-width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--border, #d9e0da);
+  border-radius: 7px;
+  padding: 0.45rem 0.65rem;
+  font: inherit;
+}
+.provider-rename button {
+  background: #275b39;
+  color: #fff;
+  justify-self: start;
+  margin: 0.25rem 0.5rem 0.25rem 0;
+}
+.provider-rename button:disabled {
+  opacity: 0.6;
+}
+
+.provider-rename input {
+  min-width: 0;
+  width: 100%;
+}
