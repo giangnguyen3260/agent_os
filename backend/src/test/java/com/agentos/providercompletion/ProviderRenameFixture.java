@@ -7,13 +7,16 @@ import com.agentos.provideradmission.ProviderWriteAdmission;
 import com.agentos.providercommands.CommandBoundary;
 import com.agentos.providercommands.CommandBoundary.Create;
 import com.agentos.providercommands.CommandBoundary.CredentialMode;
+import com.agentos.providercommands.CommandBoundary.Operation;
 import com.agentos.providercommands.CommandBoundary.Provider;
 import com.agentos.providercommands.CommandBoundary.Rename;
+import com.agentos.providercommands.CommandBoundary.RevisionCommand;
 import com.agentos.providercompletion.ProviderCompletionBoundary.Code;
 import com.agentos.providercompletion.ProviderCompletionBoundary.LookupState;
 import com.agentos.providercompletion.ProviderCompletionBoundary.WriteState;
 import com.agentos.providerconnections.ProviderConnectionService;
 import com.agentos.providercredentials.CredentialBoundary;
+import com.agentos.providermetadata.ProviderMetadataCoordinator;
 import com.agentos.providerreceipts.ProviderReceiptService;
 import com.agentos.providerrename.ProviderRenameCoordinator;
 import java.security.Key;
@@ -134,6 +137,107 @@ abstract class ProviderRenameFixture {
                 .state())
         .isEqualTo(WriteState.COMMITTED);
     requireAdmission = true;
+  }
+
+  ProviderMetadataCoordinator metadataCoordinator() {
+    return new ProviderMetadataCoordinator(receipts, completion, commands, admission);
+  }
+
+  @Test
+  void disableCommitsOneHistoricalTransitionAndReplaysDespiteCurrentPolicyAndQuota() {
+    jdbc.update("update provider_deployment_policy set openai_enabled=false where id=1");
+    var credentials =
+        jdbc.queryForList(
+            "select * from provider_credential_versions where organization_id=?", org);
+    var metadata = metadataCoordinator();
+    UUID key = UUID.randomUUID();
+    var command = new RevisionCommand(Operation.DISABLE, id, 1);
+    var result = metadata.disable(human, org, key, command);
+    assertThat(result.state()).isEqualTo(WriteState.COMMITTED);
+    var receipt = result.result().receipt();
+    assertThat(receipt.operation()).isEqualTo(Operation.DISABLE);
+    assertThat(receipt.before().state()).isEqualTo("ENABLED");
+    assertThat(receipt.after().state()).isEqualTo("DISABLED");
+    assertThat(receipt.after().revision()).isEqualTo(2);
+    assertThat(receipt.after().credentialRevision())
+        .isEqualTo(receipt.before().credentialRevision());
+    assertThat(receipt.after().name()).isEqualTo(receipt.before().name());
+    assertThat(
+            jdbc.queryForList(
+                "select * from provider_credential_versions where organization_id=?", org))
+        .isEqualTo(credentials);
+    assertThat(completion.lookupOwn(human, org, key).receipt()).isEqualTo(receipt);
+    assertThat(quota()).isEqualTo(1);
+    for (int i = 1; i < 30; i++)
+      assertThat(admission.acquireRename(human, org, UUID.randomUUID())).isTrue();
+    assertThat(metadata.disable(human, org, UUID.randomUUID(), command).failure().code())
+        .isEqualTo(Code.RATE_LIMITED);
+    currentVersion.set("rename-v2");
+    requestedVersions.clear();
+    var replay = metadata.disable(human, org, key, command);
+    assertThat(replay.result().replayed()).isTrue();
+    assertThat(replay.result().receipt()).isEqualTo(receipt);
+    assertThat(requestedVersions).containsExactly("rename-v1");
+    assertThat(quota()).isEqualTo(30);
+    assertThat(count("provider_connection_events")).isEqualTo(2);
+    assertThat(count("provider_command_receipts")).isEqualTo(2);
+    jdbc.update(
+        "update organization_memberships set role='MEMBER' where organization_id=? and"
+            + " account_id=?",
+        org,
+        actor);
+    requestedVersions.clear();
+    assertThat(metadata.disable(human, org, key, command).failure().code())
+        .isEqualTo(Code.FORBIDDEN);
+    assertThat(requestedVersions).isEmpty();
+  }
+
+  @Test
+  void disableRejectsStaleAndNoChangeWithoutWritingAndCannotEnable() {
+    var metadata = metadataCoordinator();
+    UUID key = UUID.randomUUID();
+    assertThat(
+            metadata
+                .disable(human, org, key, new RevisionCommand(Operation.DISABLE, id, 1))
+                .state())
+        .isEqualTo(WriteState.COMMITTED);
+    var snapshot = configuration();
+    assertThat(
+            metadata
+                .disable(
+                    human, org, UUID.randomUUID(), new RevisionCommand(Operation.DISABLE, id, 1))
+                .failure()
+                .code())
+        .isEqualTo(Code.REVISION_CONFLICT);
+    assertThat(
+            metadata
+                .disable(
+                    human, org, UUID.randomUUID(), new RevisionCommand(Operation.DISABLE, id, 2))
+                .failure()
+                .code())
+        .isEqualTo(Code.NO_CHANGE);
+    var createDigest = receipts.probeOwn(human, org, createKey).metadata();
+    assertThat(
+            completion
+                .executeDisablePrepared(
+                    human,
+                    org,
+                    createKey,
+                    new RevisionCommand(Operation.DISABLE, id, 2),
+                    createDigest)
+                .failure()
+                .code())
+        .isEqualTo(Code.IDEMPOTENCY_CONFLICT);
+    var enable = new RevisionCommand(Operation.ENABLE, id, 2);
+    assertThat(metadata.disable(human, org, UUID.randomUUID(), enable).failure().code())
+        .isEqualTo(Code.INVALID_COMMAND);
+    var digest = commands.prepareCurrent(new CommandBoundary.Scope(org, actor), enable, null);
+    assertThat(completion.executeDisablePrepared(human, org, key, enable, digest).failure().code())
+        .isEqualTo(Code.INVALID_COMMAND);
+    assertThat(configuration()).isEqualTo(snapshot);
+    assertThat(quota()).isEqualTo(3);
+    assertThat(count("provider_connection_events")).isEqualTo(2);
+    assertThat(count("provider_command_receipts")).isEqualTo(2);
   }
 
   static void outside() {

@@ -223,18 +223,28 @@ remains running; do not infer all seven workflows green from targeted acceptance
 The final documentation-only checkpoint preserves this tested implementation/run
 identity. No merge/deployment or Rename UI acceptance is established.
 
+## Provider lifecycle checkpoint — 11 November 2026
+
+[Draft PR77](https://github.com/giangnguyen3260/agent_os/pull/77) completed Rename UI
+review and explicit own-receipt recovery. All seven workflows passed at `7f28644f`.
+The real browser fixture verified persistence and recovery from a malformed
+response after commit, with the stored credential preserved.
+
+The next slice adds internal governed Disable execution. Rename and Disable
+share the same durable write quota and historical HMAC preparation flow.
+Disable records one configuration revision and one historical transition receipt
+with its event in the same transaction. Adapter policy can be off. The governed
+entry point refuses Enable, which requires a separate current credential-evidence
+gate. Disable HTTP, its public receipt projection and UI remain subsequent work.
+
 ## Current next three actions
 
-1. Review matching corrected-head Quality/Docker completion for PR76 and record
-   exact results; the native backend/managed acceptance above already passes.
-2. Freeze the bounded Rename UI: explicit capability discovery (proposed
-   X-Provider-Rename-Enabled header, not implemented), selected current revision,
-   normalized name edit and before/after review; allow disabled adapters/connections.
-3. Implement strict Rename historical receipt validation and scoped states for
-   NO_CHANGE/stale/429/authority loss/UNKNOWN. Explicit own GET or permitted exact
-   metadata resend retains reviewed body/key; changed revision/name requires new
-   review/key. Verify responsive browser contracts and one persisted real Rename.
-   Overall lifecycle/runtime, merge and deployment remain open.
+1. Verify internal Disable admission, replay and rollback in H2/PostgreSQL CI.
+2. Expose Disable through the authenticated write boundary and a scoped public
+   receipt projector, then add confirmation and receipt recovery in the UI.
+3. Implement Enable with locked adapter policy and current credential evidence
+   before exposing its command. Credential rotation and model discovery follow
+   their separate contracts.
 
 ## PM mandate and continuity
 

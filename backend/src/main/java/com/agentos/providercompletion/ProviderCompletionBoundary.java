@@ -5,6 +5,7 @@ import com.agentos.providercommands.CommandBoundary.Command;
 import com.agentos.providercommands.CommandBoundary.Metadata;
 import com.agentos.providercommands.CommandBoundary.Operation;
 import com.agentos.providercommands.CommandBoundary.Rename;
+import com.agentos.providercommands.CommandBoundary.RevisionCommand;
 import com.agentos.providercredentials.CredentialBoundary;
 import com.agentos.providerreceipts.ProviderReceiptFailure;
 import com.agentos.providerreceipts.ProviderReceiptService;
@@ -184,6 +185,11 @@ public final class ProviderCompletionBoundary {
     return executeWrite(actor, org, key, command, prepared, null, null, Operation.RENAME);
   }
 
+  public WriteOutcome executeDisablePrepared(
+      HumanIdentity actor, UUID org, UUID key, RevisionCommand command, Metadata prepared) {
+    return executeWrite(actor, org, key, command, prepared, null, null, Operation.DISABLE);
+  }
+
   private WriteOutcome executeWrite(
       HumanIdentity actor,
       UUID org,
@@ -207,6 +213,9 @@ public final class ProviderCompletionBoundary {
                 actor, org, key, command, prepared, createId, credential);
       } else if (governance == Operation.RENAME) {
         result = receipts.executeRenameGoverned(actor, org, key, (Rename) command, prepared);
+      } else if (governance == Operation.DISABLE) {
+        result =
+            receipts.executeDisableGoverned(actor, org, key, (RevisionCommand) command, prepared);
       } else {
         result = receipts.execute(actor, org, key, command, prepared, createId, credential);
       }

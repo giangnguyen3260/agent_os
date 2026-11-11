@@ -3,8 +3,10 @@ package com.agentos.providercompletion;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.agentos.provideradmission.ProviderWriteAdmission;
+import com.agentos.providercommands.CommandBoundary.Operation;
 import com.agentos.providercommands.CommandBoundary.Provider;
 import com.agentos.providercommands.CommandBoundary.Rename;
+import com.agentos.providercommands.CommandBoundary.RevisionCommand;
 import com.agentos.providercompletion.ProviderCompletionBoundary.Code;
 import com.agentos.providercompletion.ProviderCompletionBoundary.WriteOutcome;
 import com.agentos.providercompletion.ProviderCompletionBoundary.WriteState;
@@ -162,6 +164,34 @@ class ProviderRenamePostgresIT extends ProviderRenameFixture {
     assertThat(quota()).isEqualTo(3);
     assertThat(count("provider_connection_events")).isEqualTo(2);
     assertThat(count("provider_command_receipts")).isEqualTo(2);
+  }
+
+  @Test
+  void disableReceiptFailureRollsBackStateAndEvent() {
+    var original = configuration();
+    var metadata = metadataCoordinator();
+    var command = new RevisionCommand(Operation.DISABLE, id, 1);
+    String constraint = "disable_fixture_" + UUID.randomUUID().toString().replace("-", "");
+    jdbc.execute(
+        "alter table provider_command_receipts add constraint "
+            + constraint
+            + " check (organization_id <> '"
+            + org
+            + "'::uuid or operation <> 'DISABLE')");
+    UUID key = UUID.randomUUID();
+    try {
+      var result = metadata.disable(human, org, key, command);
+      assertThat(result.state()).isEqualTo(WriteState.REJECTED);
+      assertThat(result.failure().code()).isEqualTo(Code.RECEIPT_UNAVAILABLE);
+      assertThat(configuration()).isEqualTo(original);
+      assertThat(count("provider_connection_events")).isEqualTo(1);
+      assertThat(completion.lookupOwn(human, org, key).state())
+          .isEqualTo(ProviderCompletionBoundary.LookupState.ABSENT);
+      assertThat(quota()).isEqualTo(1);
+    } finally {
+      jdbc.execute("alter table provider_command_receipts drop constraint " + constraint);
+    }
+    assertThat(metadata.disable(human, org, key, command).state()).isEqualTo(WriteState.COMMITTED);
   }
 
   private int quotaAttempt(ProviderWriteAdmission bucket, boolean create) {
