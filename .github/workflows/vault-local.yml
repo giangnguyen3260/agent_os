@@ -11,6 +11,7 @@ on:
       - backend/src/main/java/com/agentos/providercreation/**
       - backend/src/main/java/com/agentos/provideradmission/**
       - backend/src/main/java/com/agentos/providerrename/**
+      - backend/src/main/java/com/agentos/providermetadata/**
       - backend/src/main/java/com/agentos/providerreceipts/**
       - backend/src/main/java/com/agentos/providertransport/**
       - backend/src/main/java/com/agentos/providerpolicy/**

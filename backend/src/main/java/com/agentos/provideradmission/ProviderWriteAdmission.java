@@ -41,6 +41,10 @@ public final class ProviderWriteAdmission {
   }
 
   public boolean acquireRename(HumanIdentity actor, UUID org, UUID key) {
+    return acquireMetadata(actor, org, key);
+  }
+
+  public boolean acquireMetadata(HumanIdentity actor, UUID org, UUID key) {
     return acquire(actor, org, key, null, false);
   }
 

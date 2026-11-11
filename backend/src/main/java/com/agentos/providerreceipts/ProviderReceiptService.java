@@ -146,6 +146,11 @@ public class ProviderReceiptService {
     return executeInternal(actor, org, key, command, prepared, null, null, Operation.RENAME);
   }
 
+  public Result executeDisableGoverned(
+      HumanIdentity actor, UUID org, UUID key, RevisionCommand command, Metadata prepared) {
+    return executeInternal(actor, org, key, command, prepared, null, null, Operation.DISABLE);
+  }
+
   private Result executeInternal(
       HumanIdentity actor,
       UUID org,
@@ -158,20 +163,25 @@ public class ProviderReceiptService {
     return safe(
         () -> {
           var policy = authority(actor, org, true, governance != null);
-          if (command == null || command instanceof CredentialCommand)
+          if (command == null
+              || command instanceof CredentialCommand
+              || (governance == Operation.DISABLE && command.operation() != Operation.DISABLE))
             throw fail(400, "INVALID_COMMAND");
           validKey(key);
           if (prepared == null) throw fail(400, "INVALID_PREPARATION");
           Probe stored = own(org, actor.id(), key);
           if (stored != null) {
+            if (governance == Operation.DISABLE
+                && stored.result().receipt().operation() != Operation.DISABLE)
+              throw fail(409, "IDEMPOTENCY_CONFLICT");
             if (!stored.metadata().keyVersion().equals(prepared.keyVersion()))
               throw fail(409, "PREPARATION_REQUIRED");
             if (CommandBoundary.compare(prepared, stored.metadata()) != Comparison.MATCH)
               throw fail(409, "IDEMPOTENCY_CONFLICT");
             return stored.result();
           }
-          if (governance == Operation.RENAME && policy.size() != 1)
-            throw fail(503, "COMMAND_UNAVAILABLE");
+          if ((governance == Operation.RENAME || governance == Operation.DISABLE)
+              && policy.size() != 1) throw fail(503, "COMMAND_UNAVAILABLE");
           if (governance == Operation.CREATE) {
             if (!(command instanceof Create create)) throw fail(400, "INVALID_COMMAND");
             if (policy.size() != 1) throw fail(503, "COMMAND_UNAVAILABLE");

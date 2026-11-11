@@ -5,6 +5,7 @@ on:
       - 'backend/src/main/java/com/agentos/providercreation/**'
       - 'backend/src/main/java/com/agentos/provideradmission/**'
       - 'backend/src/main/java/com/agentos/providerrename/**'
+      - 'backend/src/main/java/com/agentos/providermetadata/**'
       - 'backend/src/main/java/com/agentos/providervault/ProviderRenameVaultConfiguration.java'
       - 'backend/src/main/java/com/agentos/providervault/ProviderCommandRuntime.java'
       - 'backend/src/main/java/com/agentos/providervault/ProviderVaultConfiguration.java'
