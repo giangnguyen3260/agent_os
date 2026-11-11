@@ -16,12 +16,15 @@ import org.springframework.web.bind.annotation.RestController;
 public class OptionsController {
   private final PolicyService policies;
   private final boolean createEnabled;
+  private final boolean renameEnabled;
 
   public OptionsController(
       PolicyService policies,
-      @Value("${agentos.provider-create.enabled:false}") boolean createEnabled) {
+      @Value("${agentos.provider-create.enabled:false}") boolean createEnabled,
+      @Value("${agentos.provider-rename.http-enabled:false}") boolean renameEnabled) {
     this.policies = policies;
     this.createEnabled = createEnabled;
+    this.renameEnabled = renameEnabled;
   }
 
   @GetMapping("/api/v1/organizations/{organizationId}/provider-connections/options")
@@ -42,6 +45,7 @@ public class OptionsController {
     return ResponseEntity.ok()
         .header("Cache-Control", "no-store")
         .header("X-Provider-Create-Enabled", Boolean.toString(createEnabled))
+        .header("X-Provider-Rename-Enabled", Boolean.toString(renameEnabled))
         .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
         .body(ApiResponse.ok(result));
   }

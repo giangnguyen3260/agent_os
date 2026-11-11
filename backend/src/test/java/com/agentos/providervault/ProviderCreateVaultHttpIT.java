@@ -2,11 +2,15 @@ package com.agentos.providervault;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.agentos.auth.HumanIdentity;
+import com.agentos.providercompletion.ProviderCompletionBoundary.WriteState;
+import com.agentos.providercreation.ProviderCreateCoordinator;
 import com.agentos.providercredentials.CredentialBoundary;
 import com.agentos.providercredentials.CredentialBoundary.Provider;
 import com.agentos.providercredentials.CredentialBoundary.Reference;
 import com.agentos.providercredentials.CredentialBoundary.Scope;
 import com.agentos.providerpreparation.ProviderPreparationJournal;
+import com.agentos.providertransport.ProviderCreateBody;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.EOFException;
 import java.io.IOException;
@@ -24,6 +28,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.KeyStore;
+import java.security.MessageDigest;
 import java.security.cert.CertificateFactory;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -55,7 +60,12 @@ import org.springframework.test.context.DynamicPropertySource;
 /** Disposable browser, real HTTP/session, PostgreSQL and TLS Vault acceptance. */
 @SpringBootTest(
     webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-    properties = {"agentos.provider-create.enabled=true", "agentos.provider-list.enabled=true"})
+    properties = {
+      "agentos.provider-create.enabled=true",
+      "agentos.provider-list.enabled=true",
+      "agentos.provider-rename.enabled=true",
+      "agentos.provider-rename.http-enabled=true"
+    })
 @ActiveProfiles("test")
 @Import(ProviderCreateVaultHttpIT.UploadReadContinue.class)
 @EnabledIfEnvironmentVariable(named = "AGENTOS_TEST_VAULT_URL", matches = "https://.*")
@@ -80,6 +90,7 @@ class ProviderCreateVaultHttpIT {
   private final JdbcTemplate jdbc = administrator();
   @Autowired PasswordEncoder passwords;
   @Autowired ObjectMapper json;
+  @Autowired ProviderCreateCoordinator creates;
 
   @DynamicPropertySource
   static void configuration(DynamicPropertyRegistry properties) {
@@ -103,6 +114,18 @@ class ProviderCreateVaultHttpIT {
         "agentos.provider-vault.hmac-token-file", () -> required("AGENTOS_TEST_HMAC_TOKEN_FILE"));
     properties.add("agentos.provider-vault.credential-key-version", () -> "2");
     properties.add("agentos.provider-vault.command-key-version", () -> "1");
+    properties.add("agentos.provider-rename.url", () -> required("AGENTOS_TEST_VAULT_URL"));
+    properties.add("agentos.provider-rename.mount", () -> "agentos");
+    properties.add("agentos.provider-rename.ca-file", () -> required("AGENTOS_TEST_VAULT_CA"));
+    properties.add(
+        "agentos.provider-rename.command-token-file",
+        () -> required("AGENTOS_TEST_RENAME_COMMAND_TOKEN_FILE"));
+    properties.add("agentos.provider-rename.command-key-version", () -> "1");
+    properties.add(
+        "agentos.provider-rename.writer-jdbc-url", () -> required("AGENTOS_TEST_JOURNAL_URL"));
+    properties.add("agentos.provider-rename.writer-username", () -> "vault_browser_writer");
+    properties.add(
+        "agentos.provider-rename.writer-password-file", () -> writerPasswordFile.toString());
   }
 
   @Test
@@ -272,6 +295,204 @@ class ProviderCreateVaultHttpIT {
             .as("no browser credential in public DB rows")
             .isFalse();
       }
+    }
+  }
+
+  @Test
+  void browserRenamesAndRecoversMalformedReplyWithoutChangingTheStoredCredential()
+      throws Exception {
+    UUID org = UUID.randomUUID(), actor = UUID.randomUUID();
+    String email = actor + "@example.test";
+    jdbc.update(
+        "insert into organizations(id,name,slug,status,created_at,updated_at) values"
+            + " (?,'Rename browser',?,'ACTIVE',current_timestamp,current_timestamp)",
+        org,
+        org.toString());
+    jdbc.update(
+        "insert into human_accounts(id,email,display_name,password_hash) values (?,?,'Rename"
+            + " browser',?)",
+        actor,
+        email,
+        passwords.encode(PASSWORD));
+    jdbc.update(
+        "insert into organization_memberships(account_id,organization_id,role) values"
+            + " (?,?,'ADMIN')",
+        actor,
+        org);
+    String input =
+        "{\"provider\":\"OPENAI\",\"credentialMode\":\"OPENAI_API_KEY\","
+            + "\"name\":\"Live Rename before\",\"options\":{},\"apiKey\":\""
+            + SECRET
+            + "\"}";
+    UUID connection;
+    try (var body = ProviderCreateBody.consume(input.getBytes(StandardCharsets.UTF_8))) {
+      var seeded =
+          creates.create(
+              new HumanIdentity(actor, email, "Rename browser", 0), org, UUID.randomUUID(), body);
+      assertThat(seeded.state()).isEqualTo(WriteState.COMMITTED);
+      connection = seeded.result().receipt().connectionId();
+    }
+    var original =
+        jdbc.queryForMap(
+            "select external_locator,external_key_version,hmac_key_version,verifier from"
+                + " provider_credential_versions where organization_id=? and connection_id=?",
+            org,
+            connection);
+    byte[] credentialBefore = credentialFingerprint(org, connection);
+
+    runRenameBrowser(org, actor, connection);
+
+    var current =
+        jdbc.queryForMap(
+            "select name,configuration_revision,credential_revision,provider,mode,state from"
+                + " provider_connections where organization_id=? and id=?",
+            org,
+            connection);
+    assertThat(current.get("name")).isEqualTo("Live Rename recovered");
+    assertThat(((Number) current.get("configuration_revision")).longValue()).isEqualTo(3);
+    assertThat(((Number) current.get("credential_revision")).longValue()).isEqualTo(1);
+    assertThat(current.get("provider")).isEqualTo("OPENAI");
+    assertThat(current.get("mode")).isEqualTo("OPENAI_API_KEY");
+    assertThat(current.get("state")).isEqualTo("ENABLED");
+    assertThat(Arrays.equals(credentialBefore, credentialFingerprint(org, connection))).isTrue();
+    for (String table :
+        new String[] {
+          "provider_connections", "provider_credential_versions", "provider_secret_preparations"
+        }) {
+      assertThat(
+              jdbc.queryForObject(
+                  "select count(*) from " + table + " where organization_id=?", Long.class, org))
+          .isEqualTo(1L);
+    }
+    for (String table : new String[] {"provider_command_receipts", "provider_connection_events"}) {
+      assertThat(
+              jdbc.queryForObject(
+                  "select count(*) from " + table + " where organization_id=?", Long.class, org))
+          .isEqualTo(3L);
+    }
+    assertThat(
+            jdbc.queryForObject(
+                "select count(*) from provider_command_receipts where organization_id=? and"
+                    + " actor_id=? and connection_id=? and operation='RENAME' and key_version='1'",
+                Long.class,
+                org,
+                actor,
+                connection))
+        .isEqualTo(2L);
+    assertThat(
+            jdbc.queryForList(
+                "select name from provider_connection_events where organization_id=? and"
+                    + " connection_id=? order by configuration_revision",
+                String.class,
+                org,
+                connection))
+        .containsExactly("Live Rename before", "Live Rename confirmed", "Live Rename recovered");
+    var scope = new Scope(org, connection, Provider.OPENAI, 1);
+    readBack(
+        scope,
+        new Reference(
+            scope,
+            (String) original.get("external_locator"),
+            (String) original.get("external_key_version")),
+        (String) original.get("hmac_key_version"),
+        (String) original.get("verifier"));
+  }
+
+  private byte[] credentialFingerprint(UUID org, UUID connection) throws Exception {
+    String stored =
+        jdbc.queryForObject(
+            "select to_jsonb(v)::text from provider_credential_versions v where organization_id=?"
+                + " and connection_id=?",
+            String.class,
+            org,
+            connection);
+    return MessageDigest.getInstance("SHA-256").digest(stored.getBytes(StandardCharsets.UTF_8));
+  }
+
+  private void runRenameBrowser(UUID org, UUID actor, UUID connection) throws Exception {
+    Path frontend = Path.of(System.getProperty("user.dir")).toAbsolutePath().resolve("frontend");
+    if (!Files.isDirectory(frontend))
+      frontend = frontend.getParent().getParent().resolve("frontend");
+    assertThat(Files.isRegularFile(frontend.resolve("dist/agentos-frontend/browser/index.html")))
+        .isTrue();
+    int proxyPort;
+    try (var available = new ServerSocket(0)) {
+      proxyPort = available.getLocalPort();
+    }
+    String base = "http://127.0.0.1:" + proxyPort;
+    var serverCommand = new ProcessBuilder("node", "scripts/provider-vault-server.mjs");
+    serverCommand.directory(frontend.toFile());
+    serverCommand.environment().put("PORT", Integer.toString(proxyPort));
+    serverCommand.environment().put("BACKEND_URL", "http://127.0.0.1:" + port);
+    serverCommand.environment().put("DROP_RENAME_RESPONSE", "second");
+    serverCommand.redirectOutput(ProcessBuilder.Redirect.DISCARD);
+    serverCommand.redirectError(ProcessBuilder.Redirect.DISCARD);
+    var server = serverCommand.start();
+    try {
+      awaitProxy(server, base);
+      var command =
+          new ProcessBuilder(
+              "node",
+              "node_modules/@playwright/test/cli.js",
+              "test",
+              "tests/e2e/provider-rename-live.spec.mjs",
+              "--project",
+              "desktop",
+              "--workers",
+              "1",
+              "--retries",
+              "0",
+              "--reporter",
+              "line");
+      command.directory(frontend.toFile());
+      command.environment().put("E2E_BASE_URL", base);
+      command.environment().put("PROVIDER_RENAME_VAULT_LIVE", "true");
+      command.environment().put("PROVIDER_VAULT_ORG", org.toString());
+      command.environment().put("PROVIDER_VAULT_EMAIL", actor + "@example.test");
+      command.environment().put("PROVIDER_VAULT_PASSWORD", PASSWORD);
+      command.environment().put("PROVIDER_RENAME_CONNECTION", connection.toString());
+      // Rename browser receives metadata identifiers only, never the provider credential.
+      Path diagnostics =
+          Files.createTempFile(
+              "provider-rename-browser-",
+              ".log",
+              java.nio.file.attribute.PosixFilePermissions.asFileAttribute(
+                  java.nio.file.attribute.PosixFilePermissions.fromString("rw-------")));
+      command.redirectOutput(diagnostics.toFile());
+      command.redirectErrorStream(true);
+      var browser = command.start();
+      try {
+        assertThat(browser.waitFor(120, TimeUnit.SECONDS))
+            .as("Rename browser completed within budget")
+            .isTrue();
+        if (browser.exitValue() != 0) {
+          String locations =
+              Files.readAllLines(diagnostics).stream()
+                  .filter(line -> line.matches(".*provider-rename-live\\.spec\\.mjs:[0-9]+.*"))
+                  .map(
+                      line ->
+                          line.replaceAll(".*(provider-rename-live\\.spec\\.mjs:[0-9]+).*", "$1"))
+                  .distinct()
+                  .reduce("", (left, right) -> left + " " + right);
+          String numeric =
+              Files.readAllLines(diagnostics).stream()
+                  .filter(
+                      line ->
+                          line.matches(
+                              "PROVIDER_RENAME_LIVE_DIAGNOSTIC posts=[0-9]+ statuses=[0-9,]*"))
+                  .findFirst()
+                  .orElse("");
+          throw new AssertionError(
+              "Rename browser acceptance exit=" + browser.exitValue() + locations + " " + numeric);
+        }
+      } finally {
+        browser.destroyForcibly();
+        browser.waitFor(10, TimeUnit.SECONDS);
+        Files.deleteIfExists(diagnostics);
+      }
+    } finally {
+      server.destroyForcibly();
+      server.waitFor(10, TimeUnit.SECONDS);
     }
   }
 

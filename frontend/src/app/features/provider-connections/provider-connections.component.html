@@ -41,6 +41,9 @@
     @if (createdHere()) {
       <p role="status">Đã tạo kết nối provider.</p>
     }
+    @if (renamedHere()) {
+      <p role="status">Đã đổi tên kết nối provider.</p>
+    }
     @if (loading()) {
       <p role="status">Đang tải kết nối…</p>
     } @else if (error()) {
@@ -95,6 +98,12 @@
                     connection.updatedAt
                   }}</time>
                 </p>
+                <app-provider-rename
+                  [organization]="organization()"
+                  [connection]="connection"
+                  (renamed)="renameCompleted()"
+                  (refreshRequested)="reload()"
+                />
               </div>
             }
           </article>

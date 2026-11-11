@@ -13,6 +13,8 @@ if (!Number.isInteger(port) || port < 1024 || port > 65535) {
   throw new Error('An explicit test proxy port is required');
 }
 let dropCreate = process.env.DROP_CREATE_RESPONSE === 'once';
+const dropSecondRename = process.env.DROP_RENAME_RESPONSE === 'second';
+let renamePosts = 0;
 const types = {
   '.html': 'text/html',
   '.js': 'application/javascript',
@@ -24,11 +26,19 @@ const types = {
 const server = createServer(async (incoming, outgoing) => {
   const path = incoming.url || '/';
   if (path.startsWith('/api/')) {
-    const drop =
+    const createFault =
       dropCreate &&
       incoming.method === 'POST' &&
       /^\/api\/v1\/organizations\/[0-9a-f-]+\/provider-connections$/.test(path);
-    if (drop) dropCreate = false;
+    if (createFault) dropCreate = false;
+    const renameRequest =
+      incoming.method === 'POST' &&
+      /^\/api\/v1\/organizations\/[0-9a-f-]+\/provider-connections\/[0-9a-f-]+\/rename$/.test(
+        path,
+      );
+    if (renameRequest) renamePosts++;
+    const drop =
+      createFault || (dropSecondRename && renameRequest && renamePosts === 2);
     const proxy = upstreamRequest(
       new URL(path, backend),
       {method: incoming.method, headers: incoming.headers},
