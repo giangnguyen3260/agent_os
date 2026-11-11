@@ -15,7 +15,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 
 class ProviderOwnReceiptFeatureTest {
   @Test
-  void controllerRequiresCreateOrPublicRenameAndNeverInternalRenameAlone() {
+  void controllerRequiresAtLeastOnePublicCommand() {
     var datasource = new DriverManagerDataSource();
     var jdbc = new JdbcTemplate(datasource);
     var context =
@@ -36,16 +36,18 @@ class ProviderOwnReceiptFeatureTest {
         });
     for (boolean create : new boolean[] {false, true}) {
       for (boolean renameHttp : new boolean[] {false, true}) {
-        for (boolean internalRename : new boolean[] {false, true}) {
+        for (boolean disableHttp : new boolean[] {false, true}) {
           context
               .withPropertyValues(
                   "agentos.provider-create.enabled=" + create,
                   "agentos.provider-rename.http-enabled=" + renameHttp,
-                  "agentos.provider-rename.enabled=" + internalRename)
+                  "agentos.provider-disable.http-enabled=" + disableHttp,
+                  "agentos.provider-rename.enabled=true",
+                  "agentos.provider-disable.enabled=true")
               .run(
                   running -> {
                     assertThat(running).hasNotFailed();
-                    if (create || renameHttp)
+                    if (create || renameHttp || disableHttp)
                       assertThat(running).hasSingleBean(ProviderCreateReceiptController.class);
                     else assertThat(running).doesNotHaveBean(ProviderCreateReceiptController.class);
                   });
@@ -60,22 +62,25 @@ class ProviderOwnReceiptFeatureTest {
     for (boolean list : new boolean[] {false, true}) {
       for (boolean create : new boolean[] {false, true}) {
         for (boolean rename : new boolean[] {false, true}) {
-          var pattern = OptionsSecurity.paths(list, create, rename);
-          assertThat(pattern.matcher(collection + "/options").matches()).isTrue();
-          assertThat(pattern.matcher(collection).matches()).isEqualTo(list);
-          assertThat(pattern.matcher(collection + "/receipts/" + UUID.randomUUID()).matches())
-              .isEqualTo(create || rename);
-          // Noncanonical keys still enter the guarded chain for its safe validation response.
-          assertThat(pattern.matcher(collection + "/receipts/malformed").matches())
-              .isEqualTo(create || rename);
-          for (String suffix :
-              new String[] {
-                "/receipts/",
-                "/receipts/a/b",
-                "/receipts/a/",
-                "/other",
-                "/" + UUID.randomUUID() + "/rename"
-              }) assertThat(pattern.matcher(collection + suffix).matches()).isFalse();
+          for (boolean disable : new boolean[] {false, true}) {
+            var pattern = OptionsSecurity.paths(list, create, rename, disable);
+            assertThat(pattern.matcher(collection + "/options").matches()).isTrue();
+            assertThat(pattern.matcher(collection).matches()).isEqualTo(list);
+            assertThat(pattern.matcher(collection + "/receipts/" + UUID.randomUUID()).matches())
+                .isEqualTo(create || rename || disable);
+            // Noncanonical keys still enter the guarded chain for its safe validation response.
+            assertThat(pattern.matcher(collection + "/receipts/malformed").matches())
+                .isEqualTo(create || rename || disable);
+            for (String suffix :
+                new String[] {
+                  "/receipts/",
+                  "/receipts/a/b",
+                  "/receipts/a/",
+                  "/other",
+                  "/" + UUID.randomUUID() + "/rename",
+                  "/" + UUID.randomUUID() + "/disable"
+                }) assertThat(pattern.matcher(collection + suffix).matches()).isFalse();
+          }
         }
       }
     }

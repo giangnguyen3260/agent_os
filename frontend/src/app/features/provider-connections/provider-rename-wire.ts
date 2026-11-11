@@ -12,7 +12,17 @@ export interface ReviewedRename {
   name: string;
 }
 
-interface RenameSnapshot {
+export interface ReviewedDisable {
+  connectionId: string;
+  expectedRevision: string;
+  /** The reviewed connection name must remain unchanged. */
+  name: string;
+}
+
+type MetadataOperation = 'RENAME' | 'DISABLE';
+type ReviewedCommand = ReviewedRename | ReviewedDisable;
+
+interface HistoricalSnapshot {
   organizationId: string;
   id: string;
   provider: Provider;
@@ -24,11 +34,6 @@ interface RenameSnapshot {
   credentialRevision: string;
   createdAt: string;
   updatedAt: string;
-}
-
-interface RenameReceipt {
-  before: RenameSnapshot;
-  after: RenameSnapshot;
 }
 
 const maximumRevision = 9223372036854775807n;
@@ -54,7 +59,7 @@ function validSnapshot(
   value: unknown,
   org: string,
   target: string,
-): value is RenameSnapshot {
+): value is HistoricalSnapshot {
   if (
     !exact(
       value,
@@ -95,8 +100,9 @@ function receiptMatches(
   value: unknown,
   org: string,
   actor: string,
-  submitted: ReviewedRename,
-): value is RenameReceipt {
+  submitted: ReviewedCommand,
+  operation: MetadataOperation,
+): boolean {
   if (
     !uuid(org) ||
     !uuid(actor) ||
@@ -111,7 +117,7 @@ function receiptMatches(
     value['actorId'] !== actor ||
     value['connectionId'] !== submitted.connectionId ||
     !uuid(value['commandId']) ||
-    value['operation'] !== 'RENAME' ||
+    value['operation'] !== operation ||
     value['checkId'] !== null ||
     !wireTime(value['committedAt']) ||
     !validSnapshot(value['before'], org, submitted.connectionId) ||
@@ -125,27 +131,30 @@ function receiptMatches(
     BigInt(before.revision) < maximumRevision &&
     BigInt(after.revision) === BigInt(before.revision) + 1n &&
     after.name === submitted.name &&
-    before.name !== after.name &&
     before.provider === after.provider &&
     before.credentialMode === after.credentialMode &&
     (before.options.workspaceId ?? null) ===
       (after.options.workspaceId ?? null) &&
-    before.state === after.state &&
     before.credentialRevision === after.credentialRevision &&
     before.createdAt === after.createdAt &&
     before.createdAt <= before.updatedAt &&
     before.updatedAt <= after.updatedAt &&
-    after.updatedAt <= value['committedAt']
+    after.updatedAt <= value['committedAt'] &&
+    (operation === 'RENAME'
+      ? before.state === after.state && before.name !== after.name
+      : before.state === 'ENABLED' &&
+        after.state === 'DISABLED' &&
+        before.name === after.name)
   );
 }
 
-function data(value: unknown): unknown {
+function data(value: unknown, label: string): unknown {
   if (
     !exact(value, 'data meta') ||
     !exact(value['meta'], 'requestId') ||
     !uuid(value['meta']['requestId'])
   )
-    throw new Error('Invalid Rename response');
+    throw new Error(`Invalid ${label} response`);
   return value['data'];
 }
 
@@ -156,8 +165,45 @@ export function verifyRenamed(
   actor: string,
   submitted: ReviewedRename,
 ): void {
-  if (!receiptMatches(data(value), org, actor, submitted))
+  if (!receiptMatches(data(value, 'Rename'), org, actor, submitted, 'RENAME'))
     throw new Error('Invalid Rename receipt');
+}
+
+/** A Disable receipt confirms the reviewed connection and its unchanged name. */
+export function verifyDisabled(
+  value: unknown,
+  org: string,
+  actor: string,
+  submitted: ReviewedDisable,
+): void {
+  if (!receiptMatches(data(value, 'Disable'), org, actor, submitted, 'DISABLE'))
+    throw new Error('Invalid Disable receipt');
+}
+
+function receiptFound(
+  value: unknown,
+  org: string,
+  actor: string,
+  target: string,
+  expectedCommand: ReviewedCommand,
+  operation: MetadataOperation,
+): boolean {
+  const label = operation === 'RENAME' ? 'Rename' : 'Disable';
+  const lookup = data(value, label);
+  if (
+    !uuid(org) ||
+    !uuid(actor) ||
+    !uuid(target) ||
+    target !== expectedCommand.connectionId ||
+    !exact(lookup, 'receipt')
+  )
+    throw new Error(`Invalid ${label} receipt lookup`);
+  if (lookup['receipt'] === null) return false;
+  if (
+    !receiptMatches(lookup['receipt'], org, actor, expectedCommand, operation)
+  )
+    throw new Error(`Invalid ${label} receipt`);
+  return true;
 }
 
 export function receiptFoundRename(
@@ -167,17 +213,15 @@ export function receiptFoundRename(
   target: string,
   expectedCommand: ReviewedRename,
 ): boolean {
-  const lookup = data(value);
-  if (
-    !uuid(org) ||
-    !uuid(actor) ||
-    !uuid(target) ||
-    target !== expectedCommand.connectionId ||
-    !exact(lookup, 'receipt')
-  )
-    throw new Error('Invalid Rename receipt lookup');
-  if (lookup['receipt'] === null) return false;
-  if (!receiptMatches(lookup['receipt'], org, actor, expectedCommand))
-    throw new Error('Invalid Rename receipt');
-  return true;
+  return receiptFound(value, org, actor, target, expectedCommand, 'RENAME');
+}
+
+export function receiptFoundDisable(
+  value: unknown,
+  org: string,
+  actor: string,
+  target: string,
+  expectedCommand: ReviewedDisable,
+): boolean {
+  return receiptFound(value, org, actor, target, expectedCommand, 'DISABLE');
 }

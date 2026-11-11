@@ -67,6 +67,8 @@ import org.springframework.test.context.DynamicPropertySource;
     properties = {
       "agentos.provider-rename.enabled=true",
       "agentos.provider-rename.http-enabled=true",
+      "agentos.provider-disable.enabled=true",
+      "agentos.provider-disable.http-enabled=true",
       "agentos.provider-create.enabled=false",
       "agentos.provider-list.enabled=false"
     })
@@ -111,16 +113,19 @@ class ProviderRenameVaultIT {
     properties.add("spring.datasource.username", () -> READER);
     properties.add("spring.datasource.password", () -> READER_PASSWORD);
     properties.add("spring.datasource.driver-class-name", () -> "org.postgresql.Driver");
-    properties.add("agentos.provider-rename.url", () -> required("AGENTOS_TEST_VAULT_URL"));
-    properties.add("agentos.provider-rename.mount", () -> "agentos");
-    properties.add("agentos.provider-rename.ca-file", () -> required("AGENTOS_TEST_VAULT_CA"));
-    properties.add("agentos.provider-rename.command-token-file", () -> commandTokenFile.toString());
-    properties.add("agentos.provider-rename.command-key-version", () -> "1");
-    properties.add(
-        "agentos.provider-rename.writer-jdbc-url", () -> required("AGENTOS_TEST_JOURNAL_URL"));
-    properties.add("agentos.provider-rename.writer-username", () -> WRITER);
-    properties.add(
-        "agentos.provider-rename.writer-password-file", () -> writerPasswordFile.toString());
+    configureCommand(properties, "agentos.provider-rename.");
+    configureCommand(properties, "agentos.provider-disable.");
+  }
+
+  private static void configureCommand(DynamicPropertyRegistry properties, String prefix) {
+    properties.add(prefix + "url", () -> required("AGENTOS_TEST_VAULT_URL"));
+    properties.add(prefix + "mount", () -> "agentos");
+    properties.add(prefix + "ca-file", () -> required("AGENTOS_TEST_VAULT_CA"));
+    properties.add(prefix + "command-token-file", () -> commandTokenFile.toString());
+    properties.add(prefix + "command-key-version", () -> "1");
+    properties.add(prefix + "writer-jdbc-url", () -> required("AGENTOS_TEST_JOURNAL_URL"));
+    properties.add(prefix + "writer-username", () -> WRITER);
+    properties.add(prefix + "writer-password-file", () -> writerPasswordFile.toString());
   }
 
   @Test
@@ -463,6 +468,149 @@ class ProviderRenameVaultIT {
         "UNAUTHORIZED");
     assertThat(send(session.client(), request("/api/v1/auth/session").GET()).statusCode())
         .isEqualTo(401);
+  }
+
+  @Test
+  void disableHttpPreservesCredentialsAndReturnsHistoricalReceiptOnlyToItsOwner() throws Exception {
+    var fixture = seedHttpFixture();
+    var session = login(fixture.actor());
+    UUID org = fixture.org();
+    UUID actor = fixture.actor();
+    UUID connection = fixture.connection();
+    String root = "/api/v1/organizations/" + org + "/provider-connections";
+    String path = root + "/" + connection + "/disable";
+    String body = "{\"expectedRevision\":\"1\"}";
+    byte[] retained = fingerprint(org, "provider_credential_versions");
+    byte[] before = businessFingerprint(org);
+    error(send(session.client(), post(path, UUID.randomUUID(), body, null)), 403, "FORBIDDEN");
+    for (String invalid :
+        new String[] {
+          "{malformed",
+          "{\"expectedRevision\":1}",
+          "{\"expectedRevision\":\"1\",\"name\":\"Extra field\"}"
+        }) {
+      error(
+          send(session.client(), post(path, UUID.randomUUID(), invalid, session.csrf())),
+          400,
+          "BAD_REQUEST");
+    }
+    assertThat(Arrays.equals(before, businessFingerprint(org))).isTrue();
+    assertThat(writeAdmissionRows(org)).isZero();
+
+    UUID key = UUID.randomUUID();
+    String receiptPath = root + "/receipts/" + key;
+    var committed = send(session.client(), post(path, key, body, session.csrf()));
+    assertThat(committed.statusCode()).isEqualTo(201);
+    var receipt = data(committed);
+    assertThat(receipt.properties())
+        .extracting(Map.Entry::getKey)
+        .containsExactlyInAnyOrder(
+            "organizationId",
+            "commandId",
+            "operation",
+            "connectionId",
+            "actorId",
+            "committedAt",
+            "before",
+            "after",
+            "checkId");
+    assertThat(receipt.path("operation").asText()).isEqualTo("DISABLE");
+    assertThat(receipt.path("organizationId").asText()).isEqualTo(org.toString());
+    assertThat(receipt.path("connectionId").asText()).isEqualTo(connection.toString());
+    assertThat(receipt.path("actorId").asText()).isEqualTo(actor.toString());
+    assertThat(receipt.path("checkId").isNull()).isTrue();
+    assertThat(receipt.at("/before/state").asText()).isEqualTo("ENABLED");
+    assertThat(receipt.at("/after/state").asText()).isEqualTo("DISABLED");
+    assertThat(receipt.at("/before/revision").asText()).isEqualTo("1");
+    assertThat(receipt.at("/after/revision").asText()).isEqualTo("2");
+    assertThat(receipt.at("/after/credentialRevision").asText()).isEqualTo("1");
+    for (String snapshot : new String[] {"before", "after"}) {
+      assertThat(receipt.path(snapshot).properties())
+          .extracting(Map.Entry::getKey)
+          .containsExactlyInAnyOrder(
+              "organizationId",
+              "id",
+              "provider",
+              "credentialMode",
+              "name",
+              "options",
+              "state",
+              "revision",
+              "credentialRevision",
+              "createdAt",
+              "updatedAt");
+    }
+    for (String field :
+        new String[] {
+          "organizationId",
+          "id",
+          "provider",
+          "credentialMode",
+          "name",
+          "options",
+          "credentialRevision",
+          "createdAt"
+        }) {
+      assertThat(receipt.path("after").path(field)).isEqualTo(receipt.path("before").path(field));
+    }
+    String quotaAfterCommit = samples(org, actor);
+    var replay = send(session.client(), post(path, key, body, session.csrf()));
+    assertThat(replay.statusCode()).isEqualTo(200);
+    assertThat(data(replay)).isEqualTo(receipt);
+    assertThat(samples(org, actor)).isEqualTo(quotaAfterCommit);
+    byte[] committedBusiness = businessFingerprint(org);
+    error(
+        send(session.client(), post(path, UUID.randomUUID(), body, session.csrf())),
+        409,
+        "REVISION_CONFLICT");
+    error(
+        send(
+            session.client(),
+            post(path, UUID.randomUUID(), "{\"expectedRevision\":\"2\"}", session.csrf())),
+        409,
+        "NO_CHANGE");
+    error(
+        send(session.client(), post(path, key, "{\"expectedRevision\":\"2\"}", session.csrf())),
+        409,
+        "IDEMPOTENCY_CONFLICT");
+    assertThat(Arrays.equals(committedBusiness, businessFingerprint(org))).isTrue();
+
+    var later =
+        send(
+            session.client(),
+            post(
+                renamePath(fixture),
+                UUID.randomUUID(),
+                "{\"expectedRevision\":\"2\",\"name\":\"Later disabled connection\"}",
+                session.csrf()));
+    assertThat(later.statusCode()).isEqualTo(201);
+    assertThat(data(later).at("/after/revision").asText()).isEqualTo("3");
+    assertThat(data(later).at("/after/state").asText()).isEqualTo("DISABLED");
+    var historical = send(session.client(), request(receiptPath).GET());
+    assertThat(historical.statusCode()).isEqualTo(200);
+    assertThat(data(historical).path("receipt")).isEqualTo(receipt);
+    var other = login(seedHttpAdmin(org));
+    var hidden = send(other.client(), request(receiptPath).GET());
+    assertThat(hidden.statusCode()).isEqualTo(200);
+    assertThat(data(hidden).path("receipt").isNull()).isTrue();
+    assertThat(Arrays.equals(retained, fingerprint(org, "provider_credential_versions"))).isTrue();
+    assertThat(
+            admin.queryForObject(
+                "select count(*) from provider_secret_preparations where organization_id=?",
+                Long.class,
+                org))
+        .isZero();
+    assertThat(
+            admin.queryForObject(
+                "select count(*) from provider_command_receipts where organization_id=? and"
+                    + " actor_id=? and connection_id=? and idempotency_key=? and"
+                    + " operation='DISABLE' and key_version='1'",
+                Long.class,
+                org,
+                actor,
+                connection,
+                key))
+        .isEqualTo(1L);
   }
 
   @Test

@@ -37,9 +37,8 @@ function load(file) {
   );
   return mod.exports;
 }
-const {verifyRenamed, receiptFoundRename} = load(
-  path.join(directory, 'provider-rename-wire.ts'),
-);
+const {verifyRenamed, receiptFoundRename, verifyDisabled, receiptFoundDisable} =
+  load(path.join(directory, 'provider-rename-wire.ts'));
 const {verifyCreated} = load(path.join(directory, 'provider-create-wire.ts'));
 const org = '11111111-1111-4111-8111-111111111111';
 const actor = '22222222-2222-4222-8222-222222222222';
@@ -384,6 +383,177 @@ test('Rename and Create validators remain operation-specific', () => {
       provider: 'OPENAI',
       name: submitted.name,
       workspaceId: null,
+    }),
+  );
+});
+
+const reviewedDisable = {...submitted, name: 'Old name'};
+function disableFixture(provider = 'OPENAI', workspace = null) {
+  const value = fixture(provider, 'ENABLED', workspace);
+  value.data.operation = 'DISABLE';
+  value.data.after.state = 'DISABLED';
+  value.data.after.name = value.data.before.name;
+  return value;
+}
+
+test('Disable confirms the reviewed transition for each provider and exact int64 revisions', () => {
+  for (const [provider, workspace] of [
+    ['OPENAI', null],
+    ['GOOGLE_GEMINI', null],
+    ['ANTHROPIC', null],
+    ['ANTHROPIC', 'wrkspc_Reviewed1'],
+  ]) {
+    const value = disableFixture(provider, workspace);
+    verifyDisabled(value, org, actor, reviewedDisable);
+    assert.equal(
+      receiptFoundDisable(lookup(value), org, actor, target, reviewedDisable),
+      true,
+    );
+  }
+  const max = disableFixture();
+  max.data.before.revision = '9223372036854775806';
+  max.data.after.revision = '9223372036854775807';
+  verifyDisabled(max, org, actor, {
+    ...reviewedDisable,
+    expectedRevision: max.data.before.revision,
+  });
+});
+
+test('Disable rejects unchanged or reversed state and any name change', () => {
+  for (const [before, after] of [
+    ['ENABLED', 'ENABLED'],
+    ['DISABLED', 'DISABLED'],
+    ['DISABLED', 'ENABLED'],
+  ]) {
+    const value = disableFixture();
+    value.data.before.state = before;
+    value.data.after.state = after;
+    assert.throws(
+      () => verifyDisabled(value, org, actor, reviewedDisable),
+      /Invalid Disable receipt/,
+    );
+  }
+  for (const side of ['before', 'after']) {
+    const value = disableFixture();
+    value.data[side].name = 'Changed name';
+    assert.throws(
+      () => verifyDisabled(value, org, actor, reviewedDisable),
+      /Invalid Disable receipt/,
+    );
+  }
+  const both = disableFixture();
+  both.data.before.name = 'Other valid name';
+  both.data.after.name = 'Other valid name';
+  assert.throws(
+    () => verifyDisabled(both, org, actor, reviewedDisable),
+    /Invalid Disable receipt/,
+  );
+});
+
+test('Disable keeps operation, scope, immutable fields, adjacency and microsecond chronology strict', () => {
+  for (const mutate of [
+    value => {
+      value.data.operation = 'ENABLE';
+    },
+    value => {
+      value.data.operation = 'RENAME';
+    },
+    value => {
+      value.data.actorId = foreign;
+    },
+    value => {
+      value.data.organizationId = foreign;
+    },
+    value => {
+      value.data.connectionId = foreign;
+    },
+    value => {
+      value.data.before.id = foreign;
+    },
+    value => {
+      value.data.after.organizationId = foreign;
+    },
+    value => {
+      value.data.after.credentialRevision = '4';
+    },
+    value => {
+      value.data.after.revision = '9';
+    },
+    value => {
+      value.data.after.revision = 8;
+    },
+    value => {
+      value.data.after.updatedAt = '2026-11-10T01:02:03.000001Z';
+    },
+    value => {
+      value.data.committedAt = '2026-11-10T01:02:03.000002Z';
+    },
+    value => {
+      value.data.after.options = {secret: 'synthetic'};
+    },
+    value => {
+      value.data.before.externalLocator = 'synthetic';
+    },
+  ]) {
+    const value = disableFixture();
+    mutate(value);
+    assert.throws(
+      () => verifyDisabled(value, org, actor, reviewedDisable),
+      /Invalid Disable receipt/,
+    );
+  }
+  assert.throws(() =>
+    verifyDisabled(disableFixture(), org, actor, {
+      ...reviewedDisable,
+      expectedRevision: '6',
+    }),
+  );
+  assert.throws(
+    () => verifyRenamed(disableFixture(), org, actor, reviewedDisable),
+    /Invalid Rename receipt/,
+  );
+});
+
+test('Disable lookup distinguishes explicit absence and binds every found receipt to the review', () => {
+  const absent = {data: {receipt: null}, meta: {requestId: foreign}};
+  assert.equal(
+    receiptFoundDisable(absent, org, actor, target, reviewedDisable),
+    false,
+  );
+  assert.throws(() =>
+    receiptFoundDisable(
+      {...absent, data: {}},
+      org,
+      actor,
+      target,
+      reviewedDisable,
+    ),
+  );
+  assert.throws(() =>
+    receiptFoundDisable(
+      lookup(disableFixture()),
+      org,
+      actor,
+      foreign,
+      reviewedDisable,
+    ),
+  );
+  assert.throws(() =>
+    receiptFoundDisable(
+      lookup(disableFixture()),
+      org,
+      foreign,
+      target,
+      reviewedDisable,
+    ),
+  );
+  assert.throws(() =>
+    receiptFoundDisable(lookup(fixture()), org, actor, target, reviewedDisable),
+  );
+  assert.throws(() =>
+    receiptFoundDisable(lookup(disableFixture()), org, actor, target, {
+      ...reviewedDisable,
+      name: 'Other valid name',
     }),
   );
 });

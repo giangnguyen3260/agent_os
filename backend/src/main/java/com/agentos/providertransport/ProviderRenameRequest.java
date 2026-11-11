@@ -15,6 +15,20 @@ public final class ProviderRenameRequest {
   /** Returns the canonical idempotency key without consuming the body or creating a session. */
   public static UUID validate(
       HttpServletRequest request, String organization, String target, String csrfHeaderName) {
+    return validate(request, organization, target, csrfHeaderName, "rename");
+  }
+
+  public static UUID validateDisable(
+      HttpServletRequest request, String organization, String target, String csrfHeaderName) {
+    return validate(request, organization, target, csrfHeaderName, "disable");
+  }
+
+  private static UUID validate(
+      HttpServletRequest request,
+      String organization,
+      String target,
+      String csrfHeaderName,
+      String suffix) {
     if (request == null
         || organization == null
         || target == null
@@ -27,7 +41,8 @@ public final class ProviderRenameRequest {
                     + organization
                     + "/provider-connections/"
                     + target
-                    + "/rename")) throw new PolicyFailure(400, "BAD_REQUEST");
+                    + "/"
+                    + suffix)) throw new PolicyFailure(400, "BAD_REQUEST");
     // Create's header boundary has the same POST/JSON/Accept/framing/CSRF/key contract.
     return ProviderCreateRequest.validate(request, organization, csrfHeaderName);
   }

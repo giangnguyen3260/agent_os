@@ -177,3 +177,20 @@ nonqueued per-instance permits bound Rename body/coordinator work, separately fr
 the shared durable 30/minute write quota. Reverse-proxy limits remain operational
 configuration, not evidence of application acceptance. Native managed tests and
 matching CI are pending for this candidate; UI is not implemented by this flag.
+
+## Opt-in Disable HTTP
+
+Set `agentos.provider-disable.enabled=true` to assemble the internal Disable
+coordinator using the settings in the Rename table under the separate
+`agentos.provider-disable.*` prefix. Use a command-key reader token and a
+PostgreSQL writer with the same metadata privileges. Missing settings fail
+startup with `PROVIDER_DISABLE_CONFIGURATION_UNAVAILABLE`.
+
+Set `agentos.provider-disable.http-enabled=true` to register
+`POST /api/v1/organizations/{org}/provider-connections/{connection}/disable`
+and advertise `X-Provider-Disable-Enabled: true` on the authorized options
+response. Both flags default to false. The request uses the current ADMIN
+session, header-only CSRF, a canonical UUID idempotency key and a JSON string
+`expectedRevision`. A committed result and its own-receipt lookup contain the
+historical configuration transition. The connector uses the same 10-second idle
+upload timeout as Rename, with eight simultaneous Disable requests per instance.

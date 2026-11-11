@@ -1,13 +1,33 @@
-@if (enabled() || error()) {
-  <section class="provider-rename" aria-label="Đổi tên kết nối">
+@if (enabled() || disableEnabled() || error()) {
+  <section
+    class="provider-rename"
+    [attr.aria-label]="
+      review()?.operation === 'disable' ||
+      pending()?.review?.operation === 'disable' ||
+      (!enabled() && disableEnabled())
+        ? 'Tắt kết nối'
+        : 'Đổi tên kết nối'
+    "
+  >
     @if (error()) {
       <p role="alert">{{ error() }}</p>
     }
-    @if (pending()) {
-      <div data-testid="provider-rename-unknown">
+    @if (pending(); as attempt) {
+      <div
+        [attr.data-testid]="
+          attempt.review.operation === 'rename'
+            ? 'provider-rename-unknown'
+            : 'provider-disable-unknown'
+        "
+      >
         <p role="status">
-          Chưa xác nhận được kết quả đổi tên. Hãy kiểm tra biên nhận trước khi
-          gửi yêu cầu khác.
+          @if (attempt.review.operation === 'rename') {
+            Chưa xác nhận được kết quả đổi tên. Hãy kiểm tra biên nhận trước khi
+            gửi yêu cầu khác.
+          } @else {
+            Chưa xác nhận được kết quả tắt kết nối. Hãy kiểm tra biên nhận trước
+            khi gửi yêu cầu khác.
+          }
         </p>
         <button type="button" [disabled]="busy()" (click)="checkReceipt()">
           Kiểm tra kết quả
@@ -20,28 +40,48 @@
       <button type="button" (click)="refreshRequested.emit()">
         Tải lại kết nối
       </button>
-    } @else if (enabled()) {
+    } @else if (enabled() || disableEnabled()) {
       @if (review(); as change) {
-        <div
-          data-testid="provider-rename-review"
-          role="region"
-          aria-label="Xem lại đổi tên"
-        >
-          <h3>Xem lại thay đổi</h3>
-          <p>
-            Tên hiện tại: <strong>{{ change.beforeName }}</strong>
-          </p>
-          <p>
-            Tên mới: <strong>{{ change.name }}</strong>
-          </p>
-          <p>Phiên bản cấu hình: {{ change.expectedRevision }}</p>
-          <button type="button" [disabled]="busy()" (click)="confirm()">
-            Xác nhận đổi tên
-          </button>
-          <button type="button" [disabled]="busy()" (click)="edit()">
-            Chỉnh sửa tên
-          </button>
-        </div>
+        @if (change.operation === 'disable') {
+          <div
+            data-testid="provider-disable-review"
+            role="region"
+            aria-label="Xem lại thao tác tắt kết nối"
+          >
+            <h3>Xem lại thao tác tắt kết nối</h3>
+            <p>
+              Kết nối: <strong>{{ change.name }}</strong>
+            </p>
+            <p>Phiên bản cấu hình: {{ change.expectedRevision }}</p>
+            <button type="button" [disabled]="busy()" (click)="confirm()">
+              Xác nhận tắt kết nối
+            </button>
+            <button type="button" [disabled]="busy()" (click)="edit()">
+              Hủy
+            </button>
+          </div>
+        } @else {
+          <div
+            data-testid="provider-rename-review"
+            role="region"
+            aria-label="Xem lại đổi tên"
+          >
+            <h3>Xem lại thay đổi</h3>
+            <p>
+              Tên hiện tại: <strong>{{ change.beforeName }}</strong>
+            </p>
+            <p>
+              Tên mới: <strong>{{ change.name }}</strong>
+            </p>
+            <p>Phiên bản cấu hình: {{ change.expectedRevision }}</p>
+            <button type="button" [disabled]="busy()" (click)="confirm()">
+              Xác nhận đổi tên
+            </button>
+            <button type="button" [disabled]="busy()" (click)="edit()">
+              Chỉnh sửa tên
+            </button>
+          </div>
+        }
       } @else if (editing()) {
         <form
           data-testid="provider-rename-form"
@@ -62,7 +102,12 @@
           <button type="submit" [disabled]="busy()">Xem lại thay đổi</button>
         </form>
       } @else {
-        <button type="button" (click)="start()">Đổi tên</button>
+        @if (enabled()) {
+          <button type="button" (click)="start()">Đổi tên</button>
+        }
+        @if (disableEnabled()) {
+          <button type="button" (click)="prepareDisable()">Tắt kết nối</button>
+        }
       }
     }
   </section>
