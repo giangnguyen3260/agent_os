@@ -6,6 +6,7 @@ import com.agentos.providercommands.CommandBoundary.Metadata;
 import com.agentos.providercommands.CommandBoundary.Operation;
 import com.agentos.providercommands.CommandBoundary.Rename;
 import com.agentos.providercommands.CommandBoundary.RevisionCommand;
+import com.agentos.providercommands.CommandBoundary.Rotate;
 import com.agentos.providercredentials.CredentialBoundary;
 import com.agentos.providerreceipts.ProviderReceiptFailure;
 import com.agentos.providerreceipts.ProviderReceiptService;
@@ -196,6 +197,16 @@ public final class ProviderCompletionBoundary {
     return executeWrite(actor, org, key, command, prepared, null, null, Operation.ENABLE);
   }
 
+  public WriteOutcome executeRotatePrepared(
+      HumanIdentity actor,
+      UUID org,
+      UUID key,
+      Rotate command,
+      Metadata prepared,
+      CredentialBoundary.Metadata credential) {
+    return executeWrite(actor, org, key, command, prepared, null, credential, Operation.ROTATE);
+  }
+
   private WriteOutcome executeWrite(
       HumanIdentity actor,
       UUID org,
@@ -225,6 +236,9 @@ public final class ProviderCompletionBoundary {
       } else if (governance == Operation.ENABLE) {
         result =
             receipts.executeEnableGoverned(actor, org, key, (RevisionCommand) command, prepared);
+      } else if (governance == Operation.ROTATE) {
+        result =
+            receipts.executeRotateGoverned(actor, org, key, (Rotate) command, prepared, credential);
       } else {
         result = receipts.execute(actor, org, key, command, prepared, createId, credential);
       }

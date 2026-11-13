@@ -4,10 +4,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.agentos.auth.HumanIdentity;
+import com.agentos.provideradmission.ProviderWriteAdmission;
 import com.agentos.providercommands.CommandBoundary;
 import com.agentos.providercommands.CommandBoundary.Create;
 import com.agentos.providercommands.CommandBoundary.CredentialMode;
 import com.agentos.providercommands.CommandBoundary.Metadata;
+import com.agentos.providercommands.CommandBoundary.Operation;
 import com.agentos.providercommands.CommandBoundary.Provider;
 import com.agentos.providercompletion.ProviderCompletionBoundary.Code;
 import com.agentos.providercompletion.ProviderCompletionBoundary.LookupState;
@@ -16,7 +18,9 @@ import com.agentos.providerconnections.ProviderConnectionService;
 import com.agentos.providercredentials.CredentialBoundary;
 import com.agentos.providerreceipts.ProviderReceiptFailure;
 import com.agentos.providerreceipts.ProviderReceiptService;
+import com.agentos.providerrotation.ProviderRotateCoordinator;
 import com.agentos.providertransport.ProviderCreateResponses;
+import com.agentos.providertransport.ProviderRotateBody;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.lang.reflect.Proxy;
 import java.security.Key;
@@ -575,6 +579,139 @@ abstract class ProviderCompletionFixture {
       start.countDown();
       workers.shutdownNow();
     }
+  }
+
+  @Test
+  void rotateCommitsNewCredentialAndReplaysTheHistoricalReceiptWithoutStorage() {
+    enableCreatePolicy();
+    assertThat(
+            healthy
+                .executeCreatePrepared(human, org, key, command, prepared, id, credential)
+                .state())
+        .isEqualTo(WriteState.COMMITTED);
+    connections.setEnabled(human, org, id, 1, false);
+    jdbc.update("update provider_deployment_policy set openai_enabled=false where id=1");
+    var writes = new java.util.ArrayList<CredentialBoundary.Scope>();
+    var afterStore = new java.util.concurrent.atomic.AtomicReference<Runnable>(() -> {});
+    var commandKeys =
+        new CommandBoundary(
+            new CommandBoundary.Keys() {
+              public String currentVersion() {
+                outside();
+                return "command-v1";
+              }
+
+              public Key key(String version) {
+                outside();
+                return new SecretKeySpec(new byte[32], "HmacSHA256");
+              }
+            });
+    var storage =
+        new CredentialBoundary(
+            new CredentialBoundary.Keys() {
+              public String currentVersion() {
+                outside();
+                return "credential-v1";
+              }
+
+              public SecretKey key(String version) {
+                outside();
+                return new SecretKeySpec(new byte[32], "HmacSHA256");
+              }
+            },
+            new CredentialBoundary.Secrets() {
+              public CredentialBoundary.Reference store(
+                  CredentialBoundary.Scope scope, byte[] bytes) {
+                outside();
+                writes.add(scope);
+                afterStore.get().run();
+                return new CredentialBoundary.Reference(scope, "opaque/rotation", "external-v1");
+              }
+
+              public byte[] read(CredentialBoundary.Reference reference) {
+                throw new AssertionError("Rotation and replay never read the old key");
+              }
+
+              public void preparationFailed(
+                  CredentialBoundary.Scope scope, CredentialBoundary.Reference reference) {
+                throw new AssertionError("Unexpected storage failure");
+              }
+            });
+    var coordinator =
+        new ProviderRotateCoordinator(
+            receipts,
+            healthy,
+            commandKeys,
+            storage,
+            new ProviderWriteAdmission(jdbc.getDataSource()));
+    var stale = coordinator.rotate(human, org, UUID.randomUUID(), rotateBody(1, "new-key"));
+    assertThat(stale.failure().code()).isEqualTo(Code.REVISION_CONFLICT);
+    assertThat(writes).isEmpty();
+
+    var rotateKey = UUID.randomUUID();
+    var body = rotateBody(2, "new-key");
+    var borrowed = body.credential();
+    var first = coordinator.rotate(human, org, rotateKey, body);
+    assertThat(first.state()).isEqualTo(WriteState.COMMITTED);
+    assertThat(borrowed).containsOnly((byte) 0);
+    var receipt = first.result().receipt();
+    assertThat(receipt.operation()).isEqualTo(Operation.ROTATE);
+    assertThat(receipt.before().credentialRevision()).isEqualTo(1);
+    assertThat(receipt.after().credentialRevision()).isEqualTo(2);
+    assertThat(receipt.after().revision()).isEqualTo(3);
+    assertThat(receipt.after().state()).isEqualTo("DISABLED");
+    assertThat(writes)
+        .containsExactly(
+            new CredentialBoundary.Scope(org, id, CredentialBoundary.Provider.OPENAI, 2));
+    assertThat(
+            jdbc.queryForList(
+                "select credential_revision from provider_credential_versions where"
+                    + " organization_id=? and connection_id=? order by credential_revision",
+                Long.class,
+                org,
+                id))
+        .containsExactly(1L, 2L);
+    connections.rename(human, org, id, 3, "After rotation");
+
+    var replay = coordinator.rotate(human, org, rotateKey, rotateBody(2, "new-key"));
+    assertThat(replay.state()).isEqualTo(WriteState.COMMITTED);
+    assertThat(replay.result().replayed()).isTrue();
+    assertThat(replay.result().receipt()).isEqualTo(receipt);
+    var mismatch = coordinator.rotate(human, org, rotateKey, rotateBody(2, "other-key"));
+    assertThat(mismatch.failure().code()).isEqualTo(Code.IDEMPOTENCY_CONFLICT);
+    var wrongOperation = coordinator.rotate(human, org, key, rotateBody(2, "new-key"));
+    assertThat(wrongOperation.failure().code()).isEqualTo(Code.IDEMPOTENCY_CONFLICT);
+    assertThat(writes).hasSize(1);
+
+    afterStore.set(() -> connections.rename(human, org, id, 4, "Concurrent change"));
+    UUID racedKey = UUID.randomUUID();
+    var raced = coordinator.rotate(human, org, racedKey, rotateBody(4, "raced-key"));
+    assertThat(raced.failure().code()).isEqualTo(Code.REVISION_CONFLICT);
+    assertThat(writes).hasSize(2);
+    assertThat(healthy.lookupOwn(human, org, racedKey).state()).isEqualTo(LookupState.ABSENT);
+    assertThat(
+            jdbc.queryForObject(
+                "select credential_revision from provider_connections where organization_id=? and"
+                    + " id=?",
+                Long.class,
+                org,
+                id))
+        .isEqualTo(2L);
+    assertThat(
+            jdbc.queryForObject(
+                "select count(*) from provider_credential_versions where organization_id=? and"
+                    + " connection_id=?",
+                Long.class,
+                org,
+                id))
+        .isEqualTo(2L);
+  }
+
+  private ProviderRotateBody rotateBody(long revision, String secret) {
+    return ProviderRotateBody.consume(
+        id,
+        ("{\"expectedRevision\":\"" + revision + "\",\"apiKey\":\"" + secret + "\"}")
+            .getBytes(java.nio.charset.StandardCharsets.UTF_8));
   }
 
   private void enableCreatePolicy() {
