@@ -45,27 +45,17 @@ export class ProviderConnectionsComponent {
   readonly loading = signal(false);
   readonly error = signal('');
   readonly expanded = signal<string | null>(null);
-  private readonly createdScope = signal<{org: string; actor: string} | null>(
-    null,
-  );
-  readonly createdHere = computed(() => {
-    const scope = this.createdScope();
-    return (
-      scope !== null &&
-      scope.org === this.organization() &&
-      scope.actor === this.auth.user()?.id
-    );
-  });
-  private readonly renamedScope = signal<{org: string; actor: string} | null>(
-    null,
-  );
-  readonly renamedHere = computed(() => {
-    const scope = this.renamedScope();
-    return (
-      scope !== null &&
-      scope.org === this.organization() &&
-      scope.actor === this.auth.user()?.id
-    );
+  private readonly completion = signal<{
+    org: string;
+    actor: string;
+    operation: 'create' | 'rename' | 'disable' | 'enable';
+  } | null>(null);
+  readonly completedHere = computed(() => {
+    const result = this.completion();
+    return result?.org === this.organization() &&
+      result.actor === this.auth.user()?.id
+      ? result.operation
+      : null;
   });
   readonly providers = {
     OPENAI: 'OpenAI',
@@ -89,12 +79,9 @@ export class ProviderConnectionsComponent {
           this.expanded.set(null);
           this.error.set('');
           const org = params.get('id');
-          const notice = this.createdScope();
+          const notice = this.completion();
           if (!notice || org !== notice.org || actor !== notice.actor)
-            this.createdScope.set(null);
-          const renamed = this.renamedScope();
-          if (!renamed || org !== renamed.org || actor !== renamed.actor)
-            this.renamedScope.set(null);
+            this.completion.set(null);
           this.organization.set(org ?? '');
           const raw = query.get('page') ?? '0';
           if (!actor) {
@@ -153,16 +140,12 @@ export class ProviderConnectionsComponent {
     this.refresh.next();
   }
 
-  renameCompleted() {
+  commandCompleted(
+    operation: 'create' | 'rename' | 'disable' | 'enable',
+  ): void {
     const actor = this.auth.user()?.id;
-    if (actor) this.renamedScope.set({org: this.organization(), actor});
-    this.createdScope.set(null);
-    this.reload();
-  }
-  createCompleted() {
-    this.renamedScope.set(null);
-    const actor = this.auth.user()?.id;
-    if (actor) this.createdScope.set({org: this.organization(), actor});
+    if (actor)
+      this.completion.set({org: this.organization(), actor, operation});
     this.reload();
   }
 

@@ -230,21 +230,45 @@ review and explicit own-receipt recovery. All seven workflows passed at `7f28644
 The real browser fixture verified persistence and recovery from a malformed
 response after commit, with the stored credential preserved.
 
-The next slice adds internal governed Disable execution. Rename and Disable
+[Draft PR78](https://github.com/giangnguyen3260/agent_os/pull/78) added internal
+governed Disable execution and passed all eight workflows at `4c7afb7b`. Rename and Disable
 share the same durable write quota and historical HMAC preparation flow.
 Disable records one configuration revision and one historical transition receipt
 with its event in the same transaction. Adapter policy can be off. The governed
 entry point refuses Enable, which requires a separate current credential-evidence
-gate. Disable HTTP, its public receipt projection and UI remain subsequent work.
+gate.
 
-## Current next three actions
+The Disable delivery adds an opt-in ADMIN/CSRF endpoint, a historical receipt
+projection and an options capability header. In the connection details, the UI
+requires confirmation and offers explicit receipt lookup after an uncertain
+response. A revision conflict requires a fresh list read. Rename and Disable
+share the in-flight state for a selected connection.
 
-1. Verify internal Disable admission, replay and rollback in H2/PostgreSQL CI.
-2. Expose Disable through the authenticated write boundary and a scoped public
-   receipt projector, then add confirmation and receipt recovery in the UI.
-3. Implement Enable with locked adapter policy and current credential evidence
-   before exposing its command. Credential rotation and model discovery follow
-   their separate contracts.
+Local compilation and 36 focused JUnit tests passed. Frontend build, lint,
+formatting and all 16 receipt validator groups passed. The route-mocked browser
+suites passed 102 cases across desktop, tablet and mobile, including Disable
+confirmation, revision conflict and explicit receipt recovery. The native HTTP
+fixture uses PostgreSQL and a command-only Vault token and awaits CI execution.
+
+The internal Enable command requires a current enabled adapter and a positive
+result from the installed PostgreSQL credential-evidence function. The evidence
+read occurs after the locked connection revision and state checks. Missing or
+expired evidence denies the new command. A committed historical receipt can
+still replay after authority revalidation. Enable HTTP and UI use a separate
+opt-in capability. The UI shows the blocked reason when the adapter or credential
+is unavailable and offers explicit receipt recovery after an uncertain response.
+Startup verifies the Enable writer can call the installed evidence function.
+
+Local compilation and 47 backend tests passed. Frontend build, lint, formatting
+and 19 receipt validator groups passed. The route-mocked browser suites passed
+120 cases across desktop, tablet and mobile. The native ingress and guarded
+evidence scenarios await PostgreSQL CI.
+
+## Current next actions
+
+1. Run native PostgreSQL/Vault acceptance for the Disable API.
+2. Execute the native Enable test with real guarded evidence publication.
+3. Continue credential rotation and model discovery under their separate contracts.
 
 ## PM mandate and continuity
 

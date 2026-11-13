@@ -38,11 +38,17 @@
     <p class="breadcrumb">Models / Kết nối provider</p>
     <h1>Kết nối model</h1>
     <p>Xem từng kết nối và trạng thái lưu trữ khóa truy cập.</p>
-    @if (createdHere()) {
+    @if (completedHere() === 'create') {
       <p role="status">Đã tạo kết nối provider.</p>
     }
-    @if (renamedHere()) {
+    @if (completedHere() === 'rename') {
       <p role="status">Đã đổi tên kết nối provider.</p>
+    }
+    @if (completedHere() === 'disable') {
+      <p role="status">Đã tắt kết nối provider.</p>
+    }
+    @if (completedHere() === 'enable') {
+      <p role="status">Đã bật lại kết nối provider.</p>
     }
     @if (loading()) {
       <p role="status">Đang tải kết nối…</p>
@@ -54,7 +60,7 @@
     } @else if (data(); as page) {
       <app-provider-create
         [organization]="organization()"
-        (created)="createCompleted()"
+        (created)="commandCompleted('create')"
       />
       <p role="status">{{ page.total }} kết nối · Trang {{ page.page + 1 }}</p>
       <section class="provider-panel" aria-label="Danh sách kết nối">
@@ -101,7 +107,9 @@
                 <app-provider-rename
                   [organization]="organization()"
                   [connection]="connection"
-                  (renamed)="renameCompleted()"
+                  (renamed)="commandCompleted('rename')"
+                  (disabled)="commandCompleted('disable')"
+                  (reenabled)="commandCompleted('enable')"
                   (refreshRequested)="reload()"
                 />
               </div>

@@ -10,6 +10,8 @@ import static org.mockito.Mockito.when;
 
 import com.agentos.auth.HumanIdentity;
 import com.agentos.providercommands.CommandBoundary;
+import com.agentos.providercommands.CommandBoundary.Operation;
+import com.agentos.providercommands.CommandBoundary.RevisionCommand;
 import com.agentos.providercompletion.ProviderCompletionBoundary;
 import com.agentos.providercompletion.ProviderCompletionBoundary.Code;
 import com.agentos.providercompletion.ProviderCompletionBoundary.Failure;
@@ -17,6 +19,7 @@ import com.agentos.providercompletion.ProviderCompletionBoundary.WriteOutcome;
 import com.agentos.providercompletion.ProviderCompletionBoundary.WriteState;
 import com.agentos.providerconnections.ProviderConnectionService;
 import com.agentos.providercredentials.CredentialBoundary;
+import com.agentos.providermetadata.ProviderMetadataCoordinator;
 import com.agentos.providerreceipts.ProviderReceiptService;
 import com.agentos.providerrename.ProviderRenameCoordinator;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -50,6 +53,7 @@ import org.springframework.transaction.PlatformTransactionManager;
     webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
     properties = {
       "agentos.provider-rename.http-enabled=true",
+      "agentos.provider-enable.http-enabled=true",
       "agentos.provider-list.enabled=true"
     })
 @ActiveProfiles("test")
@@ -65,6 +69,10 @@ class ProviderRenameHttpPostgresIT {
   @Autowired ProviderReceiptService receipts;
   @Autowired ProviderConnectionService connections;
   @MockBean ProviderRenameCoordinator coordinator;
+
+  @MockBean(name = "providerEnableCoordinator")
+  ProviderMetadataCoordinator enableCoordinator;
+
   private final Set<UUID> seededOrganizations = new HashSet<>();
   private final Set<UUID> seededActors = new HashSet<>();
 
@@ -100,6 +108,30 @@ class ProviderRenameHttpPostgresIT {
   }
 
   @Test
+  void enableIngressChecksSessionAndCsrfAndPassesOnlyAnEnableCommand() throws Exception {
+    UUID actor = UUID.randomUUID(), org = UUID.randomUUID(), target = UUID.randomUUID();
+    UUID key = UUID.randomUUID();
+    seedOrganization(org);
+    seedAdmin(actor, org);
+    var client = client();
+    String path = path(org, target).replaceFirst("/rename$", "/enable");
+    String body = "{\"expectedRevision\":\"2\"}";
+    error(send(client, post(path, key, body)), 401, "UNAUTHORIZED");
+    login(client, actor);
+    error(send(client, post(path, key, body)), 403, "FORBIDDEN");
+    var token = csrf(client);
+    String header = token.path("headerName").asText(), value = token.path("token").asText();
+    error(send(client, post(path, key, BODY).header(header, value)), 400, "BAD_REQUEST");
+    verifyNoInteractions(enableCoordinator);
+    var command = new RevisionCommand(Operation.ENABLE, target, 2);
+    when(enableCoordinator.enable(any(HumanIdentity.class), eq(org), eq(key), eq(command)))
+        .thenReturn(
+            new WriteOutcome(WriteState.REJECTED, null, new Failure(Code.CREDENTIAL_UNAVAILABLE)));
+    error(send(client, post(path, key, body).header(header, value)), 409, "CREDENTIAL_UNAVAILABLE");
+    verify(enableCoordinator).enable(any(HumanIdentity.class), eq(org), eq(key), eq(command));
+  }
+
+  @Test
   void sessionAuthorityCsrfAndStrictWirePrecedeRenameCoordinator() throws Exception {
     UUID actor = UUID.randomUUID(), org = UUID.randomUUID(), target = UUID.randomUUID();
     UUID key = UUID.randomUUID(), foreignOrg = UUID.randomUUID();
@@ -125,6 +157,7 @@ class ProviderRenameHttpPostgresIT {
               request("/api/v1/organizations/" + org + "/provider-connections/options").GET());
       assertThat(options.statusCode()).isEqualTo(200);
       assertThat(options.headers().firstValue("X-Provider-Rename-Enabled")).contains("true");
+      assertThat(options.headers().firstValue("X-Provider-Enable-Enabled")).contains("true");
       assertThat(options.headers().firstValue("X-Provider-Create-Enabled")).contains("false");
     } finally {
       if (policyAdded == 1) jdbc.update("delete from provider_deployment_policy where id=1");

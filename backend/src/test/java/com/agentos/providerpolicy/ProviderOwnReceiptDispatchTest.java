@@ -50,7 +50,7 @@ class ProviderOwnReceiptDispatchTest {
       var outcome = new LookupOutcome(LookupState.FOUND, receipt, null);
       var dispatched = new MockHttpServletResponse();
       var direct = new MockHttpServletResponse();
-      ProviderCreateReceiptController.writeLookup(json, dispatched, outcome, true);
+      ProviderCreateReceiptController.writeLookup(json, dispatched, outcome, true, false, false);
       if (operation == Operation.CREATE) ProviderCreateResponses.writeLookup(json, direct, outcome);
       else ProviderRenameResponses.writeLookup(json, direct, outcome);
       assertThat(dispatched.getStatus()).isEqualTo(200);
@@ -154,7 +154,7 @@ class ProviderOwnReceiptDispatchTest {
                 snapshot("Renamed", 2)),
             null);
     var rejected = new MockHttpServletResponse();
-    ProviderCreateReceiptController.writeLookup(json, rejected, renamed, false);
+    ProviderCreateReceiptController.writeLookup(json, rejected, renamed, false, false, false);
     unavailable(rejected);
     var created =
         new LookupOutcome(
@@ -162,9 +162,83 @@ class ProviderOwnReceiptDispatchTest {
             new Receipt(org, command, Operation.CREATE, connection, actor, time, null, before),
             null);
     var accepted = new MockHttpServletResponse();
-    ProviderCreateReceiptController.writeLookup(json, accepted, created, false);
+    ProviderCreateReceiptController.writeLookup(json, accepted, created, false, false, false);
     assertThat(accepted.getStatus()).isEqualTo(200);
     assertThat(envelope(accepted).at("/data/receipt/operation").asText()).isEqualTo("CREATE");
+  }
+
+  @Test
+  void disableReceiptRequiresItsOwnPublicFlag() throws Exception {
+    var after =
+        new Configuration(
+            org,
+            connection,
+            Provider.OPENAI,
+            CredentialMode.OPENAI_API_KEY,
+            "Original",
+            null,
+            "DISABLED",
+            2,
+            1,
+            time,
+            time);
+    var result =
+        new LookupOutcome(
+            LookupState.FOUND,
+            new Receipt(
+                org,
+                command,
+                Operation.DISABLE,
+                connection,
+                actor,
+                time,
+                snapshot("Original", 1),
+                after),
+            null);
+    var hidden = new MockHttpServletResponse();
+    ProviderCreateReceiptController.writeLookup(json, hidden, result, true, false, false);
+    unavailable(hidden);
+    var visible = new MockHttpServletResponse();
+    ProviderCreateReceiptController.writeLookup(json, visible, result, false, true, false);
+    assertThat(visible.getStatus()).isEqualTo(200);
+    assertThat(envelope(visible).at("/data/receipt/after/state").asText()).isEqualTo("DISABLED");
+  }
+
+  @Test
+  void enableReceiptRequiresItsOwnPublicFlag() throws Exception {
+    var before =
+        new Configuration(
+            org,
+            connection,
+            Provider.OPENAI,
+            CredentialMode.OPENAI_API_KEY,
+            "Original",
+            null,
+            "DISABLED",
+            1,
+            1,
+            time,
+            time);
+    var result =
+        new LookupOutcome(
+            LookupState.FOUND,
+            new Receipt(
+                org,
+                command,
+                Operation.ENABLE,
+                connection,
+                actor,
+                time,
+                before,
+                snapshot("Original", 2)),
+            null);
+    var hidden = new MockHttpServletResponse();
+    ProviderCreateReceiptController.writeLookup(json, hidden, result, true, true, false);
+    unavailable(hidden);
+    var visible = new MockHttpServletResponse();
+    ProviderCreateReceiptController.writeLookup(json, visible, result, false, false, true);
+    assertThat(visible.getStatus()).isEqualTo(200);
+    assertThat(envelope(visible).at("/data/receipt/after/state").asText()).isEqualTo("ENABLED");
   }
 
   @Test
@@ -210,7 +284,7 @@ class ProviderOwnReceiptDispatchTest {
 
   private MockHttpServletResponse dispatch(LookupOutcome result) throws Exception {
     var response = new MockHttpServletResponse();
-    ProviderCreateReceiptController.writeLookup(json, response, result, true);
+    ProviderCreateReceiptController.writeLookup(json, response, result, true, false, false);
     return response;
   }
 

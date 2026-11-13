@@ -13,11 +13,15 @@ import org.springframework.context.annotation.Configuration;
 public class ProviderRenameHttpConfiguration {
   @Bean
   WebServerFactoryCustomizer<TomcatServletWebServerFactory> providerRenameUploadTimeout() {
+    return uploadTimeout("PROVIDER_RENAME_HTTP_CONFIGURATION_UNAVAILABLE");
+  }
+
+  static WebServerFactoryCustomizer<TomcatServletWebServerFactory> uploadTimeout(String errorCode) {
     return factory ->
         factory.addConnectorCustomizers(
             connector -> {
               if (!(connector.getProtocolHandler() instanceof AbstractHttp11Protocol<?> protocol)) {
-                throw new IllegalStateException("PROVIDER_RENAME_HTTP_CONFIGURATION_UNAVAILABLE");
+                throw new IllegalStateException(errorCode);
               }
               protocol.setDisableUploadTimeout(false);
               protocol.setConnectionUploadTimeout(10_000);
