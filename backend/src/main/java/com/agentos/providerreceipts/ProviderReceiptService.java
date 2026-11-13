@@ -156,6 +156,16 @@ public class ProviderReceiptService {
     return executeInternal(actor, org, key, command, prepared, null, null, Operation.ENABLE);
   }
 
+  public Result executeRotateGoverned(
+      HumanIdentity actor,
+      UUID org,
+      UUID key,
+      Rotate command,
+      Metadata prepared,
+      CredentialBoundary.Metadata credential) {
+    return executeInternal(actor, org, key, command, prepared, null, credential, Operation.ROTATE);
+  }
+
   private Result executeInternal(
       HumanIdentity actor,
       UUID org,
@@ -170,13 +180,14 @@ public class ProviderReceiptService {
           var policy = authority(actor, org, true, governance != null);
           if (command == null
               || command instanceof CredentialCommand
-              || (stateCommand(governance) && command.operation() != governance))
+              || (requiresMatchingOperation(governance) && command.operation() != governance))
             throw fail(400, "INVALID_COMMAND");
           validKey(key);
           if (prepared == null) throw fail(400, "INVALID_PREPARATION");
           Probe stored = own(org, actor.id(), key);
           if (stored != null) {
-            if (stateCommand(governance) && stored.result().receipt().operation() != governance)
+            if (requiresMatchingOperation(governance)
+                && stored.result().receipt().operation() != governance)
               throw fail(409, "IDEMPOTENCY_CONFLICT");
             if (!stored.metadata().keyVersion().equals(prepared.keyVersion()))
               throw fail(409, "PREPARATION_REQUIRED");
@@ -239,6 +250,10 @@ public class ProviderReceiptService {
                     && historical.credentialRevision() == parent.credentialRevision()
                     && historical.createdAt().toInstant().equals(parent.createdAt().toInstant())
                     && historical.updatedAt().toInstant().equals(parent.updatedAt().toInstant()));
+            if (governance == Operation.ROTATE) {
+              var scope = rotationScope(org, parent, (Rotate) command);
+              credential(credential, org, target, parent.provider(), scope.credentialRevision());
+            }
             if (governance == Operation.ENABLE)
               checkEnable(policy.get(0), parent, (RevisionCommand) command);
           }
@@ -331,6 +346,42 @@ public class ProviderReceiptService {
         });
   }
 
+  @Transactional(
+      readOnly = true,
+      propagation = Propagation.REQUIRED,
+      isolation = Isolation.REPEATABLE_READ)
+  public CredentialBoundary.Scope prepareRotateScope(
+      HumanIdentity actor, UUID org, Rotate command) {
+    return safe(
+        () -> {
+          authority(actor, org, false);
+          if (command == null) throw fail(400, "INVALID_COMMAND");
+          var rows =
+              jdbc.query(
+                  "select * from provider_connections where organization_id=? and id=?",
+                  (rs, n) -> parent(rs),
+                  org,
+                  command.target());
+          if (rows.isEmpty()) throw fail(404, "NOT_FOUND");
+          require(rows.size() == 1);
+          return rotationScope(org, rows.get(0), command);
+        });
+  }
+
+  private static CredentialBoundary.Scope rotationScope(
+      UUID org, Configuration parent, Rotate command) {
+    require(org.equals(parent.organizationId()) && command.target().equals(parent.id()));
+    if (command.expectedRevision() < 1) throw fail(400, "INVALID_COMMAND");
+    if (parent.revision() != command.expectedRevision()) throw fail(409, "REVISION_CONFLICT");
+    if (parent.revision() == Long.MAX_VALUE || parent.credentialRevision() == Long.MAX_VALUE)
+      throw fail(409, "REVISION_EXHAUSTED");
+    return new CredentialBoundary.Scope(
+        org,
+        parent.id(),
+        CredentialBoundary.Provider.valueOf(parent.provider().name()),
+        parent.credentialRevision() + 1);
+  }
+
   private Probe own(UUID org, UUID actor, UUID key) {
     var rows =
         jdbc.query(
@@ -373,8 +424,10 @@ public class ProviderReceiptService {
     return rows.isEmpty() ? null : rows.get(0);
   }
 
-  private static boolean stateCommand(Operation operation) {
-    return operation == Operation.DISABLE || operation == Operation.ENABLE;
+  private static boolean requiresMatchingOperation(Operation operation) {
+    return operation == Operation.DISABLE
+        || operation == Operation.ENABLE
+        || operation == Operation.ROTATE;
   }
 
   private static void requireProviderEnabled(Map<String, Object> policy, Provider provider) {
