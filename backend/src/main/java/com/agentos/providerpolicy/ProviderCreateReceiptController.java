@@ -12,6 +12,7 @@ import com.agentos.providertransport.ProviderCreateResponses;
 import com.agentos.providertransport.ProviderDisableResponses;
 import com.agentos.providertransport.ProviderEnableResponses;
 import com.agentos.providertransport.ProviderRenameResponses;
+import com.agentos.providertransport.ProviderRotateResponses;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -31,7 +32,8 @@ import org.springframework.web.bind.annotation.RestController;
 @ConditionalOnExpression(
     "${agentos.provider-create.enabled:false} or ${agentos.provider-rename.http-enabled:false}"
         + " or ${agentos.provider-disable.http-enabled:false}"
-        + " or ${agentos.provider-enable.http-enabled:false}")
+        + " or ${agentos.provider-enable.http-enabled:false}"
+        + " or ${agentos.provider-rotate.http-enabled:false}")
 public class ProviderCreateReceiptController {
   private static final String ORGANIZATIONS = "/api/v1/organizations/";
   private static final String RECEIPTS = "/provider-connections/receipts/";
@@ -41,6 +43,7 @@ public class ProviderCreateReceiptController {
   private final boolean renameEnabled;
   private final boolean disableEnabled;
   private final boolean enableEnabled;
+  private final boolean rotateEnabled;
 
   ProviderCreateReceiptController(
       PlatformTransactionManager manager,
@@ -49,12 +52,14 @@ public class ProviderCreateReceiptController {
       ObjectMapper json,
       @Value("${agentos.provider-rename.http-enabled:false}") boolean renameEnabled,
       @Value("${agentos.provider-disable.http-enabled:false}") boolean disableEnabled,
-      @Value("${agentos.provider-enable.http-enabled:false}") boolean enableEnabled) {
+      @Value("${agentos.provider-enable.http-enabled:false}") boolean enableEnabled,
+      @Value("${agentos.provider-rotate.http-enabled:false}") boolean rotateEnabled) {
     this.completion = new ProviderCompletionBoundary(manager, jdbc, receipts);
     this.json = json;
     this.renameEnabled = renameEnabled;
     this.disableEnabled = disableEnabled;
     this.enableEnabled = enableEnabled;
+    this.rotateEnabled = rotateEnabled;
   }
 
   @GetMapping(ORGANIZATIONS + "{organizationId}" + RECEIPTS + "{key}")
@@ -80,7 +85,8 @@ public class ProviderCreateReceiptController {
       if (session != null) session.invalidate();
       SecurityContextHolder.clearContext();
     }
-    writeLookup(json, response, result, renameEnabled, disableEnabled, enableEnabled);
+    writeLookup(
+        json, response, result, renameEnabled, disableEnabled, enableEnabled, rotateEnabled);
   }
 
   /** Dispatch only the explicitly supported historical configuration receipt operations. */
@@ -90,7 +96,8 @@ public class ProviderCreateReceiptController {
       LookupOutcome result,
       boolean renameEnabled,
       boolean disableEnabled,
-      boolean enableEnabled)
+      boolean enableEnabled,
+      boolean rotateEnabled)
       throws IOException {
     if (result == null || result.state() != LookupState.FOUND) {
       ProviderCreateResponses.writeLookup(json, response, result);
@@ -105,6 +112,8 @@ public class ProviderCreateReceiptController {
       ProviderDisableResponses.writeLookup(json, response, result);
     } else if (operation == Operation.ENABLE && enableEnabled) {
       ProviderEnableResponses.writeLookup(json, response, result);
+    } else if (operation == Operation.ROTATE && rotateEnabled) {
+      ProviderRotateResponses.writeLookup(json, response, result);
     } else {
       ProviderCreateResponses.error(json, response, new Failure(Code.RECEIPT_UNAVAILABLE));
     }

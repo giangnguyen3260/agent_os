@@ -6,9 +6,11 @@ import com.agentos.providertransport.ProviderCreateReceipt.Snapshot;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import java.util.UUID;
 
-/** Historical state change configuration only; no current health or credential metadata reads. */
+/**
+ * Historical connection change configuration only; no current health or credential metadata reads.
+ */
 @JsonInclude(JsonInclude.Include.ALWAYS)
-record ProviderStateChangeReceipt(
+record ProviderConnectionChangeReceipt(
     UUID organizationId,
     UUID commandId,
     Operation operation,
@@ -18,14 +20,12 @@ record ProviderStateChangeReceipt(
     Snapshot before,
     Snapshot after,
     UUID checkId) {
-  static ProviderStateChangeReceipt from(Receipt receipt, Operation operation) {
-    boolean enabling = operation == Operation.ENABLE;
+  static ProviderConnectionChangeReceipt from(Receipt receipt, Operation operation) {
     if (!ProviderHistoricalConfiguration.validTransition(receipt)
         || receipt.operation() != operation
-        || !(enabling ? "DISABLED" : "ENABLED").equals(receipt.before().state())
-        || !(enabling ? "ENABLED" : "DISABLED").equals(receipt.after().state())
+        || !validState(receipt, operation)
         || !receipt.before().name().equals(receipt.after().name())) return null;
-    return new ProviderStateChangeReceipt(
+    return new ProviderConnectionChangeReceipt(
         receipt.org(),
         receipt.commandId(),
         operation,
@@ -35,5 +35,16 @@ record ProviderStateChangeReceipt(
         ProviderHistoricalConfiguration.snapshot(receipt.before()),
         ProviderHistoricalConfiguration.snapshot(receipt.after()),
         null);
+  }
+
+  private static boolean validState(Receipt receipt, Operation operation) {
+    String before = receipt.before().state();
+    String after = receipt.after().state();
+    return switch (operation) {
+      case ENABLE -> "DISABLED".equals(before) && "ENABLED".equals(after);
+      case DISABLE -> "ENABLED".equals(before) && "DISABLED".equals(after);
+      case ROTATE -> before.equals(after);
+      default -> false;
+    };
   }
 }

@@ -30,6 +30,11 @@ public final class ProviderRenameRequest {
     return validate(request, organization, target, csrfHeaderName, "enable");
   }
 
+  public static UUID validateRotate(
+      HttpServletRequest request, String organization, String target, String csrfHeaderName) {
+    return validate(request, organization, target, csrfHeaderName, "rotate");
+  }
+
   private static UUID validate(
       HttpServletRequest request,
       String organization,

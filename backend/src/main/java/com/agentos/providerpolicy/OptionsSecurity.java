@@ -24,9 +24,13 @@ public class OptionsSecurity {
       @Value("${agentos.provider-create.enabled:false}") boolean createEnabled,
       @Value("${agentos.provider-rename.http-enabled:false}") boolean renameEnabled,
       @Value("${agentos.provider-disable.http-enabled:false}") boolean disableEnabled,
-      @Value("${agentos.provider-enable.http-enabled:false}") boolean enableEnabled)
+      @Value("${agentos.provider-enable.http-enabled:false}") boolean enableEnabled,
+      @Value("${agentos.provider-rotate.http-enabled:false}") boolean rotateEnabled)
       throws Exception {
-    var paths = paths(listEnabled, createEnabled, renameEnabled, disableEnabled, enableEnabled);
+    var paths =
+        paths(
+            listEnabled,
+            createEnabled || renameEnabled || disableEnabled || enableEnabled || rotateEnabled);
     http.securityMatcher(
             request ->
                 paths
@@ -43,15 +47,9 @@ public class OptionsSecurity {
     return http.build();
   }
 
-  static Pattern paths(
-      boolean listEnabled,
-      boolean createEnabled,
-      boolean renameEnabled,
-      boolean disableEnabled,
-      boolean enableEnabled) {
+  static Pattern paths(boolean listEnabled, boolean receiptsEnabled) {
     String suffix = listEnabled ? "(?:/options)?" : "/options";
-    if (createEnabled || renameEnabled || disableEnabled || enableEnabled)
-      suffix = "(?:" + suffix + "|/receipts/[^/]+)";
+    if (receiptsEnabled) suffix = "(?:" + suffix + "|/receipts/[^/]+)";
     return Pattern.compile("/api/v1/organizations/[^/]+/provider-connections" + suffix);
   }
 }
