@@ -2,6 +2,7 @@ package com.agentos.providertransport;
 
 import com.agentos.providercommands.CommandBoundary.Create;
 import com.agentos.providercommands.CommandBoundary.Failure;
+import com.agentos.providercommands.CommandBoundary.Operation;
 import com.agentos.providercommands.CommandBoundary.Provider;
 import com.agentos.providerreceipts.ProviderReceiptService.Configuration;
 import com.agentos.providerreceipts.ProviderReceiptService.Receipt;
@@ -36,7 +37,8 @@ final class ProviderHistoricalConfiguration {
         || before.revision() == Long.MAX_VALUE
         || after.revision() != before.revision() + 1
         || before.credentialRevision() > before.revision()
-        || before.credentialRevision() != after.credentialRevision()
+        || after.credentialRevision() > after.revision()
+        || !validCredentialRevision(receipt)
         || before.provider() != after.provider()
         || before.credentialMode() != after.credentialMode()
         || !Objects.equals(before.workspaceId(), after.workspaceId())
@@ -46,6 +48,12 @@ final class ProviderHistoricalConfiguration {
         || time(receipt.recordedAt()) == null
         || receipt.recordedAt().isBefore(after.updatedAt())) return false;
     return true;
+  }
+
+  private static boolean validCredentialRevision(Receipt receipt) {
+    long before = receipt.before().credentialRevision();
+    long after = receipt.after().credentialRevision();
+    return receipt.operation() == Operation.ROTATE ? after == before + 1 : after == before;
   }
 
   private static boolean valid(Configuration value, Receipt receipt) {

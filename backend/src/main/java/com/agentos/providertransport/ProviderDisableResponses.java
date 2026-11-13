@@ -13,11 +13,11 @@ public final class ProviderDisableResponses {
 
   public static void writeOutcome(
       ObjectMapper json, HttpServletResponse response, WriteOutcome outcome) throws IOException {
-    ProviderStateChangeResponses.writeOutcome(json, response, outcome, Operation.DISABLE);
+    ProviderConnectionChangeResponses.writeOutcome(json, response, outcome, Operation.DISABLE);
   }
 
   public static void writeLookup(
       ObjectMapper json, HttpServletResponse response, LookupOutcome outcome) throws IOException {
-    ProviderStateChangeResponses.writeLookup(json, response, outcome, Operation.DISABLE);
+    ProviderConnectionChangeResponses.writeLookup(json, response, outcome, Operation.DISABLE);
   }
 }

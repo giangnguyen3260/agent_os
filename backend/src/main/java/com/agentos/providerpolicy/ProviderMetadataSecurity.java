@@ -169,12 +169,14 @@ final class ProviderMetadataSecurity {
       UUID key;
       UUID organization;
       UUID target;
+      HumanIdentity actor;
       try {
         var path = route(route, request);
         if (!path.matches()) throw new PolicyFailure(400, "BAD_REQUEST");
         key = validator.validate(request, path.group(1), path.group(2), CSRF_HEADER);
         organization = UUID.fromString(path.group(1));
         target = UUID.fromString(path.group(2));
+        actor = human();
       } catch (PolicyFailure failure) {
         OptionsResponses.error(json, request, response, failure);
         return;
@@ -199,7 +201,7 @@ final class ProviderMetadataSecurity {
           return;
         }
         try {
-          outcome = command.run(human(), organization, key, body);
+          outcome = command.run(actor, organization, key, body);
         } catch (RuntimeException failure) {
           OptionsResponses.error(json, request, response, PolicyFailure.unavailable());
           return;

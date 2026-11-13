@@ -50,7 +50,8 @@ class ProviderOwnReceiptDispatchTest {
       var outcome = new LookupOutcome(LookupState.FOUND, receipt, null);
       var dispatched = new MockHttpServletResponse();
       var direct = new MockHttpServletResponse();
-      ProviderCreateReceiptController.writeLookup(json, dispatched, outcome, true, false, false);
+      ProviderCreateReceiptController.writeLookup(
+          json, dispatched, outcome, true, false, false, false);
       if (operation == Operation.CREATE) ProviderCreateResponses.writeLookup(json, direct, outcome);
       else ProviderRenameResponses.writeLookup(json, direct, outcome);
       assertThat(dispatched.getStatus()).isEqualTo(200);
@@ -154,7 +155,8 @@ class ProviderOwnReceiptDispatchTest {
                 snapshot("Renamed", 2)),
             null);
     var rejected = new MockHttpServletResponse();
-    ProviderCreateReceiptController.writeLookup(json, rejected, renamed, false, false, false);
+    ProviderCreateReceiptController.writeLookup(
+        json, rejected, renamed, false, false, false, false);
     unavailable(rejected);
     var created =
         new LookupOutcome(
@@ -162,7 +164,8 @@ class ProviderOwnReceiptDispatchTest {
             new Receipt(org, command, Operation.CREATE, connection, actor, time, null, before),
             null);
     var accepted = new MockHttpServletResponse();
-    ProviderCreateReceiptController.writeLookup(json, accepted, created, false, false, false);
+    ProviderCreateReceiptController.writeLookup(
+        json, accepted, created, false, false, false, false);
     assertThat(accepted.getStatus()).isEqualTo(200);
     assertThat(envelope(accepted).at("/data/receipt/operation").asText()).isEqualTo("CREATE");
   }
@@ -196,10 +199,10 @@ class ProviderOwnReceiptDispatchTest {
                 after),
             null);
     var hidden = new MockHttpServletResponse();
-    ProviderCreateReceiptController.writeLookup(json, hidden, result, true, false, false);
+    ProviderCreateReceiptController.writeLookup(json, hidden, result, true, false, false, false);
     unavailable(hidden);
     var visible = new MockHttpServletResponse();
-    ProviderCreateReceiptController.writeLookup(json, visible, result, false, true, false);
+    ProviderCreateReceiptController.writeLookup(json, visible, result, false, true, false, false);
     assertThat(visible.getStatus()).isEqualTo(200);
     assertThat(envelope(visible).at("/data/receipt/after/state").asText()).isEqualTo("DISABLED");
   }
@@ -233,12 +236,60 @@ class ProviderOwnReceiptDispatchTest {
                 snapshot("Original", 2)),
             null);
     var hidden = new MockHttpServletResponse();
-    ProviderCreateReceiptController.writeLookup(json, hidden, result, true, true, false);
+    ProviderCreateReceiptController.writeLookup(json, hidden, result, true, true, false, false);
     unavailable(hidden);
     var visible = new MockHttpServletResponse();
-    ProviderCreateReceiptController.writeLookup(json, visible, result, false, false, true);
+    ProviderCreateReceiptController.writeLookup(json, visible, result, false, false, true, false);
     assertThat(visible.getStatus()).isEqualTo(200);
     assertThat(envelope(visible).at("/data/receipt/after/state").asText()).isEqualTo("ENABLED");
+  }
+
+  @Test
+  void rotateLookupRequiresItsFlagAndAnAdjacentCredentialRevision() throws Exception {
+    var before = snapshot("Original", 1);
+    var after =
+        new Configuration(
+            org,
+            connection,
+            Provider.OPENAI,
+            CredentialMode.OPENAI_API_KEY,
+            "Original",
+            null,
+            "ENABLED",
+            2,
+            2,
+            time,
+            time);
+    var valid =
+        new LookupOutcome(
+            LookupState.FOUND,
+            new Receipt(org, command, Operation.ROTATE, connection, actor, time, before, after),
+            null);
+    var hidden = new MockHttpServletResponse();
+    ProviderCreateReceiptController.writeLookup(json, hidden, valid, true, true, true, false);
+    unavailable(hidden);
+    var visible = new MockHttpServletResponse();
+    ProviderCreateReceiptController.writeLookup(json, visible, valid, false, false, false, true);
+    assertThat(visible.getStatus()).isEqualTo(200);
+    assertThat(envelope(visible).at("/data/receipt/after/credentialRevision").asText())
+        .isEqualTo("2");
+
+    var invalid =
+        new LookupOutcome(
+            LookupState.FOUND,
+            new Receipt(
+                org,
+                command,
+                Operation.ROTATE,
+                connection,
+                actor,
+                time,
+                before,
+                snapshot("Original", 2)),
+            null);
+    var rejected = new MockHttpServletResponse();
+    ProviderCreateReceiptController.writeLookup(json, rejected, invalid, false, false, false, true);
+    unavailable(rejected);
   }
 
   @Test
@@ -284,7 +335,7 @@ class ProviderOwnReceiptDispatchTest {
 
   private MockHttpServletResponse dispatch(LookupOutcome result) throws Exception {
     var response = new MockHttpServletResponse();
-    ProviderCreateReceiptController.writeLookup(json, response, result, true, false, false);
+    ProviderCreateReceiptController.writeLookup(json, response, result, true, false, false, false);
     return response;
   }
 

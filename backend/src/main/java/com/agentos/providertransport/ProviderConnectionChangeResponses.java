@@ -16,8 +16,8 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 
 /** State change projections for a response whose Retry-After header has not been set. */
-final class ProviderStateChangeResponses {
-  private ProviderStateChangeResponses() {}
+final class ProviderConnectionChangeResponses {
+  private ProviderConnectionChangeResponses() {}
 
   /** Writes a confirmed state change receipt or its safe public error response. */
   static void writeOutcome(
@@ -32,7 +32,7 @@ final class ProviderStateChangeResponses {
     }
     var result = outcome == null ? null : outcome.result();
     var receipt =
-        result == null ? null : ProviderStateChangeReceipt.from(result.receipt(), operation);
+        result == null ? null : ProviderConnectionChangeReceipt.from(result.receipt(), operation);
     if (receipt == null) {
       error(json, response, new Failure(Code.RECEIPT_UNAVAILABLE));
       return;
@@ -55,7 +55,7 @@ final class ProviderStateChangeResponses {
       error(json, response, outcome.failure());
       return;
     }
-    var receipt = ProviderStateChangeReceipt.from(outcome.receipt(), operation);
+    var receipt = ProviderConnectionChangeReceipt.from(outcome.receipt(), operation);
     if (outcome.state() == LookupState.FOUND && receipt == null) {
       error(json, response, new Failure(Code.RECEIPT_UNAVAILABLE));
       return;
@@ -72,5 +72,5 @@ final class ProviderStateChangeResponses {
   }
 
   @JsonInclude(JsonInclude.Include.ALWAYS)
-  private record LookupData(ProviderStateChangeReceipt receipt) {}
+  private record LookupData(ProviderConnectionChangeReceipt receipt) {}
 }

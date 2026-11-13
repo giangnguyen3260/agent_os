@@ -213,3 +213,19 @@ adapter policy and positive credential evidence after locking the connection.
 An unavailable credential returns `409 CREDENTIAL_UNAVAILABLE`. The UI can
 reload the list to show current eligibility. Enable uses the same ADMIN/CSRF,
 revision, receipt, and upload controls as Disable.
+
+## Opt-in Rotate HTTP
+
+Set `agentos.provider-rotate.enabled=true` to assemble the coordinator with
+the managed `agentos.provider-vault.*` settings and writer privileges used by
+Create. Set `agentos.provider-rotate.http-enabled=true` to expose
+`POST /api/v1/organizations/{org}/provider-connections/{connection}/rotate`
+and advertise `X-Provider-Rotate-Enabled` on the authorized options response.
+Both flags default to false.
+
+The current ADMIN submits `expectedRevision` and the new `apiKey` as JSON
+strings with session CSRF and a UUID idempotency key. The connector has a
+10-second idle upload timeout and permits eight concurrent Rotate submissions
+per instance. The existing own-receipt GET returns the committed historical
+configuration without receiving a credential. Rotation preserves the connection
+state and historical credential references.

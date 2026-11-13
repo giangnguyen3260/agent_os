@@ -64,7 +64,9 @@ import org.springframework.test.context.DynamicPropertySource;
       "agentos.provider-create.enabled=true",
       "agentos.provider-list.enabled=true",
       "agentos.provider-rename.enabled=true",
-      "agentos.provider-rename.http-enabled=true"
+      "agentos.provider-rename.http-enabled=true",
+      "agentos.provider-rotate.enabled=true",
+      "agentos.provider-rotate.http-enabled=true"
     })
 @ActiveProfiles("test")
 @Import(ProviderCreateVaultHttpIT.UploadReadContinue.class)
@@ -398,6 +400,168 @@ class ProviderCreateVaultHttpIT {
         (String) original.get("verifier"));
   }
 
+  @Test
+  void rotatesThroughManagedHttpAndVaultAndRecoversTheSameReceipt() throws Exception {
+    UUID org = UUID.randomUUID(), actor = UUID.randomUUID();
+    jdbc.update(
+        "insert into organizations(id,name,slug,status,created_at,updated_at) values"
+            + " (?,'Rotate HTTP',?,'ACTIVE',current_timestamp,current_timestamp)",
+        org,
+        org.toString());
+    jdbc.update(
+        "insert into human_accounts(id,email,display_name,password_hash) values (?,?,'Rotate HTTP',?)",
+        actor,
+        actor + "@example.test",
+        passwords.encode(PASSWORD));
+    jdbc.update(
+        "insert into organization_memberships(account_id,organization_id,role) values (?,?,'ADMIN')",
+        actor,
+        org);
+
+    var client =
+        HttpClient.newBuilder()
+            .cookieHandler(new CookieManager(null, CookiePolicy.ACCEPT_ALL))
+            .connectTimeout(Duration.ofSeconds(3))
+            .build();
+    String base = "http://127.0.0.1:" + port;
+    String collection = base + "/api/v1/organizations/" + org + "/provider-connections";
+    var auth = authenticate(client, base, actor);
+    var initial =
+        postCredential(
+            client,
+            collection,
+            auth,
+            UUID.randomUUID(),
+            "{\"provider\":\"OPENAI\",\"credentialMode\":\"OPENAI_API_KEY\","
+                + "\"name\":\"Rotate fixture\",\"options\":{},\"apiKey\":\""
+                + SECRET
+                + "\"}");
+    assertThat(initial.statusCode()).isEqualTo(201);
+    var connection =
+        UUID.fromString(json.readTree(initial.body()).at("/data/connectionId").asText());
+    String path = collection + "/" + connection + "/rotate";
+    UUID key = UUID.randomUUID();
+    String newSecret = "rotation-disposable-synthetic-key";
+    String body = "{\"expectedRevision\":\"1\",\"apiKey\":\"" + newSecret + "\"}";
+
+    var noCsrf =
+        client.send(
+            HttpRequest.newBuilder(URI.create(path))
+                .timeout(Duration.ofSeconds(10))
+                .header("Idempotency-Key", key.toString())
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(body))
+                .build(),
+            HttpResponse.BodyHandlers.ofString());
+    assertThat(noCsrf.statusCode()).isEqualTo(403);
+    var first = postCredential(client, path, auth, key, body);
+    assertThat(first.statusCode()).isEqualTo(201);
+    assertThat(first.headers().firstValue("Cache-Control")).contains("no-store");
+    assertThat(first.body()).doesNotContain(newSecret, "external_locator", "verifier");
+    var receipt = json.readTree(first.body()).path("data");
+    assertThat(receipt.path("operation").asText()).isEqualTo("ROTATE");
+    assertThat(receipt.at("/before/credentialRevision").asText()).isEqualTo("1");
+    assertThat(receipt.at("/after/credentialRevision").asText()).isEqualTo("2");
+    assertThat(receipt.at("/after/revision").asText()).isEqualTo("2");
+
+    var replay = postCredential(client, path, auth, key, body);
+    assertThat(replay.statusCode()).isEqualTo(200);
+    assertThat(json.readTree(replay.body()).path("data")).isEqualTo(receipt);
+    var lookup =
+        client.send(
+            HttpRequest.newBuilder(URI.create(collection + "/receipts/" + key))
+                .timeout(Duration.ofSeconds(10))
+                .GET()
+                .build(),
+            HttpResponse.BodyHandlers.ofString());
+    assertThat(lookup.statusCode()).isEqualTo(200);
+    assertThat(json.readTree(lookup.body()).at("/data/receipt")).isEqualTo(receipt);
+
+    var scope = new Scope(org, connection, Provider.OPENAI, 2);
+    var stored =
+        jdbc.queryForMap(
+            "select external_locator,external_key_version,hmac_key_version,verifier"
+                + " from provider_credential_versions where organization_id=? and connection_id=?"
+                + " and credential_revision=2",
+            org,
+            connection);
+    var reference =
+        new Reference(
+            scope,
+            (String) stored.get("external_locator"),
+            (String) stored.get("external_key_version"));
+    readBack(
+        scope,
+        reference,
+        (String) stored.get("hmac_key_version"),
+        (String) stored.get("verifier"),
+        newSecret);
+    assertThat(
+            jdbc.queryForObject(
+                "select count(*) from provider_secret_preparations where organization_id=?",
+                Long.class,
+                org))
+        .isEqualTo(2L);
+    assertThat(
+            jdbc.queryForObject(
+                "select state from provider_secret_preparations where organization_id=? and external_locator=?",
+                String.class,
+                org,
+                reference.locator()))
+        .isEqualTo("WRITTEN");
+  }
+
+  private record Csrf(String header, String token) {}
+
+  private Csrf authenticate(HttpClient client, String base, UUID actor) throws Exception {
+    var csrfResponse =
+        client.send(
+            HttpRequest.newBuilder(URI.create(base + "/api/v1/auth/csrf"))
+                .timeout(Duration.ofSeconds(5))
+                .GET()
+                .build(),
+            HttpResponse.BodyHandlers.ofString());
+    assertThat(csrfResponse.statusCode()).isEqualTo(200);
+    var token = json.readTree(csrfResponse.body()).path("data");
+    var login =
+        client.send(
+            HttpRequest.newBuilder(URI.create(base + "/api/v1/auth/login"))
+                .timeout(Duration.ofSeconds(5))
+                .header(token.path("headerName").asText(), token.path("token").asText())
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .POST(
+                    HttpRequest.BodyPublishers.ofString(
+                        "username=" + actor + "%40example.test&password=" + PASSWORD))
+                .build(),
+            HttpResponse.BodyHandlers.discarding());
+    assertThat(login.statusCode()).isEqualTo(200);
+    csrfResponse =
+        client.send(
+            HttpRequest.newBuilder(URI.create(base + "/api/v1/auth/csrf"))
+                .timeout(Duration.ofSeconds(5))
+                .GET()
+                .build(),
+            HttpResponse.BodyHandlers.ofString());
+    assertThat(csrfResponse.statusCode()).isEqualTo(200);
+    token = json.readTree(csrfResponse.body()).path("data");
+    String csrf = token.path("token").asText();
+    String header = token.path("headerName").asText();
+    return new Csrf(header, csrf);
+  }
+
+  private static HttpResponse<String> postCredential(
+      HttpClient client, String url, Csrf csrf, UUID key, String body) throws Exception {
+    return client.send(
+        HttpRequest.newBuilder(URI.create(url))
+            .timeout(Duration.ofSeconds(15))
+            .header(csrf.header(), csrf.token())
+            .header("Idempotency-Key", key.toString())
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString(body))
+            .build(),
+        HttpResponse.BodyHandlers.ofString());
+  }
+
   private byte[] credentialFingerprint(UUID org, UUID connection) throws Exception {
     String stored =
         jdbc.queryForObject(
@@ -523,38 +687,9 @@ class ProviderCreateVaultHttpIT {
             .version(HttpClient.Version.HTTP_1_1)
             .build();
     String base = "http://127.0.0.1:" + port;
-    var csrfResponse =
-        client.send(
-            HttpRequest.newBuilder(URI.create(base + "/api/v1/auth/csrf"))
-                .timeout(Duration.ofSeconds(5))
-                .GET()
-                .build(),
-            HttpResponse.BodyHandlers.ofString());
-    assertThat(csrfResponse.statusCode()).isEqualTo(200);
-    var token = json.readTree(csrfResponse.body()).path("data");
-    var login =
-        client.send(
-            HttpRequest.newBuilder(URI.create(base + "/api/v1/auth/login"))
-                .timeout(Duration.ofSeconds(5))
-                .header(token.path("headerName").asText(), token.path("token").asText())
-                .header("Content-Type", "application/x-www-form-urlencoded")
-                .POST(
-                    HttpRequest.BodyPublishers.ofString(
-                        "username=" + actor + "%40example.test&password=" + PASSWORD))
-                .build(),
-            HttpResponse.BodyHandlers.discarding());
-    assertThat(login.statusCode()).isEqualTo(200);
-    csrfResponse =
-        client.send(
-            HttpRequest.newBuilder(URI.create(base + "/api/v1/auth/csrf"))
-                .timeout(Duration.ofSeconds(5))
-                .GET()
-                .build(),
-            HttpResponse.BodyHandlers.ofString());
-    assertThat(csrfResponse.statusCode()).isEqualTo(200);
-    token = json.readTree(csrfResponse.body()).path("data");
-    String csrf = token.path("token").asText();
-    String header = token.path("headerName").asText();
+    var auth = authenticate(client, base, actor);
+    String csrf = auth.token();
+    String header = auth.header();
     String cookie =
         String.join(
             "; ",
@@ -879,6 +1014,12 @@ class ProviderCreateVaultHttpIT {
 
   private static void readBack(Scope scope, Reference reference, String version, String verifier)
       throws Exception {
+    readBack(scope, reference, version, verifier, SECRET);
+  }
+
+  private static void readBack(
+      Scope scope, Reference reference, String version, String verifier, String expectedSecret)
+      throws Exception {
     var trustStore = KeyStore.getInstance(KeyStore.getDefaultType());
     trustStore.load(null, null);
     try (var input = Files.newInputStream(Path.of(required("AGENTOS_TEST_VAULT_CA")))) {
@@ -906,7 +1047,7 @@ class ProviderCreateVaultHttpIT {
               throw new CredentialBoundary.Failure();
             },
             tls.getSocketFactory());
-    byte[] expected = SECRET.getBytes(StandardCharsets.US_ASCII);
+    byte[] expected = expectedSecret.getBytes(StandardCharsets.US_ASCII);
     try {
       new CredentialBoundary(keys, secrets)
           .use(
