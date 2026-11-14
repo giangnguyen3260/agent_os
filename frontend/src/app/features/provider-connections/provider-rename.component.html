@@ -1,4 +1,6 @@
-@if (enabled() || disableEnabled() || enableVisible() || error()) {
+@if (
+  enabled() || disableEnabled() || enableVisible() || rotateEnabled() || error()
+) {
   <section class="provider-rename" [attr.aria-label]="panelLabel()">
     @if (error()) {
       <p role="alert">{{ error() }}</p>
@@ -23,9 +25,40 @@
       <button type="button" (click)="refreshRequested.emit()">
         Tải lại kết nối
       </button>
-    } @else if (enabled() || disableEnabled() || enableVisible()) {
+    } @else if (
+      enabled() || disableEnabled() || enableVisible() || rotateEnabled()
+    ) {
       @if (review(); as change) {
-        @if (change.operation !== 'rename') {
+        @if (change.operation === 'rotate') {
+          <form
+            data-testid="provider-rotate-review"
+            novalidate
+            (submit)="submitRotate($event, rotateKey)"
+          >
+            <h3>Thay API key</h3>
+            <p>
+              Kết nối: <strong>{{ change.name }}</strong>
+            </p>
+            <p>Phiên bản khóa: {{ change.expectedCredentialRevision }}</p>
+            <label
+              >API key mới
+              <input
+                #rotateKey
+                type="password"
+                autocomplete="new-password"
+                [disabled]="busy()"
+                maxlength="4096"
+                required
+              />
+            </label>
+            <button type="submit" [disabled]="busy()">
+              Xác nhận thay API key
+            </button>
+            <button type="button" [disabled]="busy()" (click)="edit()">
+              Hủy
+            </button>
+          </form>
+        } @else if (change.operation !== 'rename') {
           <div
             [attr.data-testid]="'provider-' + change.operation + '-review'"
             role="region"
@@ -89,6 +122,9 @@
       } @else {
         @if (enabled()) {
           <button type="button" (click)="start()">Đổi tên</button>
+        }
+        @if (rotateEnabled()) {
+          <button type="button" (click)="prepareRotate()">Thay API key</button>
         }
         @if (disableEnabled()) {
           <button type="button" (click)="prepareDisable()">Tắt kết nối</button>

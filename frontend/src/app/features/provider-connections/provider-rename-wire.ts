@@ -4,7 +4,7 @@ import {
   uuid,
 } from '../task-dependencies/task-dependencies-validation';
 import {providerMode, validName, validWorkspace} from './provider-create-wire';
-import {Provider} from './provider-list-wire';
+import {Provider, ProviderConnectionItem} from './provider-list-wire';
 
 export interface ReviewedRename {
   connectionId: string;
@@ -26,13 +26,19 @@ export interface ReviewedEnable {
   name: string;
 }
 
+export interface ReviewedRotate extends ReviewedEnable {
+  expectedCredentialRevision: string;
+  state: ProviderConnectionItem['state'];
+}
+
 const operationLabels = {
   RENAME: 'Rename',
   DISABLE: 'Disable',
   ENABLE: 'Enable',
+  ROTATE: 'Rotate',
 } as const;
 type MetadataOperation = keyof typeof operationLabels;
-type ReviewedCommand = ReviewedRename | ReviewedDisable | ReviewedEnable;
+type ReviewedCommand = ReviewedEnable | ReviewedRotate;
 
 interface HistoricalSnapshot {
   organizationId: string;
@@ -147,16 +153,24 @@ function receiptMatches(
     before.credentialMode === after.credentialMode &&
     (before.options.workspaceId ?? null) ===
       (after.options.workspaceId ?? null) &&
-    before.credentialRevision === after.credentialRevision &&
+    (operation === 'ROTATE'
+      ? 'expectedCredentialRevision' in submitted &&
+        before.credentialRevision === submitted.expectedCredentialRevision &&
+        BigInt(after.credentialRevision) ===
+          BigInt(before.credentialRevision) + 1n &&
+        before.state === submitted.state
+      : before.credentialRevision === after.credentialRevision) &&
     before.createdAt === after.createdAt &&
     before.createdAt <= before.updatedAt &&
     before.updatedAt <= after.updatedAt &&
     after.updatedAt <= value['committedAt'] &&
     (operation === 'RENAME'
       ? before.state === after.state && before.name !== after.name
-      : before.state !== after.state &&
-        after.state === (operation === 'ENABLE' ? 'ENABLED' : 'DISABLED') &&
-        before.name === after.name)
+      : operation === 'ROTATE'
+        ? before.state === after.state && before.name === after.name
+        : before.state !== after.state &&
+          after.state === (operation === 'ENABLE' ? 'ENABLED' : 'DISABLED') &&
+          before.name === after.name)
   );
 }
 
@@ -257,4 +271,24 @@ export function receiptFoundEnable(
   expectedCommand: ReviewedEnable,
 ): boolean {
   return receiptFound(value, org, actor, target, expectedCommand, 'ENABLE');
+}
+
+export function verifyRotated(
+  value: unknown,
+  org: string,
+  actor: string,
+  submitted: ReviewedCommand,
+): void {
+  if (!receiptMatches(data(value, 'Rotate'), org, actor, submitted, 'ROTATE'))
+    throw new Error('Invalid Rotate receipt');
+}
+
+export function receiptFoundRotate(
+  value: unknown,
+  org: string,
+  actor: string,
+  target: string,
+  expectedCommand: ReviewedCommand,
+): boolean {
+  return receiptFound(value, org, actor, target, expectedCommand, 'ROTATE');
 }

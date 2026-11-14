@@ -53,6 +53,7 @@ async function fixture(
   {
     disable = 'false',
     enable = 'false',
+    rotate = 'false',
     adapterEnabled = false,
     initial = row(),
   } = {},
@@ -79,6 +80,7 @@ async function fixture(
         'X-Provider-Rename-Enabled': enabled,
         'X-Provider-Disable-Enabled': disable,
         'X-Provider-Enable-Enabled': enable,
+        'X-Provider-Rotate-Enabled': rotate,
         'X-Provider-Create-Enabled': 'false',
       },
       json: envelope({
@@ -675,4 +677,111 @@ test('Enable recovers an uncertain result from its own receipt without repeating
   await expect(page.getByText('Đã bật lại kết nối provider.')).toBeVisible();
   expect(posts).toBe(1);
   expect(lookups).toBe(1);
+});
+
+const rotateAction = page =>
+  page.getByRole('button', {name: 'Thay API key', exact: true});
+const rotatePath = `**${base}/${target}/rotate`;
+const replacement = 'disposable-browser-rotation-key';
+function rotationReceipt(before) {
+  const result = receipt(before, before.name);
+  result.operation = 'ROTATE';
+  result.after.credentialRevision = (
+    BigInt(before.credentialRevision) + 1n
+  ).toString();
+  return result;
+}
+
+async function submitRotation(page) {
+  await rotateAction(page).click();
+  const review = page.getByTestId('provider-rotate-review');
+  await review.getByLabel('API key mới').fill(replacement);
+  await review.getByRole('button', {name: 'Xác nhận thay API key'}).click();
+}
+
+test('Rotate uses its own capability even with a disabled adapter', async ({
+  page,
+}) => {
+  const before = row();
+  const state = await fixture(page, 'false', {rotate: 'true', initial: before});
+  await page.route(rotatePath, async route => {
+    expect(route.request().postDataJSON()).toEqual({
+      expectedRevision: before.revision,
+      apiKey: replacement,
+    });
+    expect(route.request().headers()['x-csrf-token']).toBe(
+      'fixture-csrf-token',
+    );
+    const result = rotationReceipt(before);
+    state.update({...before, ...result.after});
+    await route.fulfill({status: 201, json: envelope(result)});
+  });
+  await submitRotation(page);
+  await expect(
+    page.getByText('Đã thay API key cho kết nối provider.'),
+  ).toBeVisible();
+  await expect(page.getByLabel('API key mới')).toHaveCount(0);
+});
+
+test('Rotate clears the key and checks only its receipt after an uncertain response', async ({
+  page,
+}) => {
+  const before = row();
+  const state = await fixture(page, 'true', {rotate: 'true', initial: before});
+  const result = rotationReceipt(before);
+  let posts = 0,
+    lookups = 0,
+    key;
+  let release;
+  const responseBarrier = new Promise(resolve => {
+    release = resolve;
+  });
+  await page.route(rotatePath, async route => {
+    posts++;
+    key = route.request().headers()['idempotency-key'];
+    await responseBarrier;
+    await route.fulfill({
+      status: 201,
+      contentType: 'application/json',
+      body: '{',
+    });
+  });
+  await page.route(`**${base}/receipts/*`, async route => {
+    lookups++;
+    expect(route.request().method()).toBe('GET');
+    expect(route.request().postData()).toBeNull();
+    expect(new URL(route.request().url()).pathname).toBe(
+      `${base}/receipts/${key}`,
+    );
+    const candidate =
+      lookups === 1
+        ? {...result, after: {...result.after, credentialRevision: '1'}}
+        : result;
+    if (lookups === 2) state.update({...before, ...result.after});
+    await route.fulfill({json: envelope({receipt: candidate})});
+  });
+  await submitRotation(page);
+  try {
+    await expect(page.getByLabel('API key mới')).toHaveValue('');
+  } finally {
+    release();
+  }
+  const unknown = page.getByTestId('provider-rotate-unknown');
+  const check = unknown.getByRole('button', {name: 'Kiểm tra kết quả'});
+  await expect(unknown).toBeVisible();
+  expect(lookups).toBe(0);
+  await expect(page.getByLabel('API key mới')).toHaveCount(0);
+  await check.click();
+  await expect(unknown).toContainText('Không thể kiểm tra biên nhận');
+  await check.click();
+  await expect(
+    page.getByText('Đã thay API key cho kết nối provider.'),
+  ).toBeVisible();
+  expect(posts).toBe(1);
+  expect(lookups).toBe(2);
+});
+
+test('Rotate stays hidden when its own flag is off', async ({page}) => {
+  await fixture(page);
+  await expect(rotateAction(page)).toHaveCount(0);
 });

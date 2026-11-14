@@ -26,12 +26,15 @@ import {
   receiptFoundDisable,
   receiptFoundEnable,
   receiptFoundRename,
+  receiptFoundRotate,
   ReviewedDisable,
   ReviewedEnable,
   ReviewedRename,
+  ReviewedRotate,
   verifyDisabled,
   verifyEnabled,
   verifyRenamed,
+  verifyRotated,
 } from './provider-rename-wire';
 
 interface Scope {
@@ -43,7 +46,8 @@ interface Scope {
 type Review =
   | (ReviewedRename & {operation: 'rename'; beforeName: string})
   | (ReviewedDisable & {operation: 'disable'})
-  | (ReviewedEnable & {operation: 'enable'});
+  | (ReviewedEnable & {operation: 'enable'})
+  | (ReviewedRotate & {operation: 'rotate'});
 interface Pending {
   key: string;
   review: Review;
@@ -54,16 +58,19 @@ const operationNames = {
   rename: 'đổi tên',
   disable: 'tắt kết nối',
   enable: 'bật lại kết nối',
+  rotate: 'thay API key',
 } as const;
 const verifyReceipt = {
   rename: verifyRenamed,
   disable: verifyDisabled,
   enable: verifyEnabled,
+  rotate: verifyRotated,
 };
 const findReceipt = {
   rename: receiptFoundRename,
   disable: receiptFoundDisable,
   enable: receiptFoundEnable,
+  rotate: receiptFoundRotate,
 };
 
 @Component({
@@ -82,10 +89,12 @@ export class ProviderRenameComponent {
   readonly renamed = output<void>();
   readonly disabled = output<void>();
   readonly reenabled = output<void>();
+  readonly rotated = output<void>();
   readonly refreshRequested = output<void>();
   readonly enabled = signal(false);
   readonly disableEnabled = signal(false);
   readonly enableVisible = signal(false);
+  readonly rotateEnabled = signal(false);
   readonly enableUnavailable = signal('');
   readonly editing = signal(false);
   readonly name = signal('');
@@ -109,6 +118,11 @@ export class ProviderRenameComponent {
       (!operation && !this.enabled() && this.enableVisible())
     )
       return 'Bật lại kết nối';
+    if (
+      operation === 'rotate' ||
+      (!operation && !this.enabled() && this.rotateEnabled())
+    )
+      return 'Thay API key';
     return 'Đổi tên kết nối';
   });
 
@@ -159,6 +173,9 @@ export class ProviderRenameComponent {
               this.disableEnabled.set(
                 connection.state === 'ENABLED' &&
                   response.headers.get('X-Provider-Disable-Enabled') === 'true',
+              );
+              this.rotateEnabled.set(
+                response.headers.get('X-Provider-Rotate-Enabled') === 'true',
               );
               const offerEnable =
                 connection.state === 'DISABLED' &&
@@ -238,7 +255,11 @@ export class ProviderRenameComponent {
     this.prepareStateReview('enable');
   }
 
-  private prepareStateReview(operation: 'disable' | 'enable'): void {
+  prepareRotate(): void {
+    this.prepareStateReview('rotate');
+  }
+
+  private prepareStateReview(operation: 'disable' | 'enable' | 'rotate'): void {
     const scope = this.scope;
     if (
       !scope ||
@@ -252,12 +273,35 @@ export class ProviderRenameComponent {
     )
       return;
     this.error.set('');
-    this.review.set({
-      operation,
+    const common = {
       connectionId: scope.connection.id,
       expectedRevision: scope.connection.revision,
       name: scope.connection.name,
-    });
+    };
+    this.review.set(
+      operation === 'rotate'
+        ? {
+            ...common,
+            operation,
+            expectedCredentialRevision: scope.connection.credentialRevision,
+            state: scope.connection.state,
+          }
+        : {...common, operation},
+    );
+  }
+
+  submitRotate(event: Event, input: HTMLInputElement): void {
+    event.preventDefault();
+    let key = input.value;
+    input.value = '';
+    if (!/^[!-~]{1,4096}$/.test(key)) {
+      this.error.set(
+        'API key phải có từ 1 đến 4096 ký tự ASCII hiển thị, không có khoảng trắng.',
+      );
+      return;
+    }
+    void this.confirm(key);
+    key = '';
   }
 
   edit(): void {
@@ -266,7 +310,7 @@ export class ProviderRenameComponent {
     this.error.set('');
   }
 
-  async confirm(): Promise<void> {
+  async confirm(apiKey?: string): Promise<void> {
     const scope = this.scope,
       review = this.review();
     if (
@@ -274,6 +318,7 @@ export class ProviderRenameComponent {
       !review ||
       !this.current(scope) ||
       !this.operationAvailable(review.operation) ||
+      (review.operation === 'rotate' && !apiKey) ||
       this.busy() ||
       this.pending() ||
       this.needsRefresh()
@@ -293,7 +338,7 @@ export class ProviderRenameComponent {
       if (!this.current(scope)) return;
       const csrf = csrfHeader(token);
       sent = true;
-      const response = await firstValueFrom(
+      const submission = firstValueFrom(
         this.http
           .post<unknown>(
             this.base(scope) +
@@ -303,7 +348,9 @@ export class ProviderRenameComponent {
               review.operation,
             review.operation === 'rename'
               ? {expectedRevision: review.expectedRevision, name: review.name}
-              : {expectedRevision: review.expectedRevision},
+              : review.operation === 'rotate'
+                ? {expectedRevision: review.expectedRevision, apiKey}
+                : {expectedRevision: review.expectedRevision},
             {
               headers: {
                 ...headers,
@@ -316,6 +363,8 @@ export class ProviderRenameComponent {
           )
           .pipe(takeUntil(scope.closed)),
       );
+      apiKey = undefined;
+      const response = await submission;
       if (!this.current(scope)) return;
       if (response.status !== 201 && response.status !== 200)
         throw new Error('Invalid metadata response');
@@ -339,6 +388,7 @@ export class ProviderRenameComponent {
         this.name.set('');
       }
     } finally {
+      apiKey = undefined;
       if (this.current(scope)) this.busy.set(false);
     }
   }
@@ -406,10 +456,15 @@ export class ProviderRenameComponent {
         rename: 'và xem lại tên mới.',
         disable: 'trước khi tắt.',
         enable: 'trước khi bật lại.',
+        rotate: 'trước khi thay API key.',
       };
       message = `Kết nối đã thay đổi. Vui lòng tải lại kết nối ${next[operation]}`;
       this.needsRefresh.set(true);
-    } else if (failure.status === 409 && code === 'NO_CHANGE') {
+    } else if (
+      operation !== 'rotate' &&
+      failure.status === 409 &&
+      code === 'NO_CHANGE'
+    ) {
       const state = {
         rename: 'Tên kết nối không thay đổi.',
         disable: 'Kết nối đã tắt.',
@@ -489,12 +544,14 @@ export class ProviderRenameComponent {
   private operationAvailable(operation: Review['operation']): boolean {
     if (operation === 'rename') return this.enabled();
     if (operation === 'disable') return this.disableEnabled();
+    if (operation === 'rotate') return this.rotateEnabled();
     return this.enableVisible() && !this.enableUnavailable();
   }
   private clearOptions(): void {
     this.enabled.set(false);
     this.disableEnabled.set(false);
     this.enableVisible.set(false);
+    this.rotateEnabled.set(false);
     this.enableUnavailable.set('');
   }
   private reset(): void {
@@ -515,6 +572,7 @@ export class ProviderRenameComponent {
     this.receiptMessage.set('');
     if (operation === 'rename') this.renamed.emit();
     else if (operation === 'disable') this.disabled.emit();
-    else this.reenabled.emit();
+    else if (operation === 'enable') this.reenabled.emit();
+    else this.rotated.emit();
   }
 }

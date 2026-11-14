@@ -50,6 +50,9 @@
     @if (completedHere() === 'enable') {
       <p role="status">Đã bật lại kết nối provider.</p>
     }
+    @if (completedHere() === 'rotate') {
+      <p role="status">Đã thay API key cho kết nối provider.</p>
+    }
     @if (loading()) {
       <p role="status">Đang tải kết nối…</p>
     } @else if (error()) {
@@ -110,6 +113,7 @@
                   (renamed)="commandCompleted('rename')"
                   (disabled)="commandCompleted('disable')"
                   (reenabled)="commandCompleted('enable')"
+                  (rotated)="commandCompleted('rotate')"
                   (refreshRequested)="reload()"
                 />
               </div>
