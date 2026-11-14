@@ -7,6 +7,7 @@ import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mockingDetails;
 
 import com.agentos.auth.HumanIdentity;
+import com.agentos.providerchecks.ProviderAccessCheckDispatch;
 import com.agentos.providercommands.CommandBoundary;
 import com.agentos.providercommands.CommandBoundary.Command;
 import com.agentos.providercommands.CommandBoundary.Create;
@@ -670,6 +671,83 @@ abstract class ProviderReceiptFixture {
 
     } finally {
       if (seededPolicy) jdbc.update("delete from provider_deployment_policy where id=1");
+    }
+  }
+
+  @Test
+  void accessCheckDispatchClaimsOnceAndFencesAChangedActor() {
+    boolean seeded =
+        jdbc.queryForObject("select count(*) from provider_deployment_policy", Long.class) == 0;
+    if (seeded)
+      jdbc.update(
+          """
+          insert into provider_deployment_policy
+            (id,revision,openai_enabled,anthropic_enabled,gemini_enabled,created_at,updated_at)
+          values (1,3,true,true,true,current_timestamp,current_timestamp)
+          """);
+    try {
+      var policy = jdbc.queryForMap("select * from provider_deployment_policy where id=1");
+      long policyRevision = ((Number) policy.get("revision")).longValue();
+      Provider provider =
+          Boolean.TRUE.equals(policy.get("openai_enabled"))
+              ? Provider.OPENAI
+              : Boolean.TRUE.equals(policy.get("anthropic_enabled"))
+                  ? Provider.ANTHROPIC
+                  : Provider.GOOGLE_GEMINI;
+      var create = createCommand(provider);
+      service.execute(human, org, key, create, prepare(create), id, credential(provider, 1));
+      UUID check = UUID.randomUUID(), worker = UUID.randomUUID();
+      var accepted = jdbc.queryForObject("select current_timestamp", OffsetDateTime.class);
+      jdbc.update(
+          """
+          insert into provider_access_checks
+            (id,organization_id,connection_id,actor_id,actor_credential_version,
+             connection_revision,credential_revision,policy_revision,accepted_at,queue_expires_at)
+          values (?,?,?,?,0,1,1,?,?,?)
+          """,
+          check,
+          org,
+          id,
+          actor,
+          policyRevision,
+          accepted,
+          accepted.plusSeconds(60));
+      jdbc.update(
+          "insert into provider_access_check_outbox values (?,?,?,1,1,?)",
+          org,
+          id,
+          check,
+          policyRevision);
+
+      var dispatch = new ProviderAccessCheckDispatch(jdbc.getDataSource());
+      var claim = dispatch.claim(org, check, worker);
+      assertThat(claim).isNotNull();
+      assertThat(dispatch.claim(org, check, UUID.randomUUID())).isNull();
+      assertThat(dispatch.finish(claim, ProviderAccessCheckDispatch.Result.ACCESSIBLE)).isFalse();
+      assertThat(dispatch.authorize(claim)).isNotNull();
+      assertThat(dispatch.authorize(claim)).isNull();
+      jdbc.update("update human_accounts set credential_version=1 where id=?", actor);
+      assertThat(dispatch.finish(claim, ProviderAccessCheckDispatch.Result.ACCESSIBLE)).isTrue();
+      assertThat(dispatch.finish(claim, ProviderAccessCheckDispatch.Result.UNKNOWN)).isFalse();
+      assertThat(
+              jdbc.queryForMap(
+                  "select outcome,error_code from provider_access_checks where id=?", check))
+          .containsEntry("outcome", "SUPERSEDED")
+          .containsEntry("error_code", "AUTHORITY_LOST");
+      assertThat(count("provider_access_check_outbox")).isZero();
+      UUID expired = UUID.randomUUID();
+      insertAccessCheck(expired, accepted.minusMinutes(2));
+      jdbc.update(
+          "insert into provider_access_check_outbox values (?,?,?,1,1,3)", org, id, expired);
+      assertThat(dispatch.claim(org, expired, worker)).isNull();
+      assertThat(
+              jdbc.queryForMap(
+                  "select outcome,error_code from provider_access_checks where id=?", expired))
+          .containsEntry("outcome", "FAILED")
+          .containsEntry("error_code", "CHECK_EXPIRED");
+      assertThat(count("provider_access_check_outbox")).isZero();
+    } finally {
+      if (seeded) jdbc.update("delete from provider_deployment_policy where id=1");
     }
   }
 
