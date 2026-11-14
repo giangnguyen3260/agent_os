@@ -17,7 +17,9 @@ import org.springframework.transaction.interceptor.TransactionInterceptor;
 record ProviderCommandRuntime(
     ProviderReceiptService receipts,
     ProviderCompletionBoundary completion,
-    ProviderWriteAdmission admission) {
+    ProviderWriteAdmission admission,
+    DataSource datasource,
+    ProviderConnectionService connections) {
   static ProviderCommandRuntime assemble(DataSource datasource) {
     if (datasource == null) throw new IllegalArgumentException("INVALID_CONFIGURATION");
     var jdbc = new JdbcTemplate(datasource);
@@ -35,6 +37,8 @@ record ProviderCommandRuntime(
     return new ProviderCommandRuntime(
         service,
         new ProviderCompletionBoundary(manager, jdbc, service),
-        new ProviderWriteAdmission(datasource));
+        new ProviderWriteAdmission(datasource),
+        datasource,
+        (ProviderConnectionService) connections.getProxy());
   }
 }

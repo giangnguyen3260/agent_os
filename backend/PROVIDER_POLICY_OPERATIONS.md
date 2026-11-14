@@ -238,3 +238,9 @@ Roles that read or write Provider command receipts also need SELECT on
 shared idempotency namespace. A dedicated Access Check writer additionally
 needs SELECT on `provider_access_check_outbox`, INSERT on the check, receipt,
 outbox and event tables, and permission to call the existing credential availability function.
+
+The worker is opt-in via `agentos.provider-access-check.worker-enabled=true`.
+It uses the managed Vault settings and requires the writer to update check
+disposition columns and delete completed outbox entries. Permit egress only
+to the documented provider HTTPS models routes and the configured Vault origin.
+The worker uses a dedicated thread, and its polling delay defaults to 1000 ms.
