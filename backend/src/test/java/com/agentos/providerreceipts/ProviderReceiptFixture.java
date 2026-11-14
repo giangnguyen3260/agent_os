@@ -111,6 +111,8 @@ abstract class ProviderReceiptFixture {
 
   @AfterEach
   void cleanup() {
+    jdbc.update("delete from provider_access_check_outbox where organization_id=?", org);
+    jdbc.update("delete from provider_access_checks where organization_id=?", org);
     jdbc.update("delete from provider_command_receipts where organization_id=?", org);
     jdbc.update("delete from provider_connection_events where organization_id=?", org);
     jdbc.update("delete from provider_connections where organization_id=?", org);
@@ -556,6 +558,67 @@ abstract class ProviderReceiptFixture {
                         }))
         .isInstanceOf(UnexpectedRollbackException.class);
     assertThat(snapshot()).isEqualTo(before);
+  }
+
+  @Test
+  void accessCheckMigrationBindsOutboxRevisionsAndRollsBackDuplicateDispatch() {
+    create();
+    UUID first = UUID.randomUUID();
+    UUID duplicate = UUID.randomUUID();
+    var accepted = OffsetDateTime.parse("2026-11-14T00:00:00Z");
+    write()
+        .executeWithoutResult(
+            status -> {
+              insertAccessCheck(first, accepted);
+              jdbc.update(
+                  "insert into provider_access_check_outbox values (?,?,?,1,1,3)", org, id, first);
+            });
+
+    assertThatThrownBy(
+            () ->
+                write()
+                    .executeWithoutResult(
+                        status -> {
+                          insertAccessCheck(duplicate, accepted);
+                          jdbc.update(
+                              "insert into provider_access_check_outbox values (?,?,?,1,1,3)",
+                              org,
+                              id,
+                              duplicate);
+                        }))
+        .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+    assertThatThrownBy(
+            () ->
+                jdbc.update(
+                    "update provider_access_check_outbox set policy_revision=4 where check_id=?",
+                    first))
+        .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+    assertThat(count("provider_access_checks")).isEqualTo(1);
+    assertThat(count("provider_access_check_outbox")).isEqualTo(1);
+    assertThat(count("provider_connection_events")).isEqualTo(1);
+    assertThat(
+            jdbc.queryForObject(
+                "select queue_expires_at from provider_access_checks where id=?",
+                OffsetDateTime.class,
+                first))
+        .isEqualTo(accepted.plusSeconds(60));
+  }
+
+  private void insertAccessCheck(UUID check, OffsetDateTime accepted) {
+    jdbc.update(
+        """
+        insert into provider_access_checks
+          (id,organization_id,connection_id,actor_id,actor_credential_version,
+           connection_revision,credential_revision,policy_revision,accepted_at,queue_expires_at)
+        values (?,?,?,?,?,1,1,3,?,?)
+        """,
+        check,
+        org,
+        id,
+        actor,
+        human.credentialVersion(),
+        accepted,
+        accepted.plusSeconds(60));
   }
 
   @ParameterizedTest
