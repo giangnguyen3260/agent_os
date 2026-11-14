@@ -1015,8 +1015,8 @@ class ProviderRenameVaultIT {
       statement.execute("grant usage on schema public to " + READER + "," + WRITER);
       statement.execute(
           "grant select on public.organizations,public.human_accounts,"
-              + "public.organization_memberships,public.provider_connection_events,"
-              + "public.provider_command_receipts to "
+              + "public.organization_memberships,public.provider_connection_events,public.provider_access_check_receipts,public.provider_access_checks,public.provider_command_receipts"
+              + " to "
               + READER);
       statement.execute("grant update(id) on public.human_accounts to " + READER);
       statement.execute(
@@ -1032,8 +1032,8 @@ class ProviderRenameVaultIT {
           "grant select on public.organizations,public.human_accounts,"
               + "public.organization_memberships,public.provider_deployment_policy,"
               + "public.provider_connections,public.provider_credential_versions,"
-              + "public.provider_connection_events,public.provider_command_receipts,"
-              + "public.provider_write_admission to "
+              + "public.provider_connection_events,public.provider_access_check_receipts,public.provider_access_checks,public.provider_command_receipts,public.provider_write_admission"
+              + " to "
               + WRITER);
       statement.execute(
           "grant update(id) on public.organizations,public.human_accounts to " + WRITER);
