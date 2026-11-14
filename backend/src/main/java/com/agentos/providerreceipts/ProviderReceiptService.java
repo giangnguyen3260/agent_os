@@ -65,7 +65,20 @@ public class ProviderReceiptService {
       UUID actorId,
       OffsetDateTime recordedAt,
       Configuration before,
-      Configuration after) {
+      Configuration after,
+      UUID checkId) {
+    public Receipt(
+        UUID org,
+        UUID commandId,
+        Operation operation,
+        UUID connectionId,
+        UUID actorId,
+        OffsetDateTime recordedAt,
+        Configuration before,
+        Configuration after) {
+      this(org, commandId, operation, connectionId, actorId, recordedAt, before, after, null);
+    }
+
     @Override
     public String toString() {
       return "Receipt[redacted]";
@@ -166,6 +179,158 @@ public class ProviderReceiptService {
     return executeInternal(actor, org, key, command, prepared, null, credential, Operation.ROTATE);
   }
 
+  public Result acceptAccessCheck(
+      HumanIdentity actor, UUID org, UUID key, CredentialCommand command, Metadata prepared) {
+    return safe(
+        () -> {
+          var policy = authority(actor, org, true, true);
+          if (command == null || command.operation() != Operation.ACCESS_CHECK)
+            throw fail(400, "INVALID_COMMAND");
+          validKey(key);
+          if (prepared == null) throw fail(400, "INVALID_PREPARATION");
+          var historical = own(org, actor.id(), key);
+          if (historical != null) {
+            if (historical.result().receipt().operation() != Operation.ACCESS_CHECK
+                || !command.target().equals(historical.result().receipt().connectionId()))
+              throw fail(409, "IDEMPOTENCY_CONFLICT");
+            if (!historical.metadata().keyVersion().equals(prepared.keyVersion()))
+              throw fail(409, "PREPARATION_REQUIRED");
+            if (CommandBoundary.compare(prepared, historical.metadata()) != Comparison.MATCH)
+              throw fail(409, "IDEMPOTENCY_CONFLICT");
+            return historical.result();
+          }
+          if (policy.size() != 1) throw fail(503, "COMMAND_UNAVAILABLE");
+          UUID target = command.target();
+          var rows =
+              jdbc.query(
+                  "select * from provider_connections where organization_id=? and id=? for update",
+                  (rs, n) -> parent(rs),
+                  org,
+                  target);
+          if (rows.isEmpty()) throw fail(404, "NOT_FOUND");
+          require(rows.size() == 1);
+          var parent = rows.get(0);
+          if (parent.revision() != command.expectedRevision()
+              || parent.credentialRevision() != command.expectedCredentialRevision())
+            throw fail(409, "REVISION_CONFLICT");
+          if (!"ENABLED".equals(parent.state())) throw fail(409, "CONNECTION_DISABLED");
+          requireProviderEnabled(policy.get(0), parent.provider());
+          requireCredentialAvailable(parent);
+          long policyRevision = ((Number) policy.get(0).get("revision")).longValue();
+          var current = eventAt(org, target, parent.revision());
+          var initial = creation(org, target);
+          var snapshot = configuration(current, initial);
+          require(parent.equals(snapshot));
+          if (!jdbc.queryForList(
+                  "select check_id from provider_access_check_outbox where organization_id=? and"
+                      + " connection_id=?",
+                  org,
+                  target)
+              .isEmpty()) throw fail(409, "CHECK_IN_PROGRESS");
+          var accepted = now();
+          checkQuota(org, actor.id(), accepted);
+          UUID check = UUID.randomUUID(), commandId = UUID.randomUUID();
+          require(
+              jdbc.update(
+                      """
+insert into provider_access_checks
+  (id,organization_id,connection_id,actor_id,actor_credential_version,
+   connection_revision,credential_revision,policy_revision,accepted_at,queue_expires_at)
+values (?,?,?,?,?,?,?,?,?,?)
+""",
+                      check,
+                      org,
+                      target,
+                      actor.id(),
+                      actor.credentialVersion(),
+                      parent.revision(),
+                      parent.credentialRevision(),
+                      policyRevision,
+                      accepted,
+                      accepted.plusSeconds(60))
+                  == 1);
+          require(
+              jdbc.update(
+                      """
+insert into provider_access_check_outbox
+  (organization_id,connection_id,check_id,connection_revision,credential_revision,policy_revision)
+values (?,?,?,?,?,?)
+""",
+                      org,
+                      target,
+                      check,
+                      parent.revision(),
+                      parent.credentialRevision(),
+                      policyRevision)
+                  == 1);
+          require(
+              jdbc.update(
+                      """
+insert into provider_access_check_receipts
+  (organization_id,connection_id,actor_id,idempotency_key,command_id,check_id,
+   snapshot_event_id,creation_event_id,digest_version,key_version,command_digest)
+values (?,?,?,?,?,?,?,?,?,?,?)
+""",
+                      org,
+                      target,
+                      actor.id(),
+                      key,
+                      commandId,
+                      check,
+                      current.id(),
+                      initial.id(),
+                      prepared.digestVersion(),
+                      prepared.keyVersion(),
+                      prepared.digest())
+                  == 1);
+          return new Result(
+              new Receipt(
+                  org,
+                  commandId,
+                  Operation.ACCESS_CHECK,
+                  target,
+                  actor.id(),
+                  accepted,
+                  snapshot,
+                  snapshot,
+                  check),
+              false);
+        });
+  }
+
+  private void checkQuota(UUID org, UUID actor, OffsetDateTime accepted) {
+    var recent =
+        jdbc.query(
+            """
+            select actor_id, accepted_at from provider_access_checks
+            where organization_id=? and accepted_at>?
+            order by accepted_at desc limit 12
+            """,
+            (rs, n) ->
+                new CheckQuotaEntry(
+                    id(rs, "actor_id"), rs.getObject("accepted_at", OffsetDateTime.class)),
+            org,
+            accepted.minusSeconds(60));
+    var actorTimes =
+        recent.stream()
+            .filter(row -> actor.equals(row.actor()))
+            .map(CheckQuotaEntry::accepted)
+            .toList();
+    var eligible = accepted;
+    if (recent.size() == 12) eligible = recent.get(11).accepted().plusSeconds(60);
+    if (actorTimes.size() >= 6 && actorTimes.get(5).plusSeconds(60).isAfter(eligible))
+      eligible = actorTimes.get(5).plusSeconds(60);
+    if (eligible.isAfter(accepted)) {
+      long nanos = java.time.Duration.between(accepted, eligible).toNanos();
+      throw new ProviderReceiptFailure(
+          429,
+          "RATE_LIMITED",
+          (int) Math.max(1, Math.min(60, (nanos + 999_999_999) / 1_000_000_000)));
+    }
+  }
+
+  private record CheckQuotaEntry(UUID actor, OffsetDateTime accepted) {}
+
   private Result executeInternal(
       HumanIdentity actor,
       UUID org,
@@ -186,8 +351,9 @@ public class ProviderReceiptService {
           if (prepared == null) throw fail(400, "INVALID_PREPARATION");
           Probe stored = own(org, actor.id(), key);
           if (stored != null) {
-            if (requiresMatchingOperation(governance)
-                && stored.result().receipt().operation() != governance)
+            if (stored.result().receipt().operation() == Operation.ACCESS_CHECK
+                || (requiresMatchingOperation(governance)
+                    && stored.result().receipt().operation() != governance))
               throw fail(409, "IDEMPOTENCY_CONFLICT");
             if (!stored.metadata().keyVersion().equals(prepared.keyVersion()))
               throw fail(409, "PREPARATION_REQUIRED");
@@ -421,6 +587,51 @@ public class ProviderReceiptService {
             actor,
             key);
     require(rows.size() <= 1);
+    var checks =
+        jdbc.query(
+            """
+select r.*, c.accepted_at, c.connection_revision, c.credential_revision
+from provider_access_check_receipts r
+join provider_access_checks c on c.id=r.check_id and c.organization_id=r.organization_id
+  and c.connection_id=r.connection_id and c.actor_id=r.actor_id
+where r.organization_id=? and r.actor_id=? and r.idempotency_key=?
+""",
+            (rs, n) -> {
+              UUID target = id(rs, "connection_id");
+              var snapshot =
+                  configuration(
+                      eventId(org, target, id(rs, "snapshot_event_id")),
+                      eventId(org, target, id(rs, "creation_event_id")));
+              var accepted = rs.getObject("accepted_at", OffsetDateTime.class);
+              require(
+                  "ENABLED".equals(snapshot.state())
+                      && snapshot.revision() == rs.getLong("connection_revision")
+                      && snapshot.credentialRevision() == rs.getLong("credential_revision")
+                      && accepted != null
+                      && !accepted.isBefore(snapshot.updatedAt()));
+              var receipt =
+                  new Receipt(
+                      org,
+                      id(rs, "command_id"),
+                      Operation.ACCESS_CHECK,
+                      target,
+                      actor,
+                      accepted,
+                      snapshot,
+                      snapshot,
+                      id(rs, "check_id"));
+              return new Probe(
+                  new Result(receipt, true),
+                  new Metadata(
+                      rs.getString("digest_version"),
+                      rs.getString("key_version"),
+                      rs.getString("command_digest")));
+            },
+            org,
+            actor,
+            key);
+    require(rows.size() + checks.size() <= 1);
+    if (!checks.isEmpty()) return checks.get(0);
     return rows.isEmpty() ? null : rows.get(0);
   }
 
@@ -447,6 +658,10 @@ public class ProviderReceiptService {
     if ("ENABLED".equals(parent.state())) throw fail(409, "NO_CHANGE");
     if (parent.revision() == Long.MAX_VALUE) throw fail(409, "REVISION_EXHAUSTED");
     requireProviderEnabled(policy, parent.provider());
+    requireCredentialAvailable(parent);
+  }
+
+  private void requireCredentialAvailable(Configuration parent) {
     // Publication locks the parent before changing credential evidence. Read the same
     // scoped evidence as List in a fresh statement after taking that lock.
     Boolean available =

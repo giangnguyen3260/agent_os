@@ -3,6 +3,7 @@ package com.agentos.providerreceipts;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mockingDetails;
 
 import com.agentos.auth.HumanIdentity;
@@ -111,6 +112,7 @@ abstract class ProviderReceiptFixture {
 
   @AfterEach
   void cleanup() {
+    jdbc.update("delete from provider_access_check_receipts where organization_id=?", org);
     jdbc.update("delete from provider_access_check_outbox where organization_id=?", org);
     jdbc.update("delete from provider_access_checks where organization_id=?", org);
     jdbc.update("delete from provider_command_receipts where organization_id=?", org);
@@ -558,6 +560,77 @@ abstract class ProviderReceiptFixture {
                         }))
         .isInstanceOf(UnexpectedRollbackException.class);
     assertThat(snapshot()).isEqualTo(before);
+  }
+
+  @Test
+  void accessCheckPinsHistoricalReceiptAndRollsBackIfReceiptCannotBeInserted() {
+    create();
+    var command = new CredentialCommand(Operation.ACCESS_CHECK, id, 1, 1);
+    var proof = prepare(command);
+    UUID checkKey = UUID.randomUUID();
+    boolean seededPolicy =
+        jdbc.queryForObject("select count(*) from provider_deployment_policy", Long.class) == 0;
+    if (seededPolicy)
+      jdbc.update(
+          """
+          insert into provider_deployment_policy
+            (id,revision,openai_enabled,anthropic_enabled,gemini_enabled,created_at,updated_at)
+          values (1,1,true,true,true,current_timestamp,current_timestamp)
+          """);
+    doReturn(Boolean.TRUE)
+        .when(jdbc)
+        .queryForObject(
+            "select agentos_list_read.credential_available(?::uuid,?::uuid)",
+            Boolean.class,
+            org,
+            id);
+    try {
+      jdbc.execute(
+          "alter table provider_access_check_receipts add constraint test_reject_check"
+              + " check (connection_id <> '"
+              + id
+              + "')");
+      try {
+        error(
+            () -> service.acceptAccessCheck(human, org, checkKey, command, proof),
+            500,
+            "RECEIPT_UNAVAILABLE");
+      } finally {
+        jdbc.execute(
+            "alter table provider_access_check_receipts drop constraint test_reject_check");
+      }
+      assertThat(count("provider_access_checks")).isZero();
+      assertThat(count("provider_access_check_outbox")).isZero();
+      assertThat(service.findOwn(human, org, checkKey)).isNull();
+      var accepted = service.acceptAccessCheck(human, org, checkKey, command, proof);
+      assertThat(accepted.replayed()).isFalse();
+      assertThat(accepted.receipt().checkId()).isNotNull();
+      assertThat(accepted.receipt().before()).isEqualTo(accepted.receipt().after());
+      assertThat(accepted.receipt().after().revision()).isEqualTo(1);
+      error(
+          () -> service.acceptAccessCheck(human, org, UUID.randomUUID(), command, proof),
+          409,
+          "CHECK_IN_PROGRESS");
+      error(
+          () -> service.acceptAccessCheck(human, org, key, command, proof),
+          409,
+          "IDEMPOTENCY_CONFLICT");
+      var rename = new Rename(id, 1, "After check");
+      var renameProof = prepare(rename);
+      error(
+          () -> service.execute(human, org, checkKey, rename, renameProof, null, null),
+          409,
+          "IDEMPOTENCY_CONFLICT");
+      connections.rename(human, org, id, 1, "After check");
+      assertThat(service.findOwn(human, org, checkKey).receipt()).isEqualTo(accepted.receipt());
+      assertThat(service.acceptAccessCheck(human, org, checkKey, command, proof).replayed())
+          .isTrue();
+      assertThat(count("provider_access_checks")).isEqualTo(1);
+      assertThat(count("provider_access_check_outbox")).isEqualTo(1);
+      assertThat(count("provider_access_check_receipts")).isEqualTo(1);
+    } finally {
+      if (seededPolicy) jdbc.update("delete from provider_deployment_policy where id=1");
+    }
   }
 
   @Test

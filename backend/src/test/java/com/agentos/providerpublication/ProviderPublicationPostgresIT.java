@@ -1835,7 +1835,7 @@ class ProviderPublicationPostgresIT {
       statement.execute("grant agentos_provider_list_evidence to " + role);
       statement.execute(
           "grant select on public.organizations,public.organization_memberships,"
-              + "public.human_accounts,public.provider_deployment_policy,public.provider_connections,public.provider_credential_versions,public.provider_connection_events,public.provider_command_receipts"
+              + "public.human_accounts,public.provider_deployment_policy,public.provider_connections,public.provider_credential_versions,public.provider_connection_events,public.provider_access_check_receipts,public.provider_access_checks,public.provider_command_receipts"
               + " to "
               + role);
       statement.execute(

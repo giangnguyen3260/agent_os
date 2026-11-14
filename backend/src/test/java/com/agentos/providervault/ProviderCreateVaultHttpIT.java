@@ -1032,6 +1032,9 @@ class ProviderCreateVaultHttpIT {
               + "'");
       statement.execute("grant usage on schema public to vault_browser_writer");
       statement.execute(
+          "grant select on public.provider_access_check_receipts,public.provider_access_checks"
+              + " to vault_browser_writer");
+      statement.execute(
           "grant select,insert,update on public.provider_connections,"
               + "public.provider_credential_versions,public.provider_secret_preparations,"
               + "public.provider_command_receipts,public.provider_connection_events,"
@@ -1044,7 +1047,7 @@ class ProviderCreateVaultHttpIT {
       statement.execute("grant usage on schema public to vault_browser_web");
       statement.execute(
           "grant select on public.organizations,public.organization_memberships,"
-              + "public.provider_connections,public.human_accounts,public.provider_deployment_policy,public.provider_connection_events,public.provider_command_receipts"
+              + "public.provider_connections,public.human_accounts,public.provider_deployment_policy,public.provider_connection_events,public.provider_access_check_receipts,public.provider_access_checks,public.provider_command_receipts"
               + " to vault_browser_web");
       statement.execute("grant update(id) on public.human_accounts to vault_browser_web");
       statement.execute(

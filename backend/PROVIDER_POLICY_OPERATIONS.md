@@ -229,3 +229,12 @@ strings with session CSRF and a UUID idempotency key. The connector has a
 per instance. The existing own-receipt GET returns the committed historical
 configuration without receiving a credential. Rotation preserves the connection
 state and historical credential references.
+
+## Access Check receipt storage
+
+Apply migrations V029 and V030 before deploying the updated receipt service.
+Roles that read or write Provider command receipts also need SELECT on
+`provider_access_checks` and `provider_access_check_receipts` to resolve the
+shared idempotency namespace. A dedicated Access Check writer additionally
+needs SELECT on `provider_access_check_outbox`, INSERT on all three tables,
+and permission to call the existing credential availability function.
