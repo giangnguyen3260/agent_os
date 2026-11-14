@@ -86,6 +86,7 @@ class ProviderCreateVaultHttpIT {
   }
 
   private static final String PASSWORD = "Vault-browser-fixture-93847";
+  private static final String BROWSER_ROTATION = "browser-vault-rotate-recovery-synthetic";
   private static final String SECRET = "browser-vault-disposable-synthetic-key";
 
   @LocalServerPort int port;
@@ -342,7 +343,7 @@ class ProviderCreateVaultHttpIT {
             connection);
     byte[] credentialBefore = credentialFingerprint(org, connection);
 
-    runRenameBrowser(org, actor, connection);
+    runConnectionBrowser("rename", org, actor, connection);
 
     var current =
         jdbc.queryForMap(
@@ -409,12 +410,14 @@ class ProviderCreateVaultHttpIT {
         org,
         org.toString());
     jdbc.update(
-        "insert into human_accounts(id,email,display_name,password_hash) values (?,?,'Rotate HTTP',?)",
+        "insert into human_accounts(id,email,display_name,password_hash) values (?,?,'Rotate"
+            + " HTTP',?)",
         actor,
         actor + "@example.test",
         passwords.encode(PASSWORD));
     jdbc.update(
-        "insert into organization_memberships(account_id,organization_id,role) values (?,?,'ADMIN')",
+        "insert into organization_memberships(account_id,organization_id,role) values"
+            + " (?,?,'ADMIN')",
         actor,
         org);
 
@@ -504,11 +507,48 @@ class ProviderCreateVaultHttpIT {
         .isEqualTo(2L);
     assertThat(
             jdbc.queryForObject(
-                "select state from provider_secret_preparations where organization_id=? and external_locator=?",
+                "select state from provider_secret_preparations where organization_id=? and"
+                    + " external_locator=?",
                 String.class,
                 org,
                 reference.locator()))
         .isEqualTo("WRITTEN");
+
+    runConnectionBrowser("rotate", org, actor, connection);
+    var rotatedScope = new Scope(org, connection, Provider.OPENAI, 3);
+    var rotated =
+        jdbc.queryForMap(
+            "select external_locator,external_key_version,hmac_key_version,verifier"
+                + " from provider_credential_versions where organization_id=? and connection_id=?"
+                + " and credential_revision=3",
+            org,
+            connection);
+    readBack(
+        rotatedScope,
+        new Reference(
+            rotatedScope,
+            (String) rotated.get("external_locator"),
+            (String) rotated.get("external_key_version")),
+        (String) rotated.get("hmac_key_version"),
+        (String) rotated.get("verifier"),
+        BROWSER_ROTATION);
+    assertThat(
+            jdbc.queryForList(
+                "select operation from provider_command_receipts where organization_id=? and"
+                    + " connection_id=? order by recorded_at",
+                String.class,
+                org,
+                connection))
+        .containsExactly("CREATE", "ROTATE", "ROTATE");
+    assertThat(
+            jdbc.queryForList(
+                "select credential_revision from provider_secret_preparations where"
+                    + " organization_id=? and connection_id=? and state='WRITTEN' order by"
+                    + " credential_revision",
+                Long.class,
+                org,
+                connection))
+        .containsExactly(1L, 2L, 3L);
   }
 
   private record Csrf(String header, String token) {}
@@ -573,7 +613,8 @@ class ProviderCreateVaultHttpIT {
     return MessageDigest.getInstance("SHA-256").digest(stored.getBytes(StandardCharsets.UTF_8));
   }
 
-  private void runRenameBrowser(UUID org, UUID actor, UUID connection) throws Exception {
+  private void runConnectionBrowser(String operation, UUID org, UUID actor, UUID connection)
+      throws Exception {
     Path frontend = Path.of(System.getProperty("user.dir")).toAbsolutePath().resolve("frontend");
     if (!Files.isDirectory(frontend))
       frontend = frontend.getParent().getParent().resolve("frontend");
@@ -588,9 +629,12 @@ class ProviderCreateVaultHttpIT {
     serverCommand.directory(frontend.toFile());
     serverCommand.environment().put("PORT", Integer.toString(proxyPort));
     serverCommand.environment().put("BACKEND_URL", "http://127.0.0.1:" + port);
-    serverCommand.environment().put("DROP_RENAME_RESPONSE", "second");
+    if (operation.equals("rename"))
+      serverCommand.environment().put("DROP_RENAME_RESPONSE", "second");
     serverCommand.redirectOutput(ProcessBuilder.Redirect.DISCARD);
     serverCommand.redirectError(ProcessBuilder.Redirect.DISCARD);
+    String spec = "provider-" + operation + "-live.spec.mjs";
+    var location = java.util.regex.Pattern.compile(java.util.regex.Pattern.quote(spec) + ":[0-9]+");
     var server = serverCommand.start();
     try {
       awaitProxy(server, base);
@@ -599,7 +643,7 @@ class ProviderCreateVaultHttpIT {
               "node",
               "node_modules/@playwright/test/cli.js",
               "test",
-              "tests/e2e/provider-rename-live.spec.mjs",
+              "tests/e2e/" + spec,
               "--project",
               "desktop",
               "--workers",
@@ -610,15 +654,15 @@ class ProviderCreateVaultHttpIT {
               "line");
       command.directory(frontend.toFile());
       command.environment().put("E2E_BASE_URL", base);
-      command.environment().put("PROVIDER_RENAME_VAULT_LIVE", "true");
+      String prefix = "PROVIDER_" + operation.toUpperCase(java.util.Locale.ROOT);
+      command.environment().put(prefix + "_VAULT_LIVE", "true");
       command.environment().put("PROVIDER_VAULT_ORG", org.toString());
       command.environment().put("PROVIDER_VAULT_EMAIL", actor + "@example.test");
       command.environment().put("PROVIDER_VAULT_PASSWORD", PASSWORD);
-      command.environment().put("PROVIDER_RENAME_CONNECTION", connection.toString());
-      // Rename browser receives metadata identifiers only, never the provider credential.
+      command.environment().put(prefix + "_CONNECTION", connection.toString());
       Path diagnostics =
           Files.createTempFile(
-              "provider-rename-browser-",
+              "provider-" + operation + "-browser-",
               ".log",
               java.nio.file.attribute.PosixFilePermissions.asFileAttribute(
                   java.nio.file.attribute.PosixFilePermissions.fromString("rw-------")));
@@ -627,17 +671,15 @@ class ProviderCreateVaultHttpIT {
       var browser = command.start();
       try {
         assertThat(browser.waitFor(120, TimeUnit.SECONDS))
-            .as("Rename browser completed within budget")
+            .as(operation + " browser completed within budget")
             .isTrue();
         if (browser.exitValue() != 0) {
           String locations =
               Files.readAllLines(diagnostics).stream()
-                  .filter(line -> line.matches(".*provider-rename-live\\.spec\\.mjs:[0-9]+.*"))
-                  .map(
-                      line ->
-                          line.replaceAll(".*(provider-rename-live\\.spec\\.mjs:[0-9]+).*", "$1"))
+                  .flatMap(line -> location.matcher(line).results())
+                  .map(java.util.regex.MatchResult::group)
                   .distinct()
-                  .reduce("", (left, right) -> left + " " + right);
+                  .collect(java.util.stream.Collectors.joining(" "));
           String numeric =
               Files.readAllLines(diagnostics).stream()
                   .filter(
@@ -647,7 +689,12 @@ class ProviderCreateVaultHttpIT {
                   .findFirst()
                   .orElse("");
           throw new AssertionError(
-              "Rename browser acceptance exit=" + browser.exitValue() + locations + " " + numeric);
+              operation
+                  + " browser acceptance exit="
+                  + browser.exitValue()
+                  + locations
+                  + " "
+                  + numeric);
         }
       } finally {
         browser.destroyForcibly();
