@@ -561,6 +561,56 @@ values (?,?,?,?,?,?,?,?,?,?,?)
         parent.credentialRevision() + 1);
   }
 
+  public record AccessCheckStatus(
+      UUID organizationId,
+      UUID connectionId,
+      UUID id,
+      long connectionRevision,
+      long credentialRevision,
+      long policyRevision,
+      OffsetDateTime acceptedAt,
+      OffsetDateTime startedAt,
+      OffsetDateTime completedAt,
+      String outcome,
+      String errorCode) {}
+
+  @Transactional(
+      readOnly = true,
+      propagation = Propagation.REQUIRED,
+      isolation = Isolation.REPEATABLE_READ)
+  public AccessCheckStatus accessCheckStatus(
+      HumanIdentity actor, UUID org, UUID target, UUID check) {
+    return safe(
+        () -> {
+          authority(actor, org, false);
+          var rows =
+              jdbc.query(
+                  """
+                  select connection_revision, credential_revision, policy_revision,
+                         accepted_at, started_at, completed_at, outcome, error_code
+                  from provider_access_checks where organization_id=? and connection_id=? and id=?
+                  """,
+                  (rs, n) ->
+                      new AccessCheckStatus(
+                          org,
+                          target,
+                          check,
+                          rs.getLong("connection_revision"),
+                          rs.getLong("credential_revision"),
+                          rs.getLong("policy_revision"),
+                          rs.getObject("accepted_at", OffsetDateTime.class),
+                          rs.getObject("started_at", OffsetDateTime.class),
+                          rs.getObject("completed_at", OffsetDateTime.class),
+                          rs.getString("outcome"),
+                          rs.getString("error_code")),
+                  org,
+                  target,
+                  check);
+          if (rows.isEmpty()) throw fail(404, "NOT_FOUND");
+          return rows.getFirst();
+        });
+  }
+
   private Probe own(UUID org, UUID actor, UUID key) {
     var rows =
         jdbc.query(

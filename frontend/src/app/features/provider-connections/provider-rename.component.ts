@@ -23,6 +23,8 @@ import {
 } from './provider-create-wire';
 import {ProviderConnectionItem} from './provider-list-wire';
 import {
+  accessCheckId,
+  accessCheckStatus,
   receiptFoundDisable,
   receiptFoundEnable,
   receiptFoundRename,
@@ -47,7 +49,7 @@ type Review =
   | (ReviewedRename & {operation: 'rename'; beforeName: string})
   | (ReviewedDisable & {operation: 'disable'})
   | (ReviewedEnable & {operation: 'enable'})
-  | (ReviewedRotate & {operation: 'rotate'});
+  | (ReviewedRotate & {operation: 'rotate' | 'access-checks'});
 interface Pending {
   key: string;
   review: Review;
@@ -59,6 +61,7 @@ const operationNames = {
   disable: 'tắt kết nối',
   enable: 'bật lại kết nối',
   rotate: 'thay API key',
+  'access-checks': 'kiểm tra kết nối',
 } as const;
 const verifyReceipt = {
   rename: verifyRenamed,
@@ -94,6 +97,11 @@ export class ProviderRenameComponent {
   readonly enabled = signal(false);
   readonly disableEnabled = signal(false);
   readonly enableVisible = signal(false);
+  readonly canCheck = signal(false);
+  readonly currentCheck = signal<{id: string; review: ReviewedRotate} | null>(
+    null,
+  );
+  readonly checkResult = signal<{message: string; done: boolean} | null>(null);
   readonly rotateEnabled = signal(false);
   readonly enableUnavailable = signal('');
   readonly editing = signal(false);
@@ -123,6 +131,11 @@ export class ProviderRenameComponent {
       (!operation && !this.enabled() && this.rotateEnabled())
     )
       return 'Thay API key';
+    if (
+      operation === 'access-checks' ||
+      (!operation && !this.enabled() && this.canCheck())
+    )
+      return 'Kiểm tra kết nối';
     return 'Đổi tên kết nối';
   });
 
@@ -176,6 +189,13 @@ export class ProviderRenameComponent {
               );
               this.rotateEnabled.set(
                 response.headers.get('X-Provider-Rotate-Enabled') === 'true',
+              );
+              this.canCheck.set(
+                response.headers.get('X-Provider-Access-Check-Enabled') ===
+                  'true' &&
+                  connection.state === 'ENABLED' &&
+                  connection.credentialState === 'PRESENT' &&
+                  availableProviders.includes(connection.provider),
               );
               const offerEnable =
                 connection.state === 'DISABLED' &&
@@ -259,7 +279,13 @@ export class ProviderRenameComponent {
     this.prepareStateReview('rotate');
   }
 
-  private prepareStateReview(operation: 'disable' | 'enable' | 'rotate'): void {
+  prepareAccessCheck(): void {
+    this.prepareStateReview('access-checks');
+  }
+
+  private prepareStateReview(
+    operation: 'disable' | 'enable' | 'rotate' | 'access-checks',
+  ): void {
     const scope = this.scope;
     if (
       !scope ||
@@ -279,7 +305,7 @@ export class ProviderRenameComponent {
       name: scope.connection.name,
     };
     this.review.set(
-      operation === 'rotate'
+      operation === 'rotate' || operation === 'access-checks'
         ? {
             ...common,
             operation,
@@ -326,6 +352,8 @@ export class ProviderRenameComponent {
       return;
     this.busy.set(true);
     this.error.set('');
+    this.currentCheck.set(null);
+    this.checkResult.set(null);
     let key: string | undefined;
     let sent = false;
     try {
@@ -350,7 +378,13 @@ export class ProviderRenameComponent {
               ? {expectedRevision: review.expectedRevision, name: review.name}
               : review.operation === 'rotate'
                 ? {expectedRevision: review.expectedRevision, apiKey}
-                : {expectedRevision: review.expectedRevision},
+                : review.operation === 'access-checks'
+                  ? {
+                      expectedRevision: review.expectedRevision,
+                      expectedCredentialRevision:
+                        review.expectedCredentialRevision,
+                    }
+                  : {expectedRevision: review.expectedRevision},
             {
               headers: {
                 ...headers,
@@ -368,6 +402,17 @@ export class ProviderRenameComponent {
       if (!this.current(scope)) return;
       if (response.status !== 201 && response.status !== 200)
         throw new Error('Invalid metadata response');
+      if (review.operation === 'access-checks') {
+        const id = accessCheckId(
+          response.body,
+          scope.organization,
+          scope.actor.id,
+          review,
+        );
+        if (!id) throw new Error('Missing Access Check');
+        await this.openCheck(scope, id, review);
+        return;
+      }
       verifyReceipt[review.operation](
         response.body,
         scope.organization,
@@ -413,13 +458,28 @@ export class ProviderRenameComponent {
       if (response.status !== 200)
         throw new Error('Invalid metadata receipt response');
       const review = pending.review;
-      const found = findReceipt[review.operation](
-        response.body,
-        scope.organization,
-        scope.actor.id,
-        scope.connection.id,
-        review,
-      );
+      if (review.operation === 'access-checks') {
+        const id = accessCheckId(
+          response.body,
+          scope.organization,
+          scope.actor.id,
+          review,
+          true,
+        );
+        if (id) {
+          await this.openCheck(scope, id, review);
+          return;
+        }
+      }
+      const found =
+        review.operation !== 'access-checks' &&
+        findReceipt[review.operation](
+          response.body,
+          scope.organization,
+          scope.actor.id,
+          scope.connection.id,
+          review,
+        );
       if (found) this.complete(review.operation);
       else
         this.receiptMessage.set(
@@ -432,6 +492,56 @@ export class ProviderRenameComponent {
         );
     } finally {
       if (this.current(scope)) this.busy.set(false);
+    }
+  }
+
+  private async openCheck(
+    scope: Scope,
+    id: string,
+    review: ReviewedRotate,
+  ): Promise<void> {
+    this.review.set(null);
+    this.pending.set(null);
+    this.currentCheck.set({id, review});
+    await this.readCheck(scope, id, review);
+  }
+
+  async refreshCheck(): Promise<void> {
+    const scope = this.scope,
+      check = this.currentCheck();
+    if (!scope || !check || !this.current(scope) || this.busy()) return;
+    this.busy.set(true);
+    try {
+      await this.readCheck(scope, check.id, check.review);
+    } finally {
+      if (this.current(scope)) this.busy.set(false);
+    }
+  }
+
+  private async readCheck(
+    scope: Scope,
+    id: string,
+    review: ReviewedRotate,
+  ): Promise<void> {
+    try {
+      const value = await firstValueFrom(
+        this.http
+          .get<unknown>(
+            this.base(scope) + '/' + review.connectionId + '/checks/' + id,
+            {headers, timeout: readTimeout},
+          )
+          .pipe(takeUntil(scope.closed)),
+      );
+      if (this.current(scope))
+        this.checkResult.set(
+          accessCheckStatus(value, scope.organization, id, review),
+        );
+    } catch (failure) {
+      if (this.current(scope) && !this.deny(failure))
+        this.checkResult.set({
+          message: 'Không thể đọc trạng thái. Vui lòng thử lại.',
+          done: false,
+        });
     }
   }
 
@@ -457,11 +567,13 @@ export class ProviderRenameComponent {
         disable: 'trước khi tắt.',
         enable: 'trước khi bật lại.',
         rotate: 'trước khi thay API key.',
+        'access-checks': 'trước khi kiểm tra lại.',
       };
       message = `Kết nối đã thay đổi. Vui lòng tải lại kết nối ${next[operation]}`;
       this.needsRefresh.set(true);
     } else if (
       operation !== 'rotate' &&
+      operation !== 'access-checks' &&
       failure.status === 409 &&
       code === 'NO_CHANGE'
     ) {
@@ -481,7 +593,7 @@ export class ProviderRenameComponent {
           ? 'Yêu cầu đổi tên bị xung đột. Vui lòng kiểm tra tên rồi xem lại.'
           : `Yêu cầu ${action} bị xung đột. Vui lòng xem lại.`;
     else if (
-      operation === 'enable' &&
+      (operation === 'enable' || operation === 'access-checks') &&
       failure.status === 409 &&
       (code === 'CREDENTIAL_UNAVAILABLE' || code === 'PROVIDER_DISABLED')
     ) {
@@ -490,6 +602,16 @@ export class ProviderRenameComponent {
           ? 'Nhà cung cấp đang bị tắt. Vui lòng tải lại kết nối.'
           : 'Chưa có bằng chứng lưu trữ khóa hợp lệ. Vui lòng tải lại kết nối để kiểm tra trạng thái khóa.';
       this.needsRefresh.set(true);
+    } else if (
+      operation === 'access-checks' &&
+      failure.status === 409 &&
+      (code === 'CHECK_IN_PROGRESS' || code === 'CONNECTION_DISABLED')
+    ) {
+      message =
+        code === 'CHECK_IN_PROGRESS'
+          ? 'Kết nối đang có yêu cầu kiểm tra.'
+          : 'Kết nối đang tắt. Vui lòng tải lại kết nối.';
+      this.needsRefresh.set(code === 'CONNECTION_DISABLED');
     } else if (failure.status === 429 && code === 'RATE_LIMITED') {
       const seconds = retryAfterSeconds(failure.headers.get('Retry-After'));
       message =
@@ -545,6 +667,7 @@ export class ProviderRenameComponent {
     if (operation === 'rename') return this.enabled();
     if (operation === 'disable') return this.disableEnabled();
     if (operation === 'rotate') return this.rotateEnabled();
+    if (operation === 'access-checks') return this.canCheck();
     return this.enableVisible() && !this.enableUnavailable();
   }
   private clearOptions(): void {
@@ -552,6 +675,7 @@ export class ProviderRenameComponent {
     this.disableEnabled.set(false);
     this.enableVisible.set(false);
     this.rotateEnabled.set(false);
+    this.canCheck.set(false);
     this.enableUnavailable.set('');
   }
   private reset(): void {
@@ -563,6 +687,8 @@ export class ProviderRenameComponent {
     this.busy.set(false);
     this.error.set('');
     this.needsRefresh.set(false);
+    this.currentCheck.set(null);
+    this.checkResult.set(null);
     this.receiptMessage.set('');
   }
   private complete(operation: Review['operation']): void {
@@ -573,6 +699,6 @@ export class ProviderRenameComponent {
     if (operation === 'rename') this.renamed.emit();
     else if (operation === 'disable') this.disabled.emit();
     else if (operation === 'enable') this.reenabled.emit();
-    else this.rotated.emit();
+    else if (operation === 'rotate') this.rotated.emit();
   }
 }

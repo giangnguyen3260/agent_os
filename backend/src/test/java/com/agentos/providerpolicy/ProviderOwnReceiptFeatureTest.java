@@ -76,6 +76,11 @@ class ProviderOwnReceiptFeatureTest {
                 .matcher(collection + "/receipts/" + UUID.randomUUID())
                 .matches())
         .isTrue();
+    String check = collection + "/" + UUID.randomUUID() + "/checks/" + UUID.randomUUID();
+    assertThat(OptionsSecurity.paths(false, true, true).matcher(check).matches()).isTrue();
+    assertThat(OptionsSecurity.paths(false, true, false).matcher(check).matches()).isFalse();
+    assertThat(OptionsSecurity.paths(false, true, true).matcher(check + "/models").matches())
+        .isFalse();
     for (boolean list : new boolean[] {false, true}) {
       for (boolean receipts : new boolean[] {false, true}) {
         var pattern = OptionsSecurity.paths(list, receipts);

@@ -32,6 +32,17 @@ final class ProviderHistoricalConfiguration {
         || !canonical(receipt.actorId())) return false;
     var before = receipt.before();
     var after = receipt.after();
+    if (receipt.operation() == Operation.ACCESS_CHECK) {
+      return canonical(receipt.checkId())
+          && valid(before, receipt)
+          && before.equals(after)
+          && "ENABLED".equals(before.state())
+          && before.credentialRevision() <= before.revision()
+          && !before.updatedAt().isBefore(before.createdAt())
+          && time(receipt.recordedAt()) != null
+          && !receipt.recordedAt().isBefore(before.updatedAt());
+    }
+    if (receipt.checkId() != null) return false;
     if (!valid(before, receipt)
         || !valid(after, receipt)
         || before.revision() == Long.MAX_VALUE

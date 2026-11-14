@@ -244,3 +244,9 @@ It uses the managed Vault settings and requires the writer to update check
 disposition columns and delete completed outbox entries. Permit egress only
 to the documented provider HTTPS models routes and the configured Vault origin.
 The worker uses a dedicated thread, and its polling delay defaults to 1000 ms.
+
+Enable `agentos.provider-access-check.http-enabled=true` for Access Check
+submission, own receipt recovery and the scoped check status endpoint.
+The web reader also needs SELECT on `provider_access_checks` and
+`provider_access_check_receipts`. Run the Access Check worker in the same
+deployment or as a separately configured process before exposing the UI.

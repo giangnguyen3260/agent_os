@@ -36,6 +36,7 @@ const operationLabels = {
   DISABLE: 'Disable',
   ENABLE: 'Enable',
   ROTATE: 'Rotate',
+  ACCESS_CHECK: 'Access Check',
 } as const;
 type MetadataOperation = keyof typeof operationLabels;
 type ReviewedCommand = ReviewedEnable | ReviewedRotate;
@@ -136,7 +137,9 @@ function receiptMatches(
     value['connectionId'] !== submitted.connectionId ||
     !uuid(value['commandId']) ||
     value['operation'] !== operation ||
-    value['checkId'] !== null ||
+    (operation === 'ACCESS_CHECK'
+      ? !uuid(value['checkId'])
+      : value['checkId'] !== null) ||
     !wireTime(value['committedAt']) ||
     !validSnapshot(value['before'], org, submitted.connectionId) ||
     !validSnapshot(value['after'], org, submitted.connectionId)
@@ -144,6 +147,26 @@ function receiptMatches(
     return false;
   const before = value['before'];
   const after = value['after'];
+  if (operation === 'ACCESS_CHECK') {
+    return (
+      'expectedCredentialRevision' in submitted &&
+      before.revision === submitted.expectedRevision &&
+      before.credentialRevision === submitted.expectedCredentialRevision &&
+      before.name === submitted.name &&
+      before.state === 'ENABLED' &&
+      before.createdAt <= before.updatedAt &&
+      before.updatedAt <= value['committedAt'] &&
+      before.provider === after.provider &&
+      before.credentialMode === after.credentialMode &&
+      before.state === after.state &&
+      before.name === after.name &&
+      before.revision === after.revision &&
+      before.credentialRevision === after.credentialRevision &&
+      before.options.workspaceId === after.options.workspaceId &&
+      before.createdAt === after.createdAt &&
+      before.updatedAt === after.updatedAt
+    );
+  }
   return (
     before.revision === submitted.expectedRevision &&
     BigInt(before.revision) < maximumRevision &&
@@ -291,4 +314,93 @@ export function receiptFoundRotate(
   expectedCommand: ReviewedCommand,
 ): boolean {
   return receiptFound(value, org, actor, target, expectedCommand, 'ROTATE');
+}
+
+export function accessCheckId(
+  value: unknown,
+  org: string,
+  actor: string,
+  review: ReviewedRotate,
+  lookup = false,
+): string | null {
+  let receipt = data(value, 'Access Check');
+  if (lookup) {
+    if (!exact(receipt, 'receipt'))
+      throw new Error('Invalid Access Check lookup');
+    receipt = receipt['receipt'];
+    if (receipt === null) return null;
+  }
+  if (!receiptMatches(receipt, org, actor, review, 'ACCESS_CHECK'))
+    throw new Error('Invalid Access Check receipt');
+  return (receipt as {checkId: string}).checkId;
+}
+
+const outcomes = {
+  ACCESSIBLE: 'Kết nối có quyền đọc danh sách model.',
+  DENIED: 'Nhà cung cấp từ chối quyền truy cập.',
+  FAILED: 'Kiểm tra kết nối thất bại.',
+  UNKNOWN: 'Chưa xác định được quyền truy cập.',
+  SUPERSEDED: 'Kết nối hoặc quyền truy cập đã thay đổi trong lúc kiểm tra.',
+} as const;
+export function accessCheckStatus(
+  value: unknown,
+  org: string,
+  id: string,
+  review: ReviewedRotate,
+): {message: string; done: boolean} {
+  const result = data(value, 'Access Check');
+  if (
+    !exact(
+      result,
+      'organizationId connectionId id kind connectionRevision credentialRevision policyRevision acceptedAt startedAt completedAt expiresAt state outcome errorCode catalogueState modelCount',
+    ) ||
+    result['organizationId'] !== org ||
+    result['connectionId'] !== review.connectionId ||
+    result['id'] !== id ||
+    result['kind'] !== 'ACCESS_CHECK' ||
+    result['connectionRevision'] !== review.expectedRevision ||
+    result['credentialRevision'] !== review.expectedCredentialRevision ||
+    !positiveRevision(result['policyRevision']) ||
+    !wireTime(result['acceptedAt']) ||
+    result['catalogueState'] !== 'NOT_REQUESTED' ||
+    result['modelCount'] !== null
+  )
+    throw new Error('Invalid Access Check status');
+  const state = result['state'];
+  const outcome = result['outcome'];
+  if (
+    state === 'COMPLETED' &&
+    typeof outcome === 'string' &&
+    Object.hasOwn(outcomes, outcome) &&
+    wireTime(result['completedAt']) &&
+    wireTime(result['expiresAt']) &&
+    result['acceptedAt'] <= result['completedAt'] &&
+    result['completedAt'] <= result['expiresAt'] &&
+    (result['startedAt'] === null ||
+      (wireTime(result['startedAt']) &&
+        result['acceptedAt'] <= result['startedAt'] &&
+        result['startedAt'] <= result['completedAt'])) &&
+    (outcome === 'ACCESSIBLE'
+      ? result['errorCode'] === null && result['startedAt'] !== null
+      : typeof result['errorCode'] === 'string' &&
+        /^[A-Z_]{1,32}$/.test(result['errorCode']))
+  )
+    return {message: outcomes[outcome as keyof typeof outcomes], done: true};
+  if (
+    (state === 'QUEUED' || state === 'RUNNING') &&
+    (state === 'QUEUED'
+      ? result['startedAt'] === null
+      : wireTime(result['startedAt']) &&
+        result['acceptedAt'] <= result['startedAt']) &&
+    outcome === null &&
+    result['errorCode'] === null &&
+    result['completedAt'] === null &&
+    result['expiresAt'] === null
+  )
+    return {
+      message:
+        state === 'QUEUED' ? 'Đang chờ kiểm tra.' : 'Đang kiểm tra kết nối.',
+      done: false,
+    };
+  throw new Error('Invalid Access Check status');
 }

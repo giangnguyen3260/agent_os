@@ -54,6 +54,7 @@ async function fixture(
     disable = 'false',
     enable = 'false',
     rotate = 'false',
+    accessCheck = 'false',
     adapterEnabled = false,
     initial = row(),
   } = {},
@@ -81,6 +82,7 @@ async function fixture(
         'X-Provider-Disable-Enabled': disable,
         'X-Provider-Enable-Enabled': enable,
         'X-Provider-Rotate-Enabled': rotate,
+        'X-Provider-Access-Check-Enabled': accessCheck,
         'X-Provider-Create-Enabled': 'false',
       },
       json: envelope({
@@ -784,4 +786,89 @@ test('Rotate clears the key and checks only its receipt after an uncertain respo
 test('Rotate stays hidden when its own flag is off', async ({page}) => {
   await fixture(page);
   await expect(rotateAction(page)).toHaveCount(0);
+});
+
+test('Access Check recovers one accepted command and reads its result', async ({
+  page,
+}) => {
+  const before = {
+    ...enabledRow(),
+    credentialState: 'PRESENT',
+    credentialMask: '••••••••',
+  };
+  await fixture(page, 'false', {
+    accessCheck: 'true',
+    adapterEnabled: true,
+    initial: before,
+  });
+  const id = randomUUID();
+  const result = {
+    ...receipt(before, before.name),
+    operation: 'ACCESS_CHECK',
+    after: snapshot(before),
+    checkId: id,
+  };
+  let key;
+  let posts = 0;
+  let reads = 0;
+  await page.route(`**${base}/${target}/access-checks`, async route => {
+    posts++;
+    key = route.request().headers()['idempotency-key'];
+    expect(route.request().postDataJSON()).toEqual({
+      expectedRevision: before.revision,
+      expectedCredentialRevision: before.credentialRevision,
+    });
+    await route.fulfill({
+      status: 201,
+      contentType: 'application/json',
+      body: '{',
+    });
+  });
+  await page.route(`**${base}/receipts/*`, async route => {
+    expect(route.request().method()).toBe('GET');
+    expect(new URL(route.request().url()).pathname).toBe(
+      `${base}/receipts/${key}`,
+    );
+    await route.fulfill({json: envelope({receipt: result})});
+  });
+  await page.route(`**${base}/${target}/checks/${id}`, async route => {
+    reads++;
+    const acceptedAt = '2026-11-04T00:00:03.000000Z';
+    const completedAt = '2026-11-04T00:00:04.000000Z';
+    const done = reads > 1;
+    await route.fulfill({
+      json: envelope({
+        organizationId: org,
+        connectionId: target,
+        id,
+        kind: 'ACCESS_CHECK',
+        connectionRevision: before.revision,
+        credentialRevision: before.credentialRevision,
+        policyRevision: '1',
+        acceptedAt,
+        startedAt: done ? acceptedAt : null,
+        completedAt: done ? completedAt : null,
+        expiresAt: done ? '2026-11-04T00:15:04.000000Z' : null,
+        state: done ? 'COMPLETED' : 'QUEUED',
+        outcome: done ? 'ACCESSIBLE' : null,
+        errorCode: null,
+        catalogueState: 'NOT_REQUESTED',
+        modelCount: null,
+      }),
+    });
+  });
+  await page
+    .getByRole('button', {name: 'Kiểm tra kết nối', exact: true})
+    .click();
+  await page.getByRole('button', {name: 'Xác nhận kiểm tra kết nối'}).click();
+  const pending = page.getByTestId('provider-access-checks-unknown');
+  await expect(pending).toBeVisible();
+  await pending.getByRole('button', {name: 'Kiểm tra kết quả'}).click();
+  await expect(page.getByText('Đang chờ kiểm tra.')).toBeVisible();
+  await page.getByRole('button', {name: 'Cập nhật trạng thái'}).click();
+  await expect(
+    page.getByText('Kết nối có quyền đọc danh sách model.'),
+  ).toBeVisible();
+  expect(posts).toBe(1);
+  expect(reads).toBe(2);
 });

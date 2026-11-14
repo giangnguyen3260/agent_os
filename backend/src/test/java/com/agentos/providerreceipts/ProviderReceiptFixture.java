@@ -664,6 +664,14 @@ abstract class ProviderReceiptFixture {
       assertThat(count("provider_access_checks")).isEqualTo(1);
       assertThat(count("provider_access_check_outbox")).isEqualTo(1);
       assertThat(count("provider_access_check_receipts")).isEqualTo(1);
+      var status = service.accessCheckStatus(human, org, id, accepted.receipt().checkId());
+      assertThat(status.connectionRevision()).isEqualTo(1);
+      assertThat(status.startedAt()).isNull();
+      assertThat(status.completedAt()).isNull();
+      error(
+          () -> service.accessCheckStatus(human, org, UUID.randomUUID(), status.id()),
+          404,
+          "NOT_FOUND");
       assertThat(count("provider_access_check_events")).isEqualTo(1);
       var event =
           jdbc.queryForMap(
