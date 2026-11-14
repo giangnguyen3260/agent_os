@@ -63,6 +63,9 @@ public final class ProviderAccessCheckDispatch {
     }
   }
 
+  record Target(
+      UUID connection, UUID actor, long actorVersion, long revision, long credentialRevision) {}
+
   private record Locked(Check check, OffsetDateTime now, Result invalidation) {}
 
   private final JdbcTemplate jdbc;
@@ -111,6 +114,28 @@ where organization_id=? and id=? and worker_owner_id is null and completed_at is
                   organization,
                   check));
           return new Claim(organization, check, worker, token);
+        });
+  }
+
+  Target target(Claim claim) {
+    return transact(
+        () -> {
+          var locked = lock(claim.organization(), claim.check());
+          if (locked == null
+              || !locked.check().ownedBy(claim)
+              || locked.check().authorized() != null) return null;
+          var rejection = rejection(locked);
+          if (rejection != null) {
+            complete(claim.organization(), claim.check(), locked.now(), rejection);
+            return null;
+          }
+          var check = locked.check();
+          return new Target(
+              check.connection(),
+              check.actor(),
+              check.actorVersion(),
+              check.revision(),
+              check.credentialRevision());
         });
   }
 

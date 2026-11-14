@@ -8,6 +8,7 @@ import static org.mockito.Mockito.mockingDetails;
 
 import com.agentos.auth.HumanIdentity;
 import com.agentos.providerchecks.ProviderAccessCheckDispatch;
+import com.agentos.providerchecks.ProviderAccessCheckRunner;
 import com.agentos.providercommands.CommandBoundary;
 import com.agentos.providercommands.CommandBoundary.Command;
 import com.agentos.providercommands.CommandBoundary.Create;
@@ -745,6 +746,77 @@ abstract class ProviderReceiptFixture {
                   "select outcome,error_code from provider_access_checks where id=?", expired))
           .containsEntry("outcome", "FAILED")
           .containsEntry("error_code", "CHECK_EXPIRED");
+      assertThat(count("provider_access_check_outbox")).isZero();
+      jdbc.update("update human_accounts set credential_version=0 where id=?", actor);
+      // The completed check releases the slot, allowing a new check at the same revision.
+      UUID next = UUID.randomUUID();
+      var queued = jdbc.queryForObject("select current_timestamp", OffsetDateTime.class);
+      jdbc.update(
+          """
+          insert into provider_access_checks
+            (id,organization_id,connection_id,actor_id,actor_credential_version,
+             connection_revision,credential_revision,policy_revision,accepted_at,queue_expires_at)
+          values (?,?,?,?,0,1,1,?,?,?)
+          """,
+          next,
+          org,
+          id,
+          actor,
+          policyRevision,
+          queued,
+          queued.plusSeconds(60));
+      jdbc.update(
+          "insert into provider_access_check_outbox values (?,?,?,1,1,?)",
+          org,
+          id,
+          next,
+          policyRevision);
+      var borrowed = new java.util.concurrent.atomic.AtomicReference<byte[]>();
+      var runner =
+          new ProviderAccessCheckRunner(
+              dispatch,
+              connections,
+              new CredentialBoundary(
+                  new CredentialBoundary.Keys() {
+                    public String currentVersion() {
+                      throw new AssertionError("Read only");
+                    }
+
+                    public javax.crypto.SecretKey key(String version) {
+                      outside();
+                      assertThat(version).isEqualTo("credential-v1");
+                      return new SecretKeySpec(new byte[32], "HmacSHA256");
+                    }
+                  },
+                  new CredentialBoundary.Secrets() {
+                    public CredentialBoundary.Reference store(
+                        CredentialBoundary.Scope scope, byte[] bytes) {
+                      throw new AssertionError("Read only");
+                    }
+
+                    public byte[] read(CredentialBoundary.Reference reference) {
+                      outside();
+                      return SECRET.getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+                    }
+
+                    public void preparationFailed(
+                        CredentialBoundary.Scope scope, CredentialBoundary.Reference reference) {
+                      throw new AssertionError("Read only");
+                    }
+                  }),
+              (kind, workspace, bytes, deadline) -> {
+                outside();
+                assertThat(borrowed.compareAndSet(null, bytes)).isTrue();
+                assertThat(bytes)
+                    .isEqualTo(SECRET.getBytes(java.nio.charset.StandardCharsets.US_ASCII));
+                return ProviderAccessCheckDispatch.Result.ACCESSIBLE;
+              },
+              java.time.Clock.systemUTC());
+      runner.run(org, next, worker);
+      runner.run(org, next, UUID.randomUUID());
+      assertThat(borrowed.get()).isNotNull().containsOnly((byte) 0);
+      assertThat(jdbc.queryForMap("select outcome from provider_access_checks where id=?", next))
+          .containsEntry("outcome", "ACCESSIBLE");
       assertThat(count("provider_access_check_outbox")).isZero();
     } finally {
       if (seeded) jdbc.update("delete from provider_deployment_policy where id=1");
