@@ -7,6 +7,9 @@ import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mockingDetails;
 
 import com.agentos.auth.HumanIdentity;
+import com.agentos.providerchecks.ProviderAccessCheckDispatch;
+import com.agentos.providerchecks.ProviderAccessCheckPoller;
+import com.agentos.providerchecks.ProviderAccessCheckRunner;
 import com.agentos.providercommands.CommandBoundary;
 import com.agentos.providercommands.CommandBoundary.Command;
 import com.agentos.providercommands.CommandBoundary.Create;
@@ -146,6 +149,10 @@ abstract class ProviderReceiptFixture {
   }
 
   CredentialBoundary.Metadata credential(Provider provider, long revision) {
+    return credential(provider, revision, id);
+  }
+
+  private CredentialBoundary.Metadata credential(Provider provider, long revision, UUID target) {
     var b =
         new CredentialBoundary(
             new CredentialBoundary.Keys() {
@@ -179,7 +186,7 @@ abstract class ProviderReceiptFixture {
             });
     return b.prepare(
         new CredentialBoundary.Scope(
-            org, id, CredentialBoundary.Provider.valueOf(provider.name()), revision),
+            org, target, CredentialBoundary.Provider.valueOf(provider.name()), revision),
         SECRET.toCharArray());
   }
 
@@ -670,6 +677,195 @@ abstract class ProviderReceiptFixture {
 
     } finally {
       if (seededPolicy) jdbc.update("delete from provider_deployment_policy where id=1");
+    }
+  }
+
+  @Test
+  void accessCheckDispatchClaimsOnceAndFencesAChangedActor() {
+    boolean seeded =
+        jdbc.queryForObject("select count(*) from provider_deployment_policy", Long.class) == 0;
+    if (seeded)
+      jdbc.update(
+          """
+          insert into provider_deployment_policy
+            (id,revision,openai_enabled,anthropic_enabled,gemini_enabled,created_at,updated_at)
+          values (1,3,true,true,true,current_timestamp,current_timestamp)
+          """);
+    try {
+      var policy = jdbc.queryForMap("select * from provider_deployment_policy where id=1");
+      long policyRevision = ((Number) policy.get("revision")).longValue();
+      Provider provider =
+          Boolean.TRUE.equals(policy.get("openai_enabled"))
+              ? Provider.OPENAI
+              : Boolean.TRUE.equals(policy.get("anthropic_enabled"))
+                  ? Provider.ANTHROPIC
+                  : Provider.GOOGLE_GEMINI;
+      var create = createCommand(provider);
+      service.execute(human, org, key, create, prepare(create), id, credential(provider, 1));
+      UUID check = UUID.randomUUID(), worker = UUID.randomUUID();
+      var accepted = jdbc.queryForObject("select current_timestamp", OffsetDateTime.class);
+      jdbc.update(
+          """
+          insert into provider_access_checks
+            (id,organization_id,connection_id,actor_id,actor_credential_version,
+             connection_revision,credential_revision,policy_revision,accepted_at,queue_expires_at)
+          values (?,?,?,?,0,1,1,?,?,?)
+          """,
+          check,
+          org,
+          id,
+          actor,
+          policyRevision,
+          accepted,
+          accepted.plusSeconds(60));
+      jdbc.update(
+          "insert into provider_access_check_outbox values (?,?,?,1,1,?)",
+          org,
+          id,
+          check,
+          policyRevision);
+
+      var dispatch = new ProviderAccessCheckDispatch(jdbc.getDataSource());
+      var claim = dispatch.claim(org, check, worker);
+      assertThat(claim).isNotNull();
+      assertThat(dispatch.claim(org, check, UUID.randomUUID())).isNull();
+      assertThat(dispatch.finish(claim, ProviderAccessCheckDispatch.Result.ACCESSIBLE)).isFalse();
+      assertThat(dispatch.authorize(claim)).isNotNull();
+      assertThat(dispatch.authorize(claim)).isNull();
+      jdbc.update("update human_accounts set credential_version=1 where id=?", actor);
+      assertThat(dispatch.finish(claim, ProviderAccessCheckDispatch.Result.ACCESSIBLE)).isTrue();
+      assertThat(dispatch.finish(claim, ProviderAccessCheckDispatch.Result.UNKNOWN)).isFalse();
+      assertThat(
+              jdbc.queryForMap(
+                  "select outcome,error_code from provider_access_checks where id=?", check))
+          .containsEntry("outcome", "SUPERSEDED")
+          .containsEntry("error_code", "AUTHORITY_LOST");
+      assertThat(count("provider_access_check_outbox")).isZero();
+      UUID expired = UUID.randomUUID();
+      insertAccessCheck(expired, accepted.minusMinutes(2));
+      jdbc.update(
+          "insert into provider_access_check_outbox values (?,?,?,1,1,3)", org, id, expired);
+      assertThat(dispatch.claim(org, expired, worker)).isNull();
+      assertThat(
+              jdbc.queryForMap(
+                  "select outcome,error_code from provider_access_checks where id=?", expired))
+          .containsEntry("outcome", "FAILED")
+          .containsEntry("error_code", "CHECK_EXPIRED");
+      assertThat(count("provider_access_check_outbox")).isZero();
+      jdbc.update("update human_accounts set credential_version=0 where id=?", actor);
+      // The completed check releases the slot, allowing a new check at the same revision.
+      UUID next = UUID.randomUUID();
+      var queued = jdbc.queryForObject("select current_timestamp", OffsetDateTime.class);
+      jdbc.update(
+          """
+          insert into provider_access_checks
+            (id,organization_id,connection_id,actor_id,actor_credential_version,
+             connection_revision,credential_revision,policy_revision,accepted_at,queue_expires_at)
+          values (?,?,?,?,0,1,1,?,?,?)
+          """,
+          next,
+          org,
+          id,
+          actor,
+          policyRevision,
+          queued,
+          queued.plusSeconds(60));
+      jdbc.update(
+          "insert into provider_access_check_outbox values (?,?,?,1,1,?)",
+          org,
+          id,
+          next,
+          policyRevision);
+      var borrowed = new java.util.concurrent.atomic.AtomicReference<byte[]>();
+      var runner =
+          new ProviderAccessCheckRunner(
+              dispatch,
+              connections,
+              new CredentialBoundary(
+                  new CredentialBoundary.Keys() {
+                    public String currentVersion() {
+                      throw new AssertionError("Read only");
+                    }
+
+                    public javax.crypto.SecretKey key(String version) {
+                      outside();
+                      assertThat(version).isEqualTo("credential-v1");
+                      return new SecretKeySpec(new byte[32], "HmacSHA256");
+                    }
+                  },
+                  new CredentialBoundary.Secrets() {
+                    public CredentialBoundary.Reference store(
+                        CredentialBoundary.Scope scope, byte[] bytes) {
+                      throw new AssertionError("Read only");
+                    }
+
+                    public byte[] read(CredentialBoundary.Reference reference) {
+                      outside();
+                      return SECRET.getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+                    }
+
+                    public void preparationFailed(
+                        CredentialBoundary.Scope scope, CredentialBoundary.Reference reference) {
+                      throw new AssertionError("Read only");
+                    }
+                  }),
+              (kind, workspace, bytes, deadline) -> {
+                outside();
+                assertThat(borrowed.compareAndSet(null, bytes)).isTrue();
+                assertThat(bytes)
+                    .isEqualTo(SECRET.getBytes(java.nio.charset.StandardCharsets.US_ASCII));
+                return ProviderAccessCheckDispatch.Result.ACCESSIBLE;
+              },
+              java.time.Clock.systemUTC());
+      UUID abandoned = UUID.randomUUID();
+      UUID abandonedConnection = UUID.randomUUID();
+      connections.create(
+          human,
+          org,
+          abandonedConnection,
+          "Abandoned check",
+          create.workspaceId(),
+          credential(provider, 1, abandonedConnection));
+      var past = queued.minusMinutes(2);
+      jdbc.update(
+          """
+          insert into provider_access_checks
+            (id,organization_id,connection_id,actor_id,actor_credential_version,
+             connection_revision,credential_revision,policy_revision,accepted_at,queue_expires_at,
+             worker_owner_id,dispatch_token,started_at,dispatch_deadline)
+          values (?,?,?,?,0,1,1,?,?,?,?,?,?,?)
+          """,
+          abandoned,
+          org,
+          abandonedConnection,
+          actor,
+          policyRevision,
+          past,
+          past.plusSeconds(60),
+          worker,
+          UUID.randomUUID(),
+          past,
+          past.plusSeconds(30));
+      jdbc.update(
+          "insert into provider_access_check_outbox values (?,?,?,1,1,?)",
+          org,
+          abandonedConnection,
+          abandoned,
+          policyRevision);
+      var poller = new ProviderAccessCheckPoller(jdbc.getDataSource(), dispatch, runner);
+      poller.poll();
+      poller.poll();
+      assertThat(
+              jdbc.queryForMap(
+                  "select outcome,error_code from provider_access_checks where id=?", abandoned))
+          .containsEntry("outcome", "UNKNOWN")
+          .containsEntry("error_code", "TRANSPORT_UNKNOWN");
+      assertThat(borrowed.get()).isNotNull().containsOnly((byte) 0);
+      assertThat(jdbc.queryForMap("select outcome from provider_access_checks where id=?", next))
+          .containsEntry("outcome", "ACCESSIBLE");
+      assertThat(count("provider_access_check_outbox")).isZero();
+    } finally {
+      if (seeded) jdbc.update("delete from provider_deployment_policy where id=1");
     }
   }
 
