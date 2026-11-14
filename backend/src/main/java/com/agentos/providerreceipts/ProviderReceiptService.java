@@ -283,6 +283,19 @@ values (?,?,?,?,?,?,?,?,?,?,?)
                       prepared.keyVersion(),
                       prepared.digest())
                   == 1);
+          require(
+              jdbc.update(
+                      """
+                      insert into provider_access_check_events
+                        (check_id,organization_id,connection_id,actor_id,event_type,occurred_at)
+                      values (?,?,?,?,'ACCEPTED',?)
+                      """,
+                      check,
+                      org,
+                      target,
+                      actor.id(),
+                      accepted)
+                  == 1);
           return new Result(
               new Receipt(
                   org,
