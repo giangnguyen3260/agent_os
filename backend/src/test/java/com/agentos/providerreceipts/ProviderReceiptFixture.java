@@ -8,6 +8,7 @@ import static org.mockito.Mockito.mockingDetails;
 
 import com.agentos.auth.HumanIdentity;
 import com.agentos.providerchecks.ProviderAccessCheckDispatch;
+import com.agentos.providerchecks.ProviderAccessCheckPoller;
 import com.agentos.providerchecks.ProviderAccessCheckRunner;
 import com.agentos.providercommands.CommandBoundary;
 import com.agentos.providercommands.CommandBoundary.Command;
@@ -148,6 +149,10 @@ abstract class ProviderReceiptFixture {
   }
 
   CredentialBoundary.Metadata credential(Provider provider, long revision) {
+    return credential(provider, revision, id);
+  }
+
+  private CredentialBoundary.Metadata credential(Provider provider, long revision, UUID target) {
     var b =
         new CredentialBoundary(
             new CredentialBoundary.Keys() {
@@ -181,7 +186,7 @@ abstract class ProviderReceiptFixture {
             });
     return b.prepare(
         new CredentialBoundary.Scope(
-            org, id, CredentialBoundary.Provider.valueOf(provider.name()), revision),
+            org, target, CredentialBoundary.Provider.valueOf(provider.name()), revision),
         SECRET.toCharArray());
   }
 
@@ -812,8 +817,49 @@ abstract class ProviderReceiptFixture {
                 return ProviderAccessCheckDispatch.Result.ACCESSIBLE;
               },
               java.time.Clock.systemUTC());
-      runner.run(org, next, worker);
-      runner.run(org, next, UUID.randomUUID());
+      UUID abandoned = UUID.randomUUID();
+      UUID abandonedConnection = UUID.randomUUID();
+      connections.create(
+          human,
+          org,
+          abandonedConnection,
+          "Abandoned check",
+          create.workspaceId(),
+          credential(provider, 1, abandonedConnection));
+      var past = queued.minusMinutes(2);
+      jdbc.update(
+          """
+          insert into provider_access_checks
+            (id,organization_id,connection_id,actor_id,actor_credential_version,
+             connection_revision,credential_revision,policy_revision,accepted_at,queue_expires_at,
+             worker_owner_id,dispatch_token,started_at,dispatch_deadline)
+          values (?,?,?,?,0,1,1,?,?,?,?,?,?,?)
+          """,
+          abandoned,
+          org,
+          abandonedConnection,
+          actor,
+          policyRevision,
+          past,
+          past.plusSeconds(60),
+          worker,
+          UUID.randomUUID(),
+          past,
+          past.plusSeconds(30));
+      jdbc.update(
+          "insert into provider_access_check_outbox values (?,?,?,1,1,?)",
+          org,
+          abandonedConnection,
+          abandoned,
+          policyRevision);
+      var poller = new ProviderAccessCheckPoller(jdbc.getDataSource(), dispatch, runner);
+      poller.poll();
+      poller.poll();
+      assertThat(
+              jdbc.queryForMap(
+                  "select outcome,error_code from provider_access_checks where id=?", abandoned))
+          .containsEntry("outcome", "UNKNOWN")
+          .containsEntry("error_code", "TRANSPORT_UNKNOWN");
       assertThat(borrowed.get()).isNotNull().containsOnly((byte) 0);
       assertThat(jdbc.queryForMap("select outcome from provider_access_checks where id=?", next))
           .containsEntry("outcome", "ACCESSIBLE");
