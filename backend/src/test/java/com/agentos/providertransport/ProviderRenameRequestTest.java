@@ -21,6 +21,20 @@ class ProviderRenameRequestTest {
       "/api/v1/organizations/" + ORG + "/provider-connections/" + TARGET + "/rename";
 
   @Test
+  void accessCheckUsesOnlyItsExactPostPathAndTheSharedHeaderContract() {
+    var request = request();
+    String path = PATH.replace("/rename", "/access-checks");
+    request.setRequestURI(path);
+    assertThat(ProviderRenameRequest.validateAccessCheck(request, ORG, TARGET, CSRF))
+        .isEqualTo(UUID.fromString(KEY));
+    request.setQueryString("page=0");
+    bad(() -> ProviderRenameRequest.validateAccessCheck(request, ORG, TARGET, CSRF));
+    request.setQueryString(null);
+    request.setRequestURI(path.replace("/access-checks", "/model-discoveries"));
+    bad(() -> ProviderRenameRequest.validateAccessCheck(request, ORG, TARGET, CSRF));
+  }
+
+  @Test
   void acceptsOnlyExactRawRouteIncludingContextPathWithoutReadingBodyOrCreatingSession() {
     for (String context : new String[] {"", "/agentos"}) {
       for (String media :
