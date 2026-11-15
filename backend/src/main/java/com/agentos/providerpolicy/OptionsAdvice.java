@@ -10,15 +10,18 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
     assignableTypes = {
       OptionsController.class,
       ProviderListController.class,
-      ProviderCreateReceiptController.class
+      ProviderCreateReceiptController.class,
+      ProviderAccessCheckController.class
     })
 public class OptionsAdvice {
   @ExceptionHandler(Exception.class)
   ResponseEntity<ApiErrorResponse> failure(Exception exception) {
     PolicyFailure failure =
         exception instanceof PolicyFailure known ? known : PolicyFailure.unavailable();
-    if (failure.status() != 400 && failure.status() != 401 && failure.status() != 403)
-      failure = PolicyFailure.unavailable();
+    if (failure.status() != 400
+        && failure.status() != 401
+        && failure.status() != 403
+        && failure.status() != 404) failure = PolicyFailure.unavailable();
     return ResponseEntity.status(failure.status())
         .header("Cache-Control", "no-store")
         .contentType(org.springframework.http.MediaType.APPLICATION_JSON)

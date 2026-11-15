@@ -318,6 +318,35 @@ class ProviderOwnReceiptDispatchTest {
     }
   }
 
+  @Test
+  void accessCheckReceiptPreservesSnapshotAndExposesOnlyTheCheckIdWhenEnabled() throws Exception {
+    UUID check = UUID.randomUUID();
+    var configuration = snapshot("Reviewed", 1);
+    var receipt =
+        new Receipt(
+            org,
+            command,
+            Operation.ACCESS_CHECK,
+            connection,
+            actor,
+            time,
+            configuration,
+            configuration,
+            check);
+    var outcome = new LookupOutcome(LookupState.FOUND, receipt, null);
+    var disabled = new MockHttpServletResponse();
+    ProviderCreateReceiptController.writeLookup(
+        json, disabled, outcome, false, false, false, false, false);
+    unavailable(disabled);
+    var enabled = new MockHttpServletResponse();
+    ProviderCreateReceiptController.writeLookup(
+        json, enabled, outcome, false, false, false, false, true);
+    assertThat(enabled.getStatus()).isEqualTo(200);
+    var data = envelope(enabled).path("data").path("receipt");
+    assertThat(data.path("checkId").asText()).isEqualTo(check.toString());
+    assertThat(data.path("before")).isEqualTo(data.path("after"));
+  }
+
   private Configuration snapshot(String name, long revision) {
     return new Configuration(
         org,

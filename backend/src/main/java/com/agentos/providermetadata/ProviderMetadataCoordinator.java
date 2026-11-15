@@ -4,6 +4,7 @@ import com.agentos.auth.HumanIdentity;
 import com.agentos.provideradmission.ProviderWriteAdmission;
 import com.agentos.providercommands.CommandBoundary;
 import com.agentos.providercommands.CommandBoundary.Command;
+import com.agentos.providercommands.CommandBoundary.CredentialCommand;
 import com.agentos.providercommands.CommandBoundary.Metadata;
 import com.agentos.providercommands.CommandBoundary.Operation;
 import com.agentos.providercommands.CommandBoundary.Rename;
@@ -60,6 +61,13 @@ public final class ProviderMetadataCoordinator {
     return execute(actor, organization, key, command);
   }
 
+  public WriteOutcome accessCheck(
+      HumanIdentity actor, UUID organization, UUID key, CredentialCommand command) {
+    if (command == null || command.operation() != Operation.ACCESS_CHECK)
+      return new WriteOutcome(WriteState.REJECTED, null, new Failure(Code.INVALID_COMMAND));
+    return execute(actor, organization, key, command);
+  }
+
   /** Command key access occurs outside transactions and does not require credential storage. */
   private WriteOutcome execute(HumanIdentity actor, UUID organization, UUID key, Command command) {
     boolean committing = false;
@@ -69,7 +77,9 @@ public final class ProviderMetadataCoordinator {
           || command == null) return unavailable();
       // The proxied RR probe reauthorizes before historical HMAC access or fresh admission.
       var historical = receipts.probeOwn(actor, organization, key);
-      if (historical == null && !admission.acquireMetadata(actor, organization, key)) {
+      if (historical == null
+          && !(command instanceof CredentialCommand)
+          && !admission.acquireMetadata(actor, organization, key)) {
         historical = receipts.probeOwn(actor, organization, key);
         if (historical == null) return unavailable();
       }
@@ -112,6 +122,8 @@ public final class ProviderMetadataCoordinator {
       HumanIdentity actor, UUID organization, UUID key, Command command, Metadata digest) {
     if (command instanceof Rename rename)
       return completion.executeRenamePrepared(actor, organization, key, rename, digest);
+    if (command instanceof CredentialCommand check)
+      return completion.executeAccessCheckPrepared(actor, organization, key, check, digest);
     var stateChange = (RevisionCommand) command;
     return stateChange.operation() == Operation.ENABLE
         ? completion.executeEnablePrepared(actor, organization, key, stateChange, digest)

@@ -14,6 +14,7 @@ final class OptionsResponses {
       case 400 -> "Invalid provider settings request";
       case 401 -> "Authentication required";
       case 403 -> "Request denied";
+      case 404 -> "Provider check not found";
       case 405 -> "Method not allowed";
       case 429 -> "Too many requests";
       default -> "Provider settings are unavailable";

@@ -2,6 +2,7 @@ package com.agentos.providercompletion;
 
 import com.agentos.auth.HumanIdentity;
 import com.agentos.providercommands.CommandBoundary.Command;
+import com.agentos.providercommands.CommandBoundary.CredentialCommand;
 import com.agentos.providercommands.CommandBoundary.Metadata;
 import com.agentos.providercommands.CommandBoundary.Operation;
 import com.agentos.providercommands.CommandBoundary.Rename;
@@ -42,6 +43,8 @@ public final class ProviderCompletionBoundary {
     CONNECTION_CONFLICT(409),
     PROVIDER_DISABLED(409),
     CREDENTIAL_UNAVAILABLE(409),
+    CONNECTION_DISABLED(409),
+    CHECK_IN_PROGRESS(409),
     CONNECTION_LIMIT(409),
     RATE_LIMITED(429),
     PREPARATION_REQUIRED(409),
@@ -207,6 +210,11 @@ public final class ProviderCompletionBoundary {
     return executeWrite(actor, org, key, command, prepared, null, credential, Operation.ROTATE);
   }
 
+  public WriteOutcome executeAccessCheckPrepared(
+      HumanIdentity actor, UUID org, UUID key, CredentialCommand command, Metadata prepared) {
+    return executeWrite(actor, org, key, command, prepared, null, null, Operation.ACCESS_CHECK);
+  }
+
   private WriteOutcome executeWrite(
       HumanIdentity actor,
       UUID org,
@@ -239,11 +247,18 @@ public final class ProviderCompletionBoundary {
       } else if (governance == Operation.ROTATE) {
         result =
             receipts.executeRotateGoverned(actor, org, key, (Rotate) command, prepared, credential);
+      } else if (governance == Operation.ACCESS_CHECK) {
+        result = receipts.acceptAccessCheck(actor, org, key, (CredentialCommand) command, prepared);
       } else {
         result = receipts.execute(actor, org, key, command, prepared, createId, credential);
       }
     } catch (RuntimeException failure) {
       Code code = known(failure);
+      if (code == Code.RATE_LIMITED && failure instanceof ProviderReceiptFailure rate) {
+        return rollback(owned)
+            ? new WriteOutcome(WriteState.REJECTED, null, new Failure(code, rate.retryAfter()))
+            : write(WriteState.UNKNOWN, Code.COMMAND_OUTCOME_UNKNOWN);
+      }
       return rollback(owned)
           ? write(WriteState.REJECTED, code == null ? Code.COMMAND_UNAVAILABLE : code)
           : write(WriteState.UNKNOWN, Code.COMMAND_OUTCOME_UNKNOWN);

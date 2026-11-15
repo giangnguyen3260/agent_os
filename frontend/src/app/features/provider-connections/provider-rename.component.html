@@ -1,9 +1,22 @@
 @if (
-  enabled() || disableEnabled() || enableVisible() || rotateEnabled() || error()
+  enabled() ||
+  disableEnabled() ||
+  enableVisible() ||
+  rotateEnabled() ||
+  canCheck() ||
+  error()
 ) {
   <section class="provider-rename" [attr.aria-label]="panelLabel()">
     @if (error()) {
       <p role="alert">{{ error() }}</p>
+    }
+    @if (currentCheck() && checkResult(); as check) {
+      <p role="status">{{ check.message }}</p>
+      @if (!check.done) {
+        <button type="button" [disabled]="busy()" (click)="refreshCheck()">
+          Cập nhật trạng thái
+        </button>
+      }
     }
     @if (pending(); as attempt) {
       <div
@@ -26,7 +39,11 @@
         Tải lại kết nối
       </button>
     } @else if (
-      enabled() || disableEnabled() || enableVisible() || rotateEnabled()
+      enabled() ||
+      disableEnabled() ||
+      enableVisible() ||
+      rotateEnabled() ||
+      canCheck()
     ) {
       @if (review(); as change) {
         @if (change.operation === 'rotate') {
@@ -122,6 +139,15 @@
       } @else {
         @if (enabled()) {
           <button type="button" (click)="start()">Đổi tên</button>
+        }
+        @if (canCheck()) {
+          <button
+            type="button"
+            [disabled]="busy() || (!!currentCheck() && !checkResult()?.done)"
+            (click)="prepareAccessCheck()"
+          >
+            Kiểm tra kết nối
+          </button>
         }
         @if (rotateEnabled()) {
           <button type="button" (click)="prepareRotate()">Thay API key</button>

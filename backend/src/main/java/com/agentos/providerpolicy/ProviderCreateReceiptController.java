@@ -8,6 +8,7 @@ import com.agentos.providercompletion.ProviderCompletionBoundary.Failure;
 import com.agentos.providercompletion.ProviderCompletionBoundary.LookupOutcome;
 import com.agentos.providercompletion.ProviderCompletionBoundary.LookupState;
 import com.agentos.providerreceipts.ProviderReceiptService;
+import com.agentos.providertransport.ProviderAccessCheckResponses;
 import com.agentos.providertransport.ProviderCreateResponses;
 import com.agentos.providertransport.ProviderDisableResponses;
 import com.agentos.providertransport.ProviderEnableResponses;
@@ -33,7 +34,8 @@ import org.springframework.web.bind.annotation.RestController;
     "${agentos.provider-create.enabled:false} or ${agentos.provider-rename.http-enabled:false}"
         + " or ${agentos.provider-disable.http-enabled:false}"
         + " or ${agentos.provider-enable.http-enabled:false}"
-        + " or ${agentos.provider-rotate.http-enabled:false}")
+        + " or ${agentos.provider-rotate.http-enabled:false}"
+        + " or ${agentos.provider-access-check.http-enabled:false}")
 public class ProviderCreateReceiptController {
   private static final String ORGANIZATIONS = "/api/v1/organizations/";
   private static final String RECEIPTS = "/provider-connections/receipts/";
@@ -44,6 +46,7 @@ public class ProviderCreateReceiptController {
   private final boolean disableEnabled;
   private final boolean enableEnabled;
   private final boolean rotateEnabled;
+  private final boolean accessCheckEnabled;
 
   ProviderCreateReceiptController(
       PlatformTransactionManager manager,
@@ -53,13 +56,15 @@ public class ProviderCreateReceiptController {
       @Value("${agentos.provider-rename.http-enabled:false}") boolean renameEnabled,
       @Value("${agentos.provider-disable.http-enabled:false}") boolean disableEnabled,
       @Value("${agentos.provider-enable.http-enabled:false}") boolean enableEnabled,
-      @Value("${agentos.provider-rotate.http-enabled:false}") boolean rotateEnabled) {
+      @Value("${agentos.provider-rotate.http-enabled:false}") boolean rotateEnabled,
+      @Value("${agentos.provider-access-check.http-enabled:false}") boolean accessCheckEnabled) {
     this.completion = new ProviderCompletionBoundary(manager, jdbc, receipts);
     this.json = json;
     this.renameEnabled = renameEnabled;
     this.disableEnabled = disableEnabled;
     this.enableEnabled = enableEnabled;
     this.rotateEnabled = rotateEnabled;
+    this.accessCheckEnabled = accessCheckEnabled;
   }
 
   @GetMapping(ORGANIZATIONS + "{organizationId}" + RECEIPTS + "{key}")
@@ -86,7 +91,14 @@ public class ProviderCreateReceiptController {
       SecurityContextHolder.clearContext();
     }
     writeLookup(
-        json, response, result, renameEnabled, disableEnabled, enableEnabled, rotateEnabled);
+        json,
+        response,
+        result,
+        renameEnabled,
+        disableEnabled,
+        enableEnabled,
+        rotateEnabled,
+        accessCheckEnabled);
   }
 
   /** Dispatch only the explicitly supported historical configuration receipt operations. */
@@ -98,6 +110,20 @@ public class ProviderCreateReceiptController {
       boolean disableEnabled,
       boolean enableEnabled,
       boolean rotateEnabled)
+      throws IOException {
+    writeLookup(
+        json, response, result, renameEnabled, disableEnabled, enableEnabled, rotateEnabled, false);
+  }
+
+  static void writeLookup(
+      ObjectMapper json,
+      HttpServletResponse response,
+      LookupOutcome result,
+      boolean renameEnabled,
+      boolean disableEnabled,
+      boolean enableEnabled,
+      boolean rotateEnabled,
+      boolean accessCheckEnabled)
       throws IOException {
     if (result == null || result.state() != LookupState.FOUND) {
       ProviderCreateResponses.writeLookup(json, response, result);
@@ -114,6 +140,8 @@ public class ProviderCreateReceiptController {
       ProviderEnableResponses.writeLookup(json, response, result);
     } else if (operation == Operation.ROTATE && rotateEnabled) {
       ProviderRotateResponses.writeLookup(json, response, result);
+    } else if (operation == Operation.ACCESS_CHECK && accessCheckEnabled) {
+      ProviderAccessCheckResponses.writeLookup(json, response, result);
     } else {
       ProviderCreateResponses.error(json, response, new Failure(Code.RECEIPT_UNAVAILABLE));
     }

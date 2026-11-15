@@ -34,7 +34,7 @@ record ProviderConnectionChangeReceipt(
         ProviderHistoricalConfiguration.time(receipt.recordedAt()),
         ProviderHistoricalConfiguration.snapshot(receipt.before()),
         ProviderHistoricalConfiguration.snapshot(receipt.after()),
-        null);
+        receipt.checkId());
   }
 
   private static boolean validState(Receipt receipt, Operation operation) {
@@ -43,7 +43,7 @@ record ProviderConnectionChangeReceipt(
     return switch (operation) {
       case ENABLE -> "DISABLED".equals(before) && "ENABLED".equals(after);
       case DISABLE -> "ENABLED".equals(before) && "DISABLED".equals(after);
-      case ROTATE -> before.equals(after);
+      case ROTATE, ACCESS_CHECK -> before.equals(after);
       default -> false;
     };
   }
