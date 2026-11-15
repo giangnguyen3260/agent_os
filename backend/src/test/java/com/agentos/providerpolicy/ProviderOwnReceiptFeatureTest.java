@@ -81,6 +81,9 @@ class ProviderOwnReceiptFeatureTest {
     assertThat(OptionsSecurity.paths(false, true, false).matcher(check).matches()).isFalse();
     assertThat(OptionsSecurity.paths(false, true, true).matcher(check + "/models").matches())
         .isFalse();
+    assertThat(OptionsSecurity.paths(false, true, false, true).matcher(check).matches()).isTrue();
+    assertThat(OptionsSecurity.paths(false, true, false, true).matcher(check + "/models").matches())
+        .isTrue();
     for (boolean list : new boolean[] {false, true}) {
       for (boolean receipts : new boolean[] {false, true}) {
         var pattern = OptionsSecurity.paths(list, receipts);

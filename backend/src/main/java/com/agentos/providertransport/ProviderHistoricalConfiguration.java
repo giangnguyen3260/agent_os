@@ -32,7 +32,8 @@ final class ProviderHistoricalConfiguration {
         || !canonical(receipt.actorId())) return false;
     var before = receipt.before();
     var after = receipt.after();
-    if (receipt.operation() == Operation.ACCESS_CHECK) {
+    if (receipt.operation() == Operation.ACCESS_CHECK
+        || receipt.operation() == Operation.MODEL_DISCOVERY) {
       return canonical(receipt.checkId())
           && valid(before, receipt)
           && before.equals(after)

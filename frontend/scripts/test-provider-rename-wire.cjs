@@ -44,6 +44,9 @@ const {
   receiptFoundDisable,
   verifyEnabled,
   receiptFoundEnable,
+  providerCheckId,
+  providerCheckStatus,
+  discoveryModelPage,
 } = load(path.join(directory, 'provider-rename-wire.ts'));
 const {verifyCreated} = load(path.join(directory, 'provider-create-wire.ts'));
 const org = '11111111-1111-4111-8111-111111111111';
@@ -110,6 +113,163 @@ function mutate(change) {
 function lookup(value) {
   return {...value, data: {receipt: value.data}};
 }
+
+function discoveryReceipt() {
+  const document = fixture();
+  document.data.operation = 'MODEL_DISCOVERY';
+  document.data.checkId = foreign;
+  document.data.after = structuredClone(document.data.before);
+  return document;
+}
+
+const discoveryReview = {
+  connectionId: target,
+  expectedRevision: '7',
+  expectedCredentialRevision: '3',
+  name: 'Old name',
+  state: 'ENABLED',
+};
+
+function discoveryStatus() {
+  return {
+    data: {
+      organizationId: org,
+      connectionId: target,
+      id: foreign,
+      kind: 'MODEL_DISCOVERY',
+      connectionRevision: '7',
+      credentialRevision: '3',
+      policyRevision: '1',
+      acceptedAt: '2026-11-10T01:02:03.000001Z',
+      startedAt: '2026-11-10T01:02:03.000002Z',
+      completedAt: '2026-11-10T01:02:03.000003Z',
+      expiresAt: '2026-11-10T01:17:03.000003Z',
+      state: 'COMPLETED',
+      outcome: 'ACCESSIBLE',
+      errorCode: null,
+      catalogueState: 'TRUNCATED',
+      modelCount: 21,
+    },
+    meta: {requestId: foreign},
+  };
+}
+
+test('Model Discovery binds submission and own receipt recovery to the reviewed revisions and kind', () => {
+  const checkId = (value, recovery = false) =>
+    providerCheckId(
+      value,
+      org,
+      actor,
+      discoveryReview,
+      'MODEL_DISCOVERY',
+      recovery,
+    );
+  assert.equal(checkId(discoveryReceipt()), foreign);
+  assert.equal(checkId(lookup(discoveryReceipt()), true), foreign);
+  const absent = discoveryReceipt();
+  absent.data = {receipt: null};
+  assert.equal(checkId(absent, true), null);
+
+  const wrongKind = discoveryReceipt();
+  wrongKind.data.operation = 'ACCESS_CHECK';
+  assert.throws(() => checkId(wrongKind), /Invalid Model Discovery receipt/);
+  const changedRevision = discoveryReceipt();
+  changedRevision.data.after.credentialRevision = '4';
+  assert.throws(
+    () => checkId(changedRevision),
+    /Invalid Model Discovery receipt/,
+  );
+});
+
+test('Model Discovery status keeps empty and truncated catalogue distinct from queued and failed checks', () => {
+  const read = value =>
+    providerCheckStatus(
+      value,
+      org,
+      foreign,
+      discoveryReview,
+      'MODEL_DISCOVERY',
+    );
+  const partial = discoveryStatus();
+  assert.equal(read(partial).catalogue.state, 'TRUNCATED');
+  assert.equal(read(partial).catalogue.count, 21);
+  const empty = discoveryStatus();
+  empty.data.catalogueState = 'COMPLETE';
+  empty.data.modelCount = 0;
+  assert.equal(read(empty).catalogue.count, 0);
+
+  const queued = discoveryStatus();
+  Object.assign(queued.data, {
+    startedAt: null,
+    completedAt: null,
+    expiresAt: null,
+    outcome: null,
+    state: 'QUEUED',
+    catalogueState: 'PENDING',
+    modelCount: null,
+  });
+  assert.equal(read(queued).done, false);
+  assert.equal(read(queued).catalogue, undefined);
+  queued.data.modelCount = 0;
+  assert.throws(() => read(queued), /Invalid Model Discovery status/);
+
+  const denied = discoveryStatus();
+  Object.assign(denied.data, {
+    outcome: 'DENIED',
+    errorCode: 'PROVIDER_FORBIDDEN',
+    catalogueState: 'UNAVAILABLE',
+    modelCount: null,
+  });
+  assert.equal(read(denied).done, true);
+  assert.equal(read(denied).catalogue, undefined);
+  denied.data.catalogueState = 'COMPLETE';
+  assert.throws(() => read(denied), /Invalid Model Discovery status/);
+});
+
+test('Model Discovery accepts exact ordered model pages only for the approved snapshot', () => {
+  const status = providerCheckStatus(
+    discoveryStatus(),
+    org,
+    foreign,
+    discoveryReview,
+    'MODEL_DISCOVERY',
+  );
+  const page = {
+    data: {
+      organizationId: org,
+      connectionId: target,
+      checkId: foreign,
+      credentialRevision: '3',
+      page: 0,
+      pageSize: 20,
+      total: 21,
+      catalogueState: 'TRUNCATED',
+      items: Array.from({length: 20}, (_, index) => ({
+        id: 'model-' + String(index + 1).padStart(2, '0'),
+        displayName: null,
+      })),
+    },
+    meta: {requestId: foreign},
+  };
+  const read = (value, index) =>
+    discoveryModelPage(
+      value,
+      org,
+      foreign,
+      discoveryReview,
+      status.catalogue,
+      index,
+    );
+  assert.equal(read(page, 0).items.length, 20);
+  const second = structuredClone(page);
+  second.data.page = 1;
+  second.data.items = [{id: 'model-21', displayName: 'Last model'}];
+  assert.equal(read(second, 1).items[0].displayName, 'Last model');
+  second.data.catalogueState = 'COMPLETE';
+  assert.throws(() => read(second, 1), /Invalid Model Discovery page/);
+  page.data.items[1].id = page.data.items[0].id;
+  assert.throws(() => read(page, 0), /Invalid Model Discovery model/);
+});
 
 test('all provider profiles, exact options and both states', () => {
   for (const provider of ['OPENAI', 'ANTHROPIC', 'GOOGLE_GEMINI'])

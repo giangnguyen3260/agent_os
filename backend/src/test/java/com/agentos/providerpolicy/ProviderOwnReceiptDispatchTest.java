@@ -9,9 +9,13 @@ import com.agentos.providercompletion.ProviderCompletionBoundary.Code;
 import com.agentos.providercompletion.ProviderCompletionBoundary.Failure;
 import com.agentos.providercompletion.ProviderCompletionBoundary.LookupOutcome;
 import com.agentos.providercompletion.ProviderCompletionBoundary.LookupState;
+import com.agentos.providercompletion.ProviderCompletionBoundary.WriteOutcome;
+import com.agentos.providercompletion.ProviderCompletionBoundary.WriteState;
 import com.agentos.providerreceipts.ProviderReceiptService.Configuration;
 import com.agentos.providerreceipts.ProviderReceiptService.Receipt;
+import com.agentos.providerreceipts.ProviderReceiptService.Result;
 import com.agentos.providertransport.ProviderCreateResponses;
+import com.agentos.providertransport.ProviderModelDiscoveryResponses;
 import com.agentos.providertransport.ProviderRenameResponses;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -345,6 +349,48 @@ class ProviderOwnReceiptDispatchTest {
     var data = envelope(enabled).path("data").path("receipt");
     assertThat(data.path("checkId").asText()).isEqualTo(check.toString());
     assertThat(data.path("before")).isEqualTo(data.path("after"));
+  }
+
+  @Test
+  void discoveryPostAndOwnLookupReturnTheSameHistoricalReceiptWhenEnabled() throws Exception {
+    UUID check = UUID.randomUUID();
+    var configuration = snapshot("Reviewed", 1);
+    var receipt =
+        new Receipt(
+            org,
+            command,
+            Operation.MODEL_DISCOVERY,
+            connection,
+            actor,
+            time,
+            configuration,
+            configuration,
+            check);
+    var lookup = new LookupOutcome(LookupState.FOUND, receipt, null);
+    var disabled = new MockHttpServletResponse();
+    ProviderCreateReceiptController.writeLookup(
+        json, disabled, lookup, false, false, false, false, true, false);
+    unavailable(disabled);
+
+    var enabled = new MockHttpServletResponse();
+    ProviderCreateReceiptController.writeLookup(
+        json, enabled, lookup, false, false, false, false, false, true);
+    assertThat(enabled.getStatus()).isEqualTo(200);
+    var data = envelope(enabled).path("data").path("receipt");
+    assertThat(data.path("operation").asText()).isEqualTo("MODEL_DISCOVERY");
+    assertThat(data.path("checkId").asText()).isEqualTo(check.toString());
+    assertThat(data.path("before")).isEqualTo(data.path("after"));
+
+    for (boolean replayed : new boolean[] {false, true}) {
+      var response = new MockHttpServletResponse();
+      ProviderModelDiscoveryResponses.writeOutcome(
+          json,
+          response,
+          new WriteOutcome(WriteState.COMMITTED, new Result(receipt, replayed), null));
+      assertThat(response.getStatus()).isEqualTo(replayed ? 200 : 201);
+      assertThat(response.getHeader("Cache-Control")).isEqualTo("no-store");
+      assertThat(envelope(response).path("data")).isEqualTo(data);
+    }
   }
 
   private Configuration snapshot(String name, long revision) {

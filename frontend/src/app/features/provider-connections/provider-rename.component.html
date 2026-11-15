@@ -4,6 +4,7 @@
   enableVisible() ||
   rotateEnabled() ||
   canCheck() ||
+  canDiscover() ||
   error()
 ) {
   <section class="provider-rename" [attr.aria-label]="panelLabel()">
@@ -16,6 +17,75 @@
         <button type="button" [disabled]="busy()" (click)="refreshCheck()">
           Cập nhật trạng thái
         </button>
+        @if (currentCheck()?.review?.operation === 'model-discoveries') {
+          <p>Rời màn hình không hủy yêu cầu đã nhận.</p>
+        }
+      }
+      @if (check.catalogue; as catalogue) {
+        <section aria-label="Danh sách model" [attr.aria-busy]="busy()">
+          <h3>Danh sách model</h3>
+          <p>
+            Kết quả lịch sử được ghi nhận lúc
+            <time [attr.datetime]="catalogue.completedAt">{{
+              catalogue.completedAt | date: 'dd/MM/yyyy HH:mm:ss'
+            }}</time
+            >.
+          </p>
+          @if (modelPage(); as page) {
+            @if (catalogue.count === 0) {
+              <p>Không có model trong kết quả khám phá.</p>
+            } @else {
+              <p role="status">
+                Hiển thị {{ page.page * 20 + 1 }}–
+                {{ page.page * 20 + page.items.length }} trong
+                {{ catalogue.count }} model.
+              </p>
+              <ul class="provider-models">
+                @for (model of page.items; track model.id) {
+                  <li>
+                    <span class="provider-model-id">{{ model.id }}</span>
+                    @if (model.displayName && model.displayName !== model.id) {
+                      <span>{{ model.displayName }}</span>
+                    }
+                  </li>
+                }
+              </ul>
+              @if (catalogue.count > 20) {
+                <nav aria-label="Phân trang danh sách model">
+                  <button
+                    type="button"
+                    [disabled]="busy() || page.page === 0"
+                    (click)="loadModelPage(page.page - 1)"
+                  >
+                    Trang trước
+                  </button>
+                  <button
+                    type="button"
+                    [disabled]="
+                      busy() || (page.page + 1) * 20 >= catalogue.count
+                    "
+                    (click)="loadModelPage(page.page + 1)"
+                  >
+                    Trang tiếp
+                  </button>
+                </nav>
+              }
+            }
+          }
+          @let failedPage = modelPageError();
+          @if (failedPage !== null) {
+            <p role="alert">Không thể đọc danh sách model.</p>
+            <button
+              type="button"
+              [disabled]="busy()"
+              (click)="loadModelPage(failedPage)"
+            >
+              Thử tải lại danh sách
+            </button>
+          } @else if (!modelPage() && busy()) {
+            <p role="status">Đang đọc danh sách model.</p>
+          }
+        </section>
       }
     }
     @if (pending(); as attempt) {
@@ -43,7 +113,8 @@
       disableEnabled() ||
       enableVisible() ||
       rotateEnabled() ||
-      canCheck()
+      canCheck() ||
+      canDiscover()
     ) {
       @if (review(); as change) {
         @if (change.operation === 'rotate') {
@@ -88,6 +159,9 @@
               Kết nối: <strong>{{ change.name }}</strong>
             </p>
             <p>Phiên bản cấu hình: {{ change.expectedRevision }}</p>
+            @if (change.operation === 'model-discoveries') {
+              <p>Phiên bản khóa: {{ change.expectedCredentialRevision }}</p>
+            }
             <button type="button" [disabled]="busy()" (click)="confirm()">
               Xác nhận {{ operationNames[change.operation] }}
             </button>
@@ -147,6 +221,15 @@
             (click)="prepareAccessCheck()"
           >
             Kiểm tra kết nối
+          </button>
+        }
+        @if (canDiscover()) {
+          <button
+            type="button"
+            [disabled]="busy() || (!!currentCheck() && !checkResult()?.done)"
+            (click)="prepareModelDiscovery()"
+          >
+            Khám phá model
           </button>
         }
         @if (rotateEnabled()) {

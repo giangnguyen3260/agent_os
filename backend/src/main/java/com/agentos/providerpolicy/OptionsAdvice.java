@@ -21,7 +21,9 @@ public class OptionsAdvice {
     if (failure.status() != 400
         && failure.status() != 401
         && failure.status() != 403
-        && failure.status() != 404) failure = PolicyFailure.unavailable();
+        && failure.status() != 404
+        && !(failure.status() == 409 && "RESULT_NOT_AVAILABLE".equals(failure.code())))
+      failure = PolicyFailure.unavailable();
     return ResponseEntity.status(failure.status())
         .header("Cache-Control", "no-store")
         .contentType(org.springframework.http.MediaType.APPLICATION_JSON)

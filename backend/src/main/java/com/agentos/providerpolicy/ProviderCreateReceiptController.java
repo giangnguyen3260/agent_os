@@ -12,6 +12,7 @@ import com.agentos.providertransport.ProviderAccessCheckResponses;
 import com.agentos.providertransport.ProviderCreateResponses;
 import com.agentos.providertransport.ProviderDisableResponses;
 import com.agentos.providertransport.ProviderEnableResponses;
+import com.agentos.providertransport.ProviderModelDiscoveryResponses;
 import com.agentos.providertransport.ProviderRenameResponses;
 import com.agentos.providertransport.ProviderRotateResponses;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -35,7 +36,8 @@ import org.springframework.web.bind.annotation.RestController;
         + " or ${agentos.provider-disable.http-enabled:false}"
         + " or ${agentos.provider-enable.http-enabled:false}"
         + " or ${agentos.provider-rotate.http-enabled:false}"
-        + " or ${agentos.provider-access-check.http-enabled:false}")
+        + " or ${agentos.provider-access-check.http-enabled:false}"
+        + " or ${agentos.provider-model-discovery.http-enabled:false}")
 public class ProviderCreateReceiptController {
   private static final String ORGANIZATIONS = "/api/v1/organizations/";
   private static final String RECEIPTS = "/provider-connections/receipts/";
@@ -47,6 +49,7 @@ public class ProviderCreateReceiptController {
   private final boolean enableEnabled;
   private final boolean rotateEnabled;
   private final boolean accessCheckEnabled;
+  private final boolean modelDiscoveryEnabled;
 
   ProviderCreateReceiptController(
       PlatformTransactionManager manager,
@@ -57,7 +60,9 @@ public class ProviderCreateReceiptController {
       @Value("${agentos.provider-disable.http-enabled:false}") boolean disableEnabled,
       @Value("${agentos.provider-enable.http-enabled:false}") boolean enableEnabled,
       @Value("${agentos.provider-rotate.http-enabled:false}") boolean rotateEnabled,
-      @Value("${agentos.provider-access-check.http-enabled:false}") boolean accessCheckEnabled) {
+      @Value("${agentos.provider-access-check.http-enabled:false}") boolean accessCheckEnabled,
+      @Value("${agentos.provider-model-discovery.http-enabled:false}")
+          boolean modelDiscoveryEnabled) {
     this.completion = new ProviderCompletionBoundary(manager, jdbc, receipts);
     this.json = json;
     this.renameEnabled = renameEnabled;
@@ -65,6 +70,7 @@ public class ProviderCreateReceiptController {
     this.enableEnabled = enableEnabled;
     this.rotateEnabled = rotateEnabled;
     this.accessCheckEnabled = accessCheckEnabled;
+    this.modelDiscoveryEnabled = modelDiscoveryEnabled;
   }
 
   @GetMapping(ORGANIZATIONS + "{organizationId}" + RECEIPTS + "{key}")
@@ -98,7 +104,8 @@ public class ProviderCreateReceiptController {
         disableEnabled,
         enableEnabled,
         rotateEnabled,
-        accessCheckEnabled);
+        accessCheckEnabled,
+        modelDiscoveryEnabled);
   }
 
   /** Dispatch only the explicitly supported historical configuration receipt operations. */
@@ -125,6 +132,29 @@ public class ProviderCreateReceiptController {
       boolean rotateEnabled,
       boolean accessCheckEnabled)
       throws IOException {
+    writeLookup(
+        json,
+        response,
+        result,
+        renameEnabled,
+        disableEnabled,
+        enableEnabled,
+        rotateEnabled,
+        accessCheckEnabled,
+        false);
+  }
+
+  static void writeLookup(
+      ObjectMapper json,
+      HttpServletResponse response,
+      LookupOutcome result,
+      boolean renameEnabled,
+      boolean disableEnabled,
+      boolean enableEnabled,
+      boolean rotateEnabled,
+      boolean accessCheckEnabled,
+      boolean modelDiscoveryEnabled)
+      throws IOException {
     if (result == null || result.state() != LookupState.FOUND) {
       ProviderCreateResponses.writeLookup(json, response, result);
       return;
@@ -142,6 +172,8 @@ public class ProviderCreateReceiptController {
       ProviderRotateResponses.writeLookup(json, response, result);
     } else if (operation == Operation.ACCESS_CHECK && accessCheckEnabled) {
       ProviderAccessCheckResponses.writeLookup(json, response, result);
+    } else if (operation == Operation.MODEL_DISCOVERY && modelDiscoveryEnabled) {
+      ProviderModelDiscoveryResponses.writeLookup(json, response, result);
     } else {
       ProviderCreateResponses.error(json, response, new Failure(Code.RECEIPT_UNAVAILABLE));
     }

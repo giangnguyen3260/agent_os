@@ -33,3 +33,17 @@
   min-width: 0;
   width: 100%;
 }
+
+.provider-models {
+  display: grid;
+  gap: 0.45rem;
+  padding-inline-start: 1.2rem;
+}
+
+.provider-models li > span {
+  display: block;
+}
+
+.provider-model-id {
+  font-weight: 600;
+}

@@ -6,6 +6,7 @@ import com.agentos.auth.HumanIdentity;
 import com.agentos.providerchecks.ProviderAccessCheckDispatch;
 import com.agentos.providerchecks.ProviderAccessCheckPoller;
 import com.agentos.providerchecks.ProviderAccessCheckRunner;
+import com.agentos.providerchecks.ProviderModelDiscoveryRunner;
 import com.agentos.providerchecks.ProviderModelsTransport;
 import com.agentos.providercompletion.ProviderCompletionBoundary.WriteState;
 import com.agentos.providercreation.ProviderCreateCoordinator;
@@ -77,7 +78,8 @@ import org.springframework.test.context.DynamicPropertySource;
       "agentos.provider-rename.http-enabled=true",
       "agentos.provider-rotate.enabled=true",
       "agentos.provider-rotate.http-enabled=true",
-      "agentos.provider-access-check.http-enabled=true"
+      "agentos.provider-access-check.http-enabled=true",
+      "agentos.provider-model-discovery.http-enabled=true"
     })
 @ActiveProfiles("test")
 @Import(ProviderCreateVaultHttpIT.UploadReadContinue.class)
@@ -566,33 +568,15 @@ class ProviderCreateVaultHttpIT {
   @Test
   void browserAccessCheckRunsThroughManagedCredentialAndWorker() throws Exception {
     UUID org = UUID.randomUUID(), actor = UUID.randomUUID();
-    String email = actor + "@example.test";
-    jdbc.update(
-        "insert into organizations(id,name,slug,status,created_at,updated_at)"
-            + " values (?,'Access Check',?,'ACTIVE',current_timestamp,current_timestamp)",
-        org,
-        org.toString());
-    jdbc.update(
-        "insert into human_accounts(id,email,display_name,password_hash)"
-            + " values (?,?,'Access Check',?)",
-        actor,
-        email,
-        passwords.encode(PASSWORD));
-    jdbc.update(
-        "insert into organization_memberships(account_id,organization_id,role) values"
-            + " (?,?,'ADMIN')",
-        actor,
-        org);
+    var human = seedCheckBrowserAdmin(org, actor, "Access Check");
     String keyFile = System.getenv("AGENTOS_ACCESS_CHECK_OPENAI_KEY_FILE");
     UUID connection;
-    try (var body = accessCheckCreateBody(keyFile)) {
-      var created =
-          creates.create(
-              new HumanIdentity(actor, email, "Access Check", 0), org, UUID.randomUUID(), body);
+    try (var body = checkCreateBody(keyFile, Provider.OPENAI, "Access Check fixture")) {
+      var created = creates.create(human, org, UUID.randomUUID(), body);
       assertThat(created.state()).isEqualTo(WriteState.COMMITTED);
       connection = created.result().receipt().connectionId();
     }
-    publishAccessCheckEvidence(org, connection);
+    publishCheckEvidence(org, connection, Provider.OPENAI);
 
     var configured = ProviderCredentialVaultRuntime.assemble(environment);
     var runtime = configured.runtime();
@@ -641,7 +625,147 @@ class ProviderCreateVaultHttpIT {
         .isZero();
   }
 
-  private ProviderCreateBody accessCheckCreateBody(String keyFile) throws IOException {
+  @Test
+  void browserDiscoversAndReadsTheCommittedCatalogueThroughTheManagedWorker() throws Exception {
+    UUID org = UUID.randomUUID(), actor = UUID.randomUUID();
+    var human = seedCheckBrowserAdmin(org, actor, "Model Discovery");
+    boolean enabled =
+        Boolean.TRUE.equals(
+            jdbc.queryForObject(
+                "select anthropic_enabled from provider_deployment_policy where id=1",
+                Boolean.class));
+    if (!enabled) updateAnthropicPolicy(true);
+    try {
+      UUID connection;
+      try (var body = checkCreateBody(null, Provider.ANTHROPIC, "Model Discovery fixture")) {
+        var created = creates.create(human, org, UUID.randomUUID(), body);
+        assertThat(created.state()).isEqualTo(WriteState.COMMITTED);
+        connection = created.result().receipt().connectionId();
+      }
+      publishCheckEvidence(org, connection, Provider.ANTHROPIC);
+
+      var configured = ProviderCredentialVaultRuntime.assemble(environment);
+      var runtime = configured.runtime();
+      var dispatch = ProviderAccessCheckDispatch.forDiscovery(runtime.datasource());
+      var sends = new AtomicInteger();
+      var models =
+          java.util.stream.IntStream.rangeClosed(1, 21)
+              .mapToObj(
+                  index ->
+                      new ProviderModelsTransport.Model(
+                          String.format(java.util.Locale.ROOT, "fixture-model-%02d", index),
+                          "Fixture model " + index))
+              .toList();
+      var runner =
+          new ProviderModelDiscoveryRunner(
+              dispatch,
+              runtime.connections(),
+              configured.credentials(),
+              (provider, workspace, key, deadline, cursor, remaining) -> {
+                int page = sends.incrementAndGet();
+                var visible = ProviderAccessCheckDispatch.Result.ACCESSIBLE;
+                if (provider == Provider.ANTHROPIC
+                    && workspace == null
+                    && Arrays.equals(key, SECRET.getBytes(StandardCharsets.US_ASCII))) {
+                  if (page == 1 && cursor == null)
+                    return new ProviderModelsTransport.Page(
+                        visible, models.subList(0, 20), models.get(19).id(), 2048);
+                  if (page == 2 && models.get(19).id().equals(cursor))
+                    return new ProviderModelsTransport.Page(
+                        visible, models.subList(20, 21), null, 128);
+                }
+                return new ProviderModelsTransport.Page(
+                    ProviderAccessCheckDispatch.Result.PROTOCOL_ERROR, List.of(), null, 0);
+              },
+              Clock.systemUTC());
+      var poller = ProviderAccessCheckPoller.forDiscovery(runtime.datasource(), dispatch, runner);
+      var worker =
+          new ProviderAccessCheckWorkerConfiguration.Worker(
+              poller::dispatchNext, poller::expireOutstanding, 100);
+      try {
+        runConnectionBrowser("model_discovery", org, actor, connection);
+      } finally {
+        worker.destroy();
+      }
+
+      assertThat(sends.get()).isEqualTo(2);
+      assertThat(
+              jdbc.queryForList(
+                  "select outcome from provider_access_checks where organization_id=?"
+                      + " and connection_id=? and check_kind='MODEL_DISCOVERY'",
+                  String.class,
+                  org,
+                  connection))
+          .containsExactly("ACCESSIBLE");
+      assertThat(
+              jdbc.queryForList(
+                  "select page_ordinal from provider_model_discovery_pages"
+                      + " where organization_id=? and connection_id=? order by page_ordinal",
+                  Integer.class,
+                  org,
+                  connection))
+          .containsExactly(1, 2);
+      assertThat(
+              jdbc.queryForList(
+                  "select catalogue_state from provider_model_discovery_snapshots"
+                      + " where organization_id=? and connection_id=?",
+                  String.class,
+                  org,
+                  connection))
+          .containsExactly("COMPLETE");
+      assertThat(
+              jdbc.queryForList(
+                  "select model_id from provider_model_discovery_entries"
+                      + " where organization_id=? and connection_id=? order by model_ordinal",
+                  String.class,
+                  org,
+                  connection))
+          .containsExactlyElementsOf(
+              models.stream().map(ProviderModelsTransport.Model::id).toList());
+      assertThat(
+              jdbc.queryForObject(
+                  "select count(*) from provider_access_check_outbox"
+                      + " where organization_id=? and connection_id=?",
+                  Long.class,
+                  org,
+                  connection))
+          .isZero();
+    } finally {
+      if (!enabled) updateAnthropicPolicy(false);
+    }
+  }
+
+  private HumanIdentity seedCheckBrowserAdmin(UUID org, UUID actor, String name) {
+    String email = actor + "@example.test";
+    jdbc.update(
+        "insert into organizations(id,name,slug,status,created_at,updated_at)"
+            + " values (?,?,?,'ACTIVE',current_timestamp,current_timestamp)",
+        org,
+        name,
+        org.toString());
+    jdbc.update(
+        "insert into human_accounts(id,email,display_name,password_hash) values (?,?,?,?)",
+        actor,
+        email,
+        name,
+        passwords.encode(PASSWORD));
+    jdbc.update(
+        "insert into organization_memberships(account_id,organization_id,role) values"
+            + " (?,?,'ADMIN')",
+        actor,
+        org);
+    return new HumanIdentity(actor, email, name, 0);
+  }
+
+  private void updateAnthropicPolicy(boolean enabled) {
+    jdbc.update(
+        "update provider_deployment_policy set anthropic_enabled=?,revision=revision+1,"
+            + " updated_at=clock_timestamp() where id=1",
+        enabled);
+  }
+
+  private ProviderCreateBody checkCreateBody(String keyFile, Provider provider, String name)
+      throws IOException {
     char[] key =
         keyFile == null
             ? SECRET.toCharArray()
@@ -656,10 +780,17 @@ class ProviderCreateVaultHttpIT {
     try {
       try (var writer = json.getFactory().createGenerator(encoded)) {
         writer.writeStartObject();
-        writer.writeStringField("provider", "OPENAI");
-        writer.writeStringField("credentialMode", "OPENAI_API_KEY");
-        writer.writeStringField("name", "Access Check fixture");
+        writer.writeStringField("provider", provider.name());
+        writer.writeStringField(
+            "credentialMode",
+            switch (provider) {
+              case OPENAI -> "OPENAI_API_KEY";
+              case ANTHROPIC -> "ANTHROPIC_API_KEY";
+              case GOOGLE_GEMINI -> "GEMINI_API_KEY";
+            });
+        writer.writeStringField("name", name);
         writer.writeObjectFieldStart("options");
+        if (provider == Provider.ANTHROPIC) writer.writeNullField("workspaceId");
         writer.writeEndObject();
         writer.writeFieldName("apiKey");
         writer.writeString(key, 0, key.length);
@@ -672,8 +803,9 @@ class ProviderCreateVaultHttpIT {
     }
   }
 
-  private void publishAccessCheckEvidence(UUID org, UUID connection) {
-    String login = "vault_browser_access_evidence";
+  private void publishCheckEvidence(UUID org, UUID connection, Provider provider) {
+    UUID publisher = UUID.randomUUID();
+    String login = "vault_browser_evidence_" + publisher.toString().replace("-", "");
     String password = UUID.randomUUID().toString();
     jdbc.execute(
         "create role "
@@ -682,7 +814,6 @@ class ProviderCreateVaultHttpIT {
             + password
             + "'");
     jdbc.execute("grant agentos_provider_evidence_publisher to " + login);
-    UUID publisher = UUID.randomUUID();
     jdbc.update(
         "insert into provider_evidence_publishers values (?,1,?)", publisher, UUID.randomUUID());
     jdbc.update(
@@ -693,13 +824,15 @@ class ProviderCreateVaultHttpIT {
         login);
     jdbc.update(
         "insert into agentos_evidence_private.publisher_permissions values"
-            + " (?,'OPENAI','PREPARE'),(?,'OPENAI','HEALTH')",
+            + " (?,?,'PREPARE'),(?,?,'HEALTH')",
         publisher,
-        publisher);
+        provider.name(),
+        publisher,
+        provider.name());
     var evidence =
         new ProviderPublicationClient(
             new DriverManagerDataSource(required("AGENTOS_TEST_JOURNAL_URL"), login, password));
-    var scope = new ProviderPublicationClient.Scope(org, connection, "OPENAI", 1);
+    var scope = new ProviderPublicationClient.Scope(org, connection, provider.name(), 1);
     var prepared = evidence.beginPreparationAssertion(scope);
     assertThat(prepared.status()).isEqualTo(ProviderPublicationClient.Status.ACCEPTED);
     assertThat(evidence.assertPrepared(prepared.value().attemptId()).status())
@@ -1208,6 +1341,11 @@ class ProviderCreateVaultHttpIT {
           "grant select,insert,delete on public.provider_access_check_outbox to"
               + " vault_browser_writer");
       statement.execute("grant update on public.provider_access_checks to vault_browser_writer");
+      statement.execute(
+          "grant select,insert on public.provider_model_discovery_pages to vault_browser_writer");
+      statement.execute(
+          "grant insert on public.provider_model_discovery_snapshots,"
+              + "public.provider_model_discovery_entries to vault_browser_writer");
       statement.execute("grant usage on schema public to vault_browser_writer");
       statement.execute(
           "grant select on public.provider_access_check_receipts,public.provider_access_checks"
@@ -1227,6 +1365,9 @@ class ProviderCreateVaultHttpIT {
           "grant select on public.organizations,public.organization_memberships,"
               + "public.provider_connections,public.human_accounts,public.provider_deployment_policy,public.provider_connection_events,public.provider_access_check_receipts,public.provider_access_checks,public.provider_command_receipts"
               + " to vault_browser_web");
+      statement.execute(
+          "grant select on public.provider_model_discovery_snapshots,"
+              + "public.provider_model_discovery_entries to vault_browser_web");
       statement.execute("grant update(id) on public.human_accounts to vault_browser_web");
       statement.execute(
           "grant select,insert,update on public.authentication_attempts,"

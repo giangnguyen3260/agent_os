@@ -254,13 +254,18 @@ deployment or as a separately configured process before exposing the UI.
 ### Model Discovery worker
 
 Enable `agentos.provider-model-discovery.worker-enabled=true` alongside
-`agentos.provider-access-check.worker-enabled=true` to process internally
-accepted discovery jobs. The worker runs on its own polling and expiry threads
+`agentos.provider-access-check.worker-enabled=true` to process discovery jobs.
+The worker runs on its own polling and expiry threads
 with the same polling delay and managed Vault configuration as Access Check.
 In addition to the existing check dispatch grants, grant the worker SELECT and
 INSERT on `provider_model_discovery_pages`, and INSERT on
 `provider_model_discovery_snapshots` and `provider_model_discovery_entries`.
-The HTTP submission and catalogue read endpoints are pending.
+Enable `agentos.provider-model-discovery.http-enabled=true` to expose Discovery
+submission, own receipt recovery, check status and the frozen model catalogue.
+Start the worker before enabling HTTP. In addition to the Access Check reader
+grants, grant the web reader SELECT on `provider_model_discovery_snapshots` and
+`provider_model_discovery_entries`. Each discovery is explicit and scoped to
+the provider connection and credential revision reviewed by the administrator.
 
 ### Verify Access Check against OpenAI
 

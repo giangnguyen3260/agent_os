@@ -9,12 +9,20 @@ import com.fasterxml.jackson.core.JsonToken;
 import java.io.InputStream;
 import java.util.UUID;
 
-/** Bounded body decoder for a reviewed Access Check against two exact revisions. */
+/** Bounded body decoder for a reviewed provider check against two exact revisions. */
 public final class ProviderAccessCheckBody {
   private ProviderAccessCheckBody() {}
 
   /** Reads a caller-owned stream without closing it. */
   public static CredentialCommand read(UUID target, InputStream input) {
+    return read(target, input, Operation.ACCESS_CHECK);
+  }
+
+  public static CredentialCommand readDiscovery(UUID target, InputStream input) {
+    return read(target, input, Operation.MODEL_DISCOVERY);
+  }
+
+  private static CredentialCommand read(UUID target, InputStream input, Operation operation) {
     return ProviderMetadataBody.read(
         input,
         parser -> {
@@ -32,7 +40,7 @@ public final class ProviderAccessCheckBody {
           }
           if (configurationRevision == null || credentialRevision == null) throw invalid();
           return new CredentialCommand(
-              Operation.ACCESS_CHECK, target, configurationRevision, credentialRevision);
+              operation, target, configurationRevision, credentialRevision);
         });
   }
 }

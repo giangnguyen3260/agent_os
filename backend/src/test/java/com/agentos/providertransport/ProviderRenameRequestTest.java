@@ -35,6 +35,19 @@ class ProviderRenameRequestTest {
   }
 
   @Test
+  void modelDiscoveryUsesItsExactPostPathAndTheSharedHeaderContract() {
+    var request = request();
+    request.setRequestURI(PATH.replace("/rename", "/model-discoveries"));
+    assertThat(ProviderRenameRequest.validateModelDiscovery(request, ORG, TARGET, CSRF))
+        .isEqualTo(UUID.fromString(KEY));
+    request.setQueryString("page=1");
+    bad(() -> ProviderRenameRequest.validateModelDiscovery(request, ORG, TARGET, CSRF));
+    request.setQueryString(null);
+    request.setRequestURI(PATH.replace("/rename", "/access-checks"));
+    bad(() -> ProviderRenameRequest.validateModelDiscovery(request, ORG, TARGET, CSRF));
+  }
+
+  @Test
   void acceptsOnlyExactRawRouteIncludingContextPathWithoutReadingBodyOrCreatingSession() {
     for (String context : new String[] {"", "/agentos"}) {
       for (String media :
