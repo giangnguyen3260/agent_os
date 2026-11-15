@@ -27,6 +27,7 @@ on:
       - frontend/tests/e2e/provider-create-live.spec.mjs
       - frontend/tests/e2e/provider-rename-live.spec.mjs
       - frontend/tests/e2e/provider-rotate-live.spec.mjs
+      - frontend/tests/e2e/provider-access-check-live.spec.mjs
       - frontend/scripts/provider-vault-server.mjs
 permissions:
   contents: read

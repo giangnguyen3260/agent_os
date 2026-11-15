@@ -3,6 +3,9 @@ package com.agentos.providervault;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.agentos.auth.HumanIdentity;
+import com.agentos.providerchecks.ProviderAccessCheckDispatch;
+import com.agentos.providerchecks.ProviderAccessCheckPoller;
+import com.agentos.providerchecks.ProviderAccessCheckRunner;
 import com.agentos.providercompletion.ProviderCompletionBoundary.WriteState;
 import com.agentos.providercreation.ProviderCreateCoordinator;
 import com.agentos.providercredentials.CredentialBoundary;
@@ -10,6 +13,7 @@ import com.agentos.providercredentials.CredentialBoundary.Provider;
 import com.agentos.providercredentials.CredentialBoundary.Reference;
 import com.agentos.providercredentials.CredentialBoundary.Scope;
 import com.agentos.providerpreparation.ProviderPreparationJournal;
+import com.agentos.providerpublication.ProviderPublicationClient;
 import com.agentos.providertransport.ProviderCreateBody;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.EOFException;
@@ -30,6 +34,7 @@ import java.nio.file.Path;
 import java.security.KeyStore;
 import java.security.MessageDigest;
 import java.security.cert.CertificateFactory;
+import java.time.Clock;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -37,6 +42,7 @@ import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManagerFactory;
 import org.apache.coyote.http11.AbstractHttp11Protocol;
@@ -50,6 +56,7 @@ import org.springframework.boot.web.embedded.tomcat.TomcatServletWebServerFactor
 import org.springframework.boot.web.server.WebServerFactoryCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.core.env.Environment;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -66,7 +73,8 @@ import org.springframework.test.context.DynamicPropertySource;
       "agentos.provider-rename.enabled=true",
       "agentos.provider-rename.http-enabled=true",
       "agentos.provider-rotate.enabled=true",
-      "agentos.provider-rotate.http-enabled=true"
+      "agentos.provider-rotate.http-enabled=true",
+      "agentos.provider-access-check.http-enabled=true"
     })
 @ActiveProfiles("test")
 @Import(ProviderCreateVaultHttpIT.UploadReadContinue.class)
@@ -94,6 +102,7 @@ class ProviderCreateVaultHttpIT {
   @Autowired PasswordEncoder passwords;
   @Autowired ObjectMapper json;
   @Autowired ProviderCreateCoordinator creates;
+  @Autowired Environment environment;
 
   @DynamicPropertySource
   static void configuration(DynamicPropertyRegistry properties) {
@@ -551,6 +560,129 @@ class ProviderCreateVaultHttpIT {
         .containsExactly(1L, 2L, 3L);
   }
 
+  @Test
+  void browserAccessCheckRunsThroughManagedCredentialAndWorker() throws Exception {
+    UUID org = UUID.randomUUID(), actor = UUID.randomUUID();
+    String email = actor + "@example.test";
+    jdbc.update(
+        "insert into organizations(id,name,slug,status,created_at,updated_at)"
+            + " values (?,'Access Check',?,'ACTIVE',current_timestamp,current_timestamp)",
+        org,
+        org.toString());
+    jdbc.update(
+        "insert into human_accounts(id,email,display_name,password_hash)"
+            + " values (?,?,'Access Check',?)",
+        actor,
+        email,
+        passwords.encode(PASSWORD));
+    jdbc.update(
+        "insert into organization_memberships(account_id,organization_id,role) values"
+            + " (?,?,'ADMIN')",
+        actor,
+        org);
+    UUID connection;
+    try (var body =
+        ProviderCreateBody.consume(
+            ("{\"provider\":\"OPENAI\",\"credentialMode\":\"OPENAI_API_KEY\","
+                    + "\"name\":\"Access Check fixture\",\"options\":{},\"apiKey\":\""
+                    + SECRET
+                    + "\"}")
+                .getBytes(StandardCharsets.UTF_8))) {
+      var created =
+          creates.create(
+              new HumanIdentity(actor, email, "Access Check", 0), org, UUID.randomUUID(), body);
+      assertThat(created.state()).isEqualTo(WriteState.COMMITTED);
+      connection = created.result().receipt().connectionId();
+    }
+    publishAccessCheckEvidence(org, connection);
+
+    var configured = ProviderCredentialVaultRuntime.assemble(environment);
+    var runtime = configured.runtime();
+    var dispatch = new ProviderAccessCheckDispatch(runtime.datasource());
+    var sent = new AtomicInteger();
+    var runner =
+        new ProviderAccessCheckRunner(
+            dispatch,
+            runtime.connections(),
+            configured.credentials(),
+            (provider, workspace, key, deadline) -> {
+              if (provider != Provider.OPENAI
+                  || workspace != null
+                  || !Arrays.equals(key, SECRET.getBytes(StandardCharsets.US_ASCII)))
+                return ProviderAccessCheckDispatch.Result.PROTOCOL_ERROR;
+              sent.incrementAndGet();
+              return ProviderAccessCheckDispatch.Result.ACCESSIBLE;
+            },
+            Clock.systemUTC());
+    var poller = new ProviderAccessCheckPoller(runtime.datasource(), dispatch, runner);
+    var worker = new ProviderAccessCheckWorkerConfiguration.Worker(poller, 100);
+    try {
+      runConnectionBrowser("access_check", org, actor, connection);
+    } finally {
+      worker.destroy();
+    }
+    assertThat(sent.get()).isEqualTo(1);
+    assertThat(
+            jdbc.queryForList(
+                "select outcome from provider_access_checks where organization_id=? and"
+                    + " connection_id=?",
+                String.class,
+                org,
+                connection))
+        .containsExactly("ACCESSIBLE");
+    assertThat(
+            jdbc.queryForObject(
+                "select count(*) from provider_access_check_outbox where organization_id=?",
+                Long.class,
+                org))
+        .isZero();
+  }
+
+  private void publishAccessCheckEvidence(UUID org, UUID connection) {
+    String login = "vault_browser_access_evidence";
+    String password = UUID.randomUUID().toString();
+    jdbc.execute(
+        "create role "
+            + login
+            + " login nosuperuser nocreatedb nocreaterole inherit password '"
+            + password
+            + "'");
+    jdbc.execute("grant agentos_provider_evidence_publisher to " + login);
+    UUID publisher = UUID.randomUUID();
+    jdbc.update(
+        "insert into provider_evidence_publishers values (?,1,?)", publisher, UUID.randomUUID());
+    jdbc.update(
+        "insert into agentos_evidence_private.publisher_principals"
+            + " select ?,rolname,oid,?,true from pg_catalog.pg_roles where rolname=?",
+        publisher,
+        org,
+        login);
+    jdbc.update(
+        "insert into agentos_evidence_private.publisher_permissions values"
+            + " (?,'OPENAI','PREPARE'),(?,'OPENAI','HEALTH')",
+        publisher,
+        publisher);
+    var evidence =
+        new ProviderPublicationClient(
+            new DriverManagerDataSource(required("AGENTOS_TEST_JOURNAL_URL"), login, password));
+    var scope = new ProviderPublicationClient.Scope(org, connection, "OPENAI", 1);
+    var prepared = evidence.beginPreparationAssertion(scope);
+    assertThat(prepared.status()).isEqualTo(ProviderPublicationClient.Status.ACCEPTED);
+    assertThat(evidence.assertPrepared(prepared.value().attemptId()).status())
+        .isEqualTo(ProviderPublicationClient.Status.ACCEPTED);
+    var health = evidence.beginHealth(scope);
+    assertThat(health.status()).isEqualTo(ProviderPublicationClient.Status.ACCEPTED);
+    assertThat(
+            evidence
+                .publishHealth(
+                    health.value().attemptId(),
+                    ProviderPublicationClient.HealthOutcome.USABLE,
+                    false,
+                    null)
+                .status())
+        .isEqualTo(ProviderPublicationClient.Status.ACCEPTED);
+  }
+
   private record Csrf(String header, String token) {}
 
   private Csrf authenticate(HttpClient client, String base, UUID actor) throws Exception {
@@ -633,7 +765,7 @@ class ProviderCreateVaultHttpIT {
       serverCommand.environment().put("DROP_RENAME_RESPONSE", "second");
     serverCommand.redirectOutput(ProcessBuilder.Redirect.DISCARD);
     serverCommand.redirectError(ProcessBuilder.Redirect.DISCARD);
-    String spec = "provider-" + operation + "-live.spec.mjs";
+    String spec = "provider-" + operation.replace('_', '-') + "-live.spec.mjs";
     var location = java.util.regex.Pattern.compile(java.util.regex.Pattern.quote(spec) + ":[0-9]+");
     var server = serverCommand.start();
     try {
@@ -1030,6 +1162,18 @@ class ProviderCreateVaultHttpIT {
               + " noreplication nobypassrls noinherit password '"
               + writerPassword
               + "'");
+      statement.execute("grant usage on schema agentos_list_read to vault_browser_writer");
+      statement.execute(
+          "grant execute on function agentos_list_read.credential_available(uuid,uuid)"
+              + " to vault_browser_writer");
+      statement.execute(
+          "grant insert on"
+              + " public.provider_access_check_receipts,public.provider_access_check_events,public.provider_access_checks"
+              + " to vault_browser_writer");
+      statement.execute(
+          "grant select,insert,delete on public.provider_access_check_outbox to"
+              + " vault_browser_writer");
+      statement.execute("grant update on public.provider_access_checks to vault_browser_writer");
       statement.execute("grant usage on schema public to vault_browser_writer");
       statement.execute(
           "grant select on public.provider_access_check_receipts,public.provider_access_checks"
