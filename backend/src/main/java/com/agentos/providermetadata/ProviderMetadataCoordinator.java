@@ -68,6 +68,13 @@ public final class ProviderMetadataCoordinator {
     return execute(actor, organization, key, command);
   }
 
+  public WriteOutcome discoverModels(
+      HumanIdentity actor, UUID organization, UUID key, CredentialCommand command) {
+    if (command == null || command.operation() != Operation.MODEL_DISCOVERY)
+      return new WriteOutcome(WriteState.REJECTED, null, new Failure(Code.INVALID_COMMAND));
+    return execute(actor, organization, key, command);
+  }
+
   /** Command key access occurs outside transactions and does not require credential storage. */
   private WriteOutcome execute(HumanIdentity actor, UUID organization, UUID key, Command command) {
     boolean committing = false;
@@ -123,7 +130,9 @@ public final class ProviderMetadataCoordinator {
     if (command instanceof Rename rename)
       return completion.executeRenamePrepared(actor, organization, key, rename, digest);
     if (command instanceof CredentialCommand check)
-      return completion.executeAccessCheckPrepared(actor, organization, key, check, digest);
+      return check.operation() == Operation.MODEL_DISCOVERY
+          ? completion.executeModelDiscoveryPrepared(actor, organization, key, check, digest)
+          : completion.executeAccessCheckPrepared(actor, organization, key, check, digest);
     var stateChange = (RevisionCommand) command;
     return stateChange.operation() == Operation.ENABLE
         ? completion.executeEnablePrepared(actor, organization, key, stateChange, digest)
