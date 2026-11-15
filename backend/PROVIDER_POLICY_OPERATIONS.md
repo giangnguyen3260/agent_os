@@ -267,6 +267,23 @@ grants, grant the web reader SELECT on `provider_model_discovery_snapshots` and
 `provider_model_discovery_entries`. Each discovery is explicit and scoped to
 the provider connection and credential revision reviewed by the administrator.
 
+### Agent model binding
+
+Apply V034 before enabling Model Discovery HTTP on the updated application.
+An organization ADMIN can configure the model binding in Agent Studio while
+the Agent is a Draft. Choices come from the latest eligible discovery for each
+connection and are revalidated at save time. A saved choice can be replaced or
+cleared. The binding has its own revision and idempotent receipts, independent
+of the Agent Studio configuration revision.
+
+For a split database login, give the binding API role read access to Agent and
+discovery metadata and the existing safe `credential_available(uuid,uuid)`
+function. Grant SELECT, INSERT and UPDATE on `agent_model_bindings` and SELECT
+and INSERT on `agent_model_binding_receipts`. Its locking reads also need UPDATE
+privilege on a key column of organizations, the provider policy, accounts,
+organization memberships, Agents and provider connections. The binding API
+does not need access to credential material in Vault.
+
 ### Verify Access Check against OpenAI
 
 The disposable Vault acceptance suite uses a simulated provider response by

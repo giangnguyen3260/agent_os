@@ -1,0 +1,61 @@
+.model-binding,
+.binding-field,
+.binding-review {
+  display: grid;
+  gap: 12px;
+}
+
+.model-binding :is(h2, h3, p, dl, dd) {
+  margin: 0;
+}
+
+.model-binding dl {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 3fr);
+  gap: 8px 16px;
+  overflow-wrap: anywhere;
+}
+
+.model-binding dt,
+.binding-field label {
+  font-weight: 600;
+}
+
+.model-binding a {
+  color: var(--primary-strong);
+  text-decoration: underline;
+}
+
+.binding-field {
+  width: min(100%, 720px);
+  min-width: 0;
+}
+
+.binding-field select {
+  width: 100%;
+  min-height: 46px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.binding-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.binding-review {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+@media (max-width: 480px) {
+  .model-binding dl {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

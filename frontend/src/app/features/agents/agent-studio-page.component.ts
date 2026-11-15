@@ -7,6 +7,7 @@ import {
   effect,
   inject,
   signal,
+  viewChild,
 } from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {FormsModule} from '@angular/forms';
@@ -24,11 +25,12 @@ import {
   StudioNumber,
   StudioText,
 } from './agent-studio.service';
+import {AgentModelBindingComponent} from './agent-model-binding.component';
 
 @Component({
   selector: 'app-agent-studio-page',
   standalone: true,
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, AgentModelBindingComponent],
   templateUrl: './agent-studio-page.component.html',
   styleUrls: [
     '../dashboard/dashboard-page.component.css',
@@ -42,6 +44,7 @@ export class AgentStudioPageComponent {
   private readonly route = inject(ActivatedRoute);
   private readonly destroy = inject(DestroyRef);
   private readonly element: ElementRef<HTMLElement> = inject(ElementRef);
+  private readonly modelBinding = viewChild(AgentModelBindingComponent);
   private requests = new Subscription();
   private epoch = 0;
   private account = this.auth.user()?.id;
@@ -276,6 +279,7 @@ export class AgentStudioPageComponent {
   }
   edit(): void {
     if (this.editable() && !this.loading()) {
+      if (this.modelBinding()?.dirty() && !this.canLeave()) return;
       this.populate();
       this.error.set('');
       this.stage.set('edit');
@@ -368,6 +372,7 @@ export class AgentStudioPageComponent {
   dirty(): boolean {
     return (
       !!this.attempt ||
+      !!this.modelBinding()?.dirty() ||
       (['edit', 'diff'].includes(this.stage()) && this.changes().length > 0)
     );
   }

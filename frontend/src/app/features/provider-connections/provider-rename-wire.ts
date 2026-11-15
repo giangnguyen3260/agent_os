@@ -71,7 +71,7 @@ interface HistoricalSnapshot {
 
 const maximumRevision = 9223372036854775807n;
 
-function positiveRevision(value: unknown): value is string {
+export function positiveRevision(value: unknown): value is string {
   return (
     typeof value === 'string' &&
     /^[1-9][0-9]{0,18}$/.test(value) &&
@@ -476,8 +476,8 @@ export function discoveryModelPage(
   value: unknown,
   org: string,
   id: string,
-  review: ReviewedRotate,
-  catalogue: NonNullable<CheckStatus['catalogue']>,
+  review: Pick<ReviewedRotate, 'connectionId' | 'expectedCredentialRevision'>,
+  catalogue: Pick<NonNullable<CheckStatus['catalogue']>, 'state' | 'count'>,
   page: number,
 ): ModelPage {
   const result = data(value, 'Model Discovery');
@@ -516,7 +516,7 @@ export function discoveryModelPage(
   return {page, items};
 }
 
-function modelText(value: unknown, maximum: number): value is string {
+export function modelText(value: unknown, maximum: number): value is string {
   return (
     text(value, maximum) && value.length > 0 && !/[\u2028\u2029]/.test(value)
   );

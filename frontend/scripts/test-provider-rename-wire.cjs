@@ -49,10 +49,80 @@ const {
   discoveryModelPage,
 } = load(path.join(directory, 'provider-rename-wire.ts'));
 const {verifyCreated} = load(path.join(directory, 'provider-create-wire.ts'));
+const {bindingState, bindingConnections, confirmedBinding} = load(
+  path.resolve(directory, '../agents/agent-model-binding-wire.ts'),
+);
 const org = '11111111-1111-4111-8111-111111111111';
 const actor = '22222222-2222-4222-8222-222222222222';
 const target = '33333333-3333-4333-8333-333333333333';
 const foreign = '44444444-4444-4444-8444-444444444444';
+
+test('Agent binding confirms only the reviewed catalogue and revision', () => {
+  const selection = {
+    connectionId: target,
+    checkId: foreign,
+    modelId: 'fixture-model-01',
+  };
+  const request = {expectedRevision: 4, selection};
+  const value = {
+    data: {
+      revision: 5,
+      editable: true,
+      binding: {
+        ...selection,
+        connectionName: 'Fixture connection',
+        provider: 'OPENAI',
+        displayName: null,
+        status: 'CURRENT',
+      },
+    },
+    meta: {requestId: actor},
+  };
+  assert.equal(
+    confirmedBinding(value, request).binding.modelId,
+    selection.modelId,
+  );
+  assert.throws(() =>
+    confirmedBinding(value, {...request, expectedRevision: 3}),
+  );
+  assert.throws(() =>
+    confirmedBinding(value, {
+      ...request,
+      selection: {...selection, checkId: org},
+    }),
+  );
+  assert.throws(() => confirmedBinding(value, {...request, selection: null}));
+  assert.throws(() =>
+    bindingState({
+      ...value,
+      data: {
+        ...value.data,
+        binding: {...value.data.binding, credential: 'unexpected'},
+      },
+    }),
+  );
+});
+
+test('Agent binding catalogue options reject duplicate connections and unsafe revisions', () => {
+  const item = {
+    connectionId: target,
+    connectionName: 'Fixture connection',
+    provider: 'ANTHROPIC',
+    checkId: foreign,
+    credentialRevision: '7',
+    modelCount: 21,
+    catalogueState: 'TRUNCATED',
+  };
+  const envelope = items => ({data: {items}, meta: {requestId: actor}});
+  assert.equal(bindingConnections(envelope([item]))[0].checkId, foreign);
+  assert.throws(() => bindingConnections(envelope([item, item])));
+  assert.throws(() =>
+    bindingConnections(envelope([{...item, credentialRevision: 7}])),
+  );
+  assert.throws(() =>
+    bindingConnections(envelope([{...item, modelCount: 1001}])),
+  );
+});
 const submitted = {
   connectionId: target,
   expectedRevision: '7',

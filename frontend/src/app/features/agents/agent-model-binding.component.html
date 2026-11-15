@@ -1,0 +1,226 @@
+@if (state() || error()) {
+  <section
+    class="panel model-binding"
+    aria-labelledby="model-binding-title"
+    data-testid="agent-model-binding"
+  >
+    <h2 id="model-binding-title">Gắn model cho Agent</h2>
+    @if (state(); as status) {
+      @if (status.binding; as saved) {
+        <dl>
+          <dt>Kết nối</dt>
+          <dd>{{ saved.connectionName }} · {{ saved.provider }}</dd>
+          <dt>Model đã lưu</dt>
+          <dd>
+            <code data-testid="agent-saved-model">{{ saved.modelId }}</code>
+            @if (saved.displayName) {
+              <span> · {{ saved.displayName }}</span>
+            }
+          </dd>
+          <dt>Trạng thái</dt>
+          <dd>{{ statusLabels[saved.status] }}</dd>
+        </dl>
+      } @else {
+        <p>Chưa gắn model.</p>
+      }
+      @if (status.editable && !requiresRefresh()) {
+        @if (review(); as candidate) {
+          <div class="binding-review" data-testid="agent-model-binding-review">
+            <h3>Xem lại thay đổi</h3>
+            @if (candidate.label) {
+              <p>{{ candidate.label }}</p>
+            } @else {
+              <p>Bỏ gắn model hiện tại khỏi Agent.</p>
+            }
+            @if (!attempt()) {
+              <div class="binding-actions">
+                <button
+                  class="button"
+                  type="button"
+                  [disabled]="busy()"
+                  (click)="save()"
+                >
+                  {{ candidate.label ? 'Lưu model' : 'Xác nhận bỏ gắn' }}
+                </button>
+                <button
+                  class="button secondary"
+                  type="button"
+                  [disabled]="busy()"
+                  (click)="cancel()"
+                >
+                  Hủy
+                </button>
+              </div>
+            }
+          </div>
+        } @else if (connections(); as options) {
+          @if (options.length) {
+            <div class="binding-field">
+              <label for="binding-connection">Kết nối nhà cung cấp</label>
+              <select
+                #connectionInput
+                id="binding-connection"
+                [value]="connection()?.connectionId ?? ''"
+                [disabled]="busy()"
+                (change)="selectConnection(connectionInput.value)"
+              >
+                <option value="">Chọn kết nối</option>
+                @for (option of options; track option.connectionId) {
+                  <option [value]="option.connectionId">
+                    {{ option.connectionName }} · {{ option.provider }}
+                  </option>
+                }
+              </select>
+            </div>
+            @if (connection(); as active) {
+              @if (active.catalogueState === 'TRUNCATED') {
+                <p>Danh sách khám phá đã được giới hạn.</p>
+              }
+              @if (active.modelCount === 0) {
+                <p>Kết nối này chưa trả về model nào.</p>
+              }
+              @if (modelPage(); as page) {
+                <div class="binding-field">
+                  <label for="binding-model">Model</label>
+                  <select
+                    #modelInput
+                    id="binding-model"
+                    [value]="model()?.id ?? ''"
+                    [disabled]="busy()"
+                    (change)="selectModel(modelInput.value)"
+                  >
+                    <option value="">Chọn model</option>
+                    @for (item of page.items; track item.id) {
+                      <option [value]="item.id">
+                        {{ item.id
+                        }}{{ item.displayName ? ' — ' + item.displayName : '' }}
+                      </option>
+                    }
+                  </select>
+                </div>
+                @if (active.modelCount > 20) {
+                  <div class="binding-actions">
+                    <button
+                      class="button secondary"
+                      type="button"
+                      [disabled]="busy() || page.page === 0"
+                      (click)="loadModels(page.page - 1)"
+                    >
+                      Trang trước
+                    </button>
+                    <span>Trang {{ page.page + 1 }}</span>
+                    <button
+                      class="button secondary"
+                      type="button"
+                      [disabled]="
+                        busy() || (page.page + 1) * 20 >= active.modelCount
+                      "
+                      (click)="loadModels(page.page + 1)"
+                    >
+                      Trang tiếp
+                    </button>
+                  </div>
+                }
+              }
+            }
+          } @else {
+            <p>
+              Chưa có danh sách model dùng được.
+              <a
+                [routerLink]="[
+                  '/workspace',
+                  organizationId(),
+                  'provider-connections',
+                ]"
+              >
+                Khám phá model trong một kết nối </a
+              >.
+            </p>
+          }
+          <div class="binding-actions">
+            @if (options.length) {
+              <button
+                class="button"
+                type="button"
+                [disabled]="busy() || !model()"
+                (click)="reviewModel()"
+              >
+                Xem lại lựa chọn
+              </button>
+            }
+            <button
+              class="button secondary"
+              type="button"
+              [disabled]="busy()"
+              (click)="choose()"
+            >
+              Tải lại các kết nối
+            </button>
+            <button
+              class="button secondary"
+              type="button"
+              [disabled]="busy()"
+              (click)="cancel()"
+            >
+              Hủy
+            </button>
+          </div>
+        } @else {
+          <div class="binding-actions">
+            <button
+              class="button"
+              type="button"
+              [disabled]="busy()"
+              (click)="choose()"
+            >
+              Chọn model
+            </button>
+            @if (status.binding) {
+              <button
+                class="button secondary"
+                type="button"
+                [disabled]="busy()"
+                (click)="reviewModel(true)"
+              >
+                Bỏ gắn model
+              </button>
+            }
+          </div>
+        }
+      }
+    }
+    @if (busy()) {
+      <p role="status">Đang xử lý…</p>
+    }
+    @if (message()) {
+      <p role="status">{{ message() }}</p>
+    }
+    @if (error()) {
+      <p role="alert" class="auth-error">{{ error() }}</p>
+      @if (requiresRefresh() || !state() || attempt()) {
+        <div class="binding-actions">
+          @if (attempt(); as unresolved) {
+            @if (unresolved.sends < 2) {
+              <button
+                class="button"
+                type="button"
+                [disabled]="busy()"
+                (click)="save()"
+              >
+                Thử lại yêu cầu lưu
+              </button>
+            }
+          }
+          <button
+            class="button secondary"
+            type="button"
+            [disabled]="busy()"
+            (click)="refresh()"
+          >
+            Tải lại trạng thái
+          </button>
+        </div>
+      }
+    }
+  </section>
+}

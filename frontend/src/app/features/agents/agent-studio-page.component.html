@@ -182,6 +182,12 @@
               }
             </dl>
           </section>
+          @if (context()?.role === 'ADMIN') {
+            <app-agent-model-binding
+              [organizationId]="id"
+              [agentId]="agentId"
+            />
+          }
         }
         @if (stage() === 'edit') {
           <form
