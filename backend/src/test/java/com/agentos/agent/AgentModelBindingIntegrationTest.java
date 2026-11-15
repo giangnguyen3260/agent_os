@@ -1,9 +1,11 @@
 package com.agentos.agent;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -12,6 +14,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.agentos.agent.api.dto.AgentDraftRequest;
 import com.agentos.agent.application.AgentDraftService;
 import com.agentos.auth.HumanIdentity;
+import com.agentos.model.application.ModelGateway;
+import com.agentos.model.application.ModelRequest;
 import com.agentos.providermetadata.ProviderMetadataCoordinator;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -53,6 +57,7 @@ public class AgentModelBindingIntegrationTest {
   @Autowired AgentDraftService drafts;
   @Autowired MockMvc mvc;
   @Autowired ObjectMapper json;
+  @Autowired ModelGateway gateway;
 
   @MockBean(name = "providerModelDiscoveryCoordinator")
   ProviderMetadataCoordinator discovery;
@@ -238,6 +243,7 @@ public class AgentModelBindingIntegrationTest {
       throws Exception {
     var catalogue = catalogue(org, OffsetDateTime.now().minusMinutes(1));
     data(mvc.perform(save(UUID.randomUUID(), 0, catalogue, MODEL).with(csrf())));
+    data(mvc.perform(saveGrant(UUID.randomUUID(), 0, 1, true).with(csrf())));
     var pending = UUID.randomUUID();
     jdbc.update(
         """
@@ -253,6 +259,8 @@ values (?,?,?,?,0,1,1,1,current_timestamp,current_timestamp + interval '60' seco
     mvc.perform(get(path() + "/connections").with(auth()))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.items.length()").value(0));
+    reviewModelAuthorization("BLOCKED", "binding and discovery evidence");
+    assertGatewayRequiresGrant(org, catalogue.connection(), MODEL);
     mvc.perform(save(UUID.randomUUID(), 1, catalogue, OTHER_MODEL).with(csrf()))
         .andExpect(status().isConflict())
         .andExpect(jsonPath("$.error.code").value("MODEL_UNAVAILABLE"));
@@ -413,6 +421,114 @@ values (?,?,?,?,0,1,1,1,?,?,?,?,?,?,?,?,'ACCESSIBLE','MODEL_DISCOVERY')
         check,
         OTHER_MODEL);
     return new Catalogue(connection, check);
+  }
+
+  @Test
+  void activationReviewsTheSelectedBindingAndGatewayRequiresMoreThanTheGrant() throws Exception {
+    var catalogue = catalogue(org, OffsetDateTime.now().minusMinutes(1));
+    var review = reviewModelAuthorization("BLOCKED", "Grant access");
+    assertThat(review.path("checks").get(2).path("message").asText()).contains(LEGACY_MODEL);
+    data(mvc.perform(save(UUID.randomUUID(), 0, catalogue, MODEL).with(csrf())));
+    review = reviewModelAuthorization("BLOCKED", "Grant access");
+    assertThat(review.path("checks").get(2).path("message").asText()).contains(MODEL);
+    assertGatewayRequiresGrant(org, catalogue.connection(), MODEL);
+
+    data(mvc.perform(saveGrant(UUID.randomUUID(), 0, 1, true).with(csrf())));
+    review = reviewModelAuthorization("PASS", "valid grant");
+    String agentPath = path().replace("/model-binding", "");
+    mvc.perform(
+            post(agentPath + "/activation")
+                .with(auth())
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    json.createObjectNode()
+                        .put("expectedRevision", review.path("revision").asInt())
+                        .toString()))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.error.code").value("ACTIVATION_BLOCKED"));
+    assertThatThrownBy(() -> gateway.execute(modelRequest(org, catalogue.connection(), MODEL)))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("runtime claim, plan and budget");
+    assertGatewayRequiresGrant(organization(), catalogue.connection(), MODEL);
+    assertGatewayRequiresGrant(org, catalogue(org, OffsetDateTime.now()).connection(), MODEL);
+    assertGatewayRequiresGrant(org, catalogue.connection(), OTHER_MODEL);
+
+    data(mvc.perform(saveGrant(UUID.randomUUID(), 1, 1, false).with(csrf())));
+    reviewModelAuthorization("BLOCKED", "revoked");
+    assertGatewayRequiresGrant(org, catalogue.connection(), MODEL);
+  }
+
+  @Test
+  void activationRejectsUnavailableEvidenceAndGrantsPinnedToAnOlderBinding() throws Exception {
+    var catalogue = catalogue(org, OffsetDateTime.now().minusMinutes(1));
+    data(mvc.perform(save(UUID.randomUUID(), 0, catalogue, MODEL).with(csrf())));
+    data(mvc.perform(saveGrant(UUID.randomUUID(), 0, 1, true).with(csrf())));
+
+    jdbc.update("update provider_deployment_policy set openai_enabled=false where id=1");
+    reviewModelAuthorization("BLOCKED", "unavailable");
+    assertGatewayRequiresGrant(org, catalogue.connection(), MODEL);
+    jdbc.update("update provider_deployment_policy set openai_enabled=true where id=1");
+
+    jdbc.update(
+        "update provider_connections set state='DISABLED' where id=?", catalogue.connection());
+    reviewModelAuthorization("BLOCKED", "unavailable");
+    jdbc.update(
+        "update provider_connections set state='ENABLED' where id=?", catalogue.connection());
+
+    data(mvc.perform(save(UUID.randomUUID(), 1, catalogue, OTHER_MODEL).with(csrf())));
+    reviewModelAuthorization("BLOCKED", "binding and discovery evidence");
+    assertGatewayRequiresGrant(org, catalogue.connection(), OTHER_MODEL);
+    data(mvc.perform(save(UUID.randomUUID(), 2, null, null).with(csrf())));
+    reviewModelAuthorization("BLOCKED", "binding and discovery evidence");
+  }
+
+  @Test
+  void activationRejectsExpiredDiscoveryEvidence() throws Exception {
+    var completed = OffsetDateTime.now().minusMinutes(1);
+    var catalogue = catalogue(org, completed);
+    data(mvc.perform(save(UUID.randomUUID(), 0, catalogue, MODEL).with(csrf())));
+    data(mvc.perform(saveGrant(UUID.randomUUID(), 0, 1, true).with(csrf())));
+    reviewModelAuthorization("PASS", "valid grant");
+
+    var expired = completed.minusMinutes(16);
+    jdbc.update(
+        """
+update provider_access_checks
+set accepted_at=?,queue_expires_at=?,started_at=?,dispatch_deadline=?,authorized_at=?,completed_at=?
+where id=?
+""",
+        expired.minusSeconds(1),
+        expired.plusSeconds(59),
+        expired,
+        expired.plusSeconds(30),
+        expired,
+        expired,
+        catalogue.check());
+    reviewModelAuthorization("BLOCKED", "binding and discovery evidence");
+    assertGatewayRequiresGrant(org, catalogue.connection(), MODEL);
+  }
+
+  private JsonNode reviewModelAuthorization(String expectedStatus, String message)
+      throws Exception {
+    var review =
+        data(mvc.perform(get(path().replace("/model-binding", "/activation-review")).with(auth())));
+    var check = review.path("checks").get(6);
+    assertThat(check.path("code").asText()).isEqualTo("MODEL_AUTHORIZATION");
+    assertThat(check.path("status").asText()).isEqualTo(expectedStatus);
+    assertThat(check.path("message").asText()).contains(message);
+    assertThat(review.path("activationAllowed").asBoolean(true)).isFalse();
+    return review;
+  }
+
+  private ModelRequest modelRequest(UUID organization, UUID connection, String model) {
+    return new ModelRequest(organization, null, null, null, agent, connection, model, List.of(), 1);
+  }
+
+  private void assertGatewayRequiresGrant(UUID organization, UUID connection, String model) {
+    assertThatThrownBy(() -> gateway.execute(modelRequest(organization, connection, model)))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("current grant");
   }
 
   private UUID organization() {

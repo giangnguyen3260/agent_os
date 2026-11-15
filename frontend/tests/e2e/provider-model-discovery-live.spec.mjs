@@ -203,6 +203,20 @@ test('Model Discovery supplies a model which can be bound, granted and revoked i
   expect((await persisted.json()).data).toEqual(historical);
 
   const grantPath = binding.replace(/model-binding$/, 'model-grant');
+  const activationReviewPath = binding.replace(/model-binding$/, 'activation-review');
+  const expectModelAuthorization = async status => {
+    const response = await page.request.get(activationReviewPath);
+    expect(response.status()).toBe(200);
+    const {data} = await response.json();
+    expect(data.activationAllowed).toBe(false);
+    expect(data.checks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({code: 'MODEL_AUTHORIZATION', status}),
+        expect.objectContaining({code: 'EXECUTION_RUNTIME', status: 'UNAVAILABLE'}),
+      ]),
+    );
+  };
+  await expectModelAuthorization('BLOCKED');
   const permissions = studio.getByRole('region', {
     name: 'Quyền dùng model',
     exact: true,
@@ -234,6 +248,7 @@ test('Model Discovery supplies a model which can be bound, granted and revoked i
     state: 'GRANTED',
   });
   await expect(current).toHaveText('Đã cấp quyền');
+  await expectModelAuthorization('PASS');
 
   await permissions
     .getByRole('button', {name: 'Thu hồi quyền dùng model', exact: true})
@@ -255,6 +270,7 @@ test('Model Discovery supplies a model which can be bound, granted and revoked i
     state: 'REVOKED',
   });
   await expect(current).toHaveText('Đã thu hồi quyền');
+  await expectModelAuthorization('BLOCKED');
   await page.reload();
   await expect(current).toHaveText('Đã thu hồi quyền');
   await expect(studio.getByTestId('agent-saved-model')).toHaveText(

@@ -239,7 +239,11 @@ public class AgentModelBindingService {
 
   private void validateSelection(UUID organization, Selection selected) {
     lockConnection(organization, selected.connectionId());
-    var exists =
+    if (!hasCurrentEvidence(organization, selected)) throw new Conflict("MODEL_UNAVAILABLE");
+  }
+
+  boolean hasCurrentEvidence(UUID organization, Selection selected) {
+    return Boolean.TRUE.equals(
         jdbc.queryForObject(
             "select count(*)>0\n" + CANDIDATE_SOURCE + " and c.id=? and k.id=? and e.model_id=?",
             Boolean.class,
@@ -247,8 +251,7 @@ public class AgentModelBindingService {
             freshnessCutoff(),
             selected.connectionId(),
             selected.checkId(),
-            selected.modelId());
-    if (!Boolean.TRUE.equals(exists)) throw new Conflict("MODEL_UNAVAILABLE");
+            selected.modelId()));
   }
 
   private boolean editable(UUID organization, UUID agent, boolean lock) {

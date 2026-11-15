@@ -41,6 +41,32 @@ public class AgentModelGrantService {
     return project(binding, current(organization, agent));
   }
 
+  record Authorization(AgentModelBindingService.Binding binding, GrantState state) {}
+
+  // Activation Review has already authorized the human and loaded the tenant-scoped Agent.
+  Authorization authorization(UUID organization, UUID agent) {
+    var binding = bindings.state(organization, agent, false);
+    var state = project(binding, current(organization, agent)).state();
+    var selected = binding.binding();
+    if (state == GrantState.GRANTED
+        && !bindings.hasCurrentEvidence(
+            organization,
+            new AgentModelBindingService.Selection(
+                selected.connectionId(), selected.checkId(), selected.modelId()))) {
+      state = GrantState.STALE;
+    }
+    return new Authorization(selected, state);
+  }
+
+  @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+  public boolean hasCurrentGrant(UUID organization, UUID agent, UUID connection, String model) {
+    if (organization == null || agent == null || connection == null || model == null) return false;
+    var authorization = authorization(organization, agent);
+    return authorization.state() == GrantState.GRANTED
+        && connection.equals(authorization.binding().connectionId())
+        && model.equals(authorization.binding().modelId());
+  }
+
   @Transactional(isolation = Isolation.READ_COMMITTED)
   public State put(UUID organization, HumanIdentity actor, UUID agent, UUID key, Request request) {
     boolean draft = bindings.lockEditable(organization, actor, agent);
