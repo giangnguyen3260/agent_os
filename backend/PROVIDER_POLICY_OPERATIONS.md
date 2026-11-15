@@ -232,7 +232,7 @@ state and historical credential references.
 
 ## Access Check receipt storage
 
-Apply migrations V029 through V031 before deploying the updated receipt service.
+Apply migrations V029 through V033 before deploying the updated receipt service.
 Roles that read or write Provider command receipts also need SELECT on
 `provider_access_checks` and `provider_access_check_receipts` to resolve the
 shared idempotency namespace. A dedicated Access Check writer additionally
@@ -250,6 +250,17 @@ submission, own receipt recovery and the scoped check status endpoint.
 The web reader also needs SELECT on `provider_access_checks` and
 `provider_access_check_receipts`. Run the Access Check worker in the same
 deployment or as a separately configured process before exposing the UI.
+
+### Model Discovery worker
+
+Enable `agentos.provider-model-discovery.worker-enabled=true` alongside
+`agentos.provider-access-check.worker-enabled=true` to process internally
+accepted discovery jobs. The worker runs on its own polling and expiry threads
+with the same polling delay and managed Vault configuration as Access Check.
+In addition to the existing check dispatch grants, grant the worker SELECT and
+INSERT on `provider_model_discovery_pages`, and INSERT on
+`provider_model_discovery_snapshots` and `provider_model_discovery_entries`.
+The HTTP submission and catalogue read endpoints are pending.
 
 ### Verify Access Check against OpenAI
 

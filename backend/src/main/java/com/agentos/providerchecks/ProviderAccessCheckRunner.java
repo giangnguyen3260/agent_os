@@ -48,17 +48,8 @@ public final class ProviderAccessCheckRunner {
     var target = dispatch.target(claim);
     if (target == null) return;
 
-    ProviderConnectionService.Connection connection;
-    try {
-      var actor = new HumanIdentity(target.actor(), "", "", target.actorVersion());
-      connection = connections.get(actor, organization, target.connection());
-    } catch (ProviderConnectionFailure failure) {
-      dispatch.finish(claim, Result.CREDENTIAL_UNAVAILABLE);
-      return;
-    }
-    if (connection.revision() != target.revision()
-        || connection.credentialRevision() != target.credentialRevision()
-        || !"ENABLED".equals(connection.state())) {
+    var connection = loadConnection(connections, organization, target);
+    if (connection == null) {
       dispatch.finish(claim, Result.CREDENTIAL_UNAVAILABLE);
       return;
     }
@@ -90,6 +81,23 @@ public final class ProviderAccessCheckRunner {
     }
     if (request.result != null) dispatch.finish(claim, request.result);
     else if (request.authorized) dispatch.finish(claim, Result.UNKNOWN);
+  }
+
+  static ProviderConnectionService.Connection loadConnection(
+      ProviderConnectionService connections,
+      UUID organization,
+      ProviderAccessCheckDispatch.Target target) {
+    try {
+      var actor = new HumanIdentity(target.actor(), "", "", target.actorVersion());
+      var connection = connections.get(actor, organization, target.connection());
+      return connection.revision() == target.revision()
+              && connection.credentialRevision() == target.credentialRevision()
+              && "ENABLED".equals(connection.state())
+          ? connection
+          : null;
+    } catch (ProviderConnectionFailure failure) {
+      return null;
+    }
   }
 
   private static final class RequestAttempt {
