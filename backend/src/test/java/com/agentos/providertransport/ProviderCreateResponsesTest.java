@@ -91,17 +91,17 @@ class ProviderCreateResponsesTest {
           .isEqualTo(
               json.readTree(
                   """
-                  {
-                    "organizationId":"%s","commandId":"%s","operation":"CREATE","connectionId":"%s",
-                    "actorId":"%s","committedAt":"2026-11-06T06:00:00.123457Z","before":null,
-                    "after":{
-                      "organizationId":"%s","id":"%s","provider":"%s","credentialMode":"%s",
-                      "name":"Fixture connection","options":%s,"state":"ENABLED","revision":"1",
-                      "credentialRevision":"1","createdAt":"2026-11-06T06:00:00.123456Z",
-                      "updatedAt":"2026-11-06T06:00:00.123456Z"
-                    },"checkId":null
-                  }
-                  """
+{
+  "organizationId":"%s","commandId":"%s","operation":"CREATE","connectionId":"%s",
+  "actorId":"%s","committedAt":"2026-11-06T06:00:00.123457Z","before":null,
+  "after":{
+    "organizationId":"%s","id":"%s","provider":"%s","credentialMode":"%s",
+    "name":"Fixture connection","options":%s,"state":"ENABLED","revision":"1",
+    "credentialRevision":"1","createdAt":"2026-11-06T06:00:00.123456Z",
+    "updatedAt":"2026-11-06T06:00:00.123456Z"
+  },"checkId":null
+}
+"""
                       .formatted(
                           org,
                           command,
@@ -218,6 +218,8 @@ class ProviderCreateResponsesTest {
             Map.entry(Code.CONNECTION_CONFLICT, "503:PROVIDER_CONNECTION_UNAVAILABLE"),
             Map.entry(Code.PROVIDER_DISABLED, "409:PROVIDER_DISABLED"),
             Map.entry(Code.CREDENTIAL_UNAVAILABLE, "409:CREDENTIAL_UNAVAILABLE"),
+            Map.entry(Code.CONNECTION_DISABLED, "409:CONNECTION_DISABLED"),
+            Map.entry(Code.CHECK_IN_PROGRESS, "409:CHECK_IN_PROGRESS"),
             Map.entry(Code.CONNECTION_LIMIT, "409:CONNECTION_LIMIT"),
             Map.entry(Code.RATE_LIMITED, "429:RATE_LIMITED"),
             Map.entry(Code.PREPARATION_REQUIRED, "503:PROVIDER_CONNECTION_UNAVAILABLE"),
