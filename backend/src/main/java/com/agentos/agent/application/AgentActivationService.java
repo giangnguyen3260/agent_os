@@ -11,6 +11,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
@@ -21,12 +22,20 @@ public class AgentActivationService {
   private final AgentDraftService drafts;
   private final AgentConfigurationService configurations;
   private final JdbcTemplate jdbc;
+  private final AgentModelGrantService modelGrants;
+  private final boolean discoveryEnabled;
 
   public AgentActivationService(
-      AgentDraftService drafts, AgentConfigurationService configurations, JdbcTemplate jdbc) {
+      AgentDraftService drafts,
+      AgentConfigurationService configurations,
+      JdbcTemplate jdbc,
+      AgentModelGrantService modelGrants,
+      @Value("${agentos.provider-model-discovery.http-enabled:false}") boolean discoveryEnabled) {
     this.drafts = drafts;
     this.configurations = configurations;
     this.jdbc = jdbc;
+    this.modelGrants = modelGrants;
+    this.discoveryEnabled = discoveryEnabled;
   }
 
   public static class Blocked extends RuntimeException {
@@ -126,6 +135,28 @@ public class AgentActivationService {
     return null;
   }
 
+  private Check modelAuthorizationCheck(AgentModelGrantService.Authorization authorization) {
+    String code = "MODEL_AUTHORIZATION";
+    String label = "Model authorization";
+    if (authorization == null) {
+      return new Check(
+          code,
+          label,
+          Status.UNAVAILABLE,
+          "Model authorization is not available. A requested model does not grant access.");
+    }
+    String problem =
+        switch (authorization.state()) {
+          case ABSENT -> "Grant access to the selected model.";
+          case REVOKED -> "Model access has been revoked.";
+          case STALE ->
+              "Review the current model binding and discovery evidence, then grant access.";
+          case UNAVAILABLE -> "The selected model's provider connection is unavailable.";
+          case GRANTED -> null;
+        };
+    return check(code, label, problem, "The current model binding has a valid grant.");
+  }
+
   private AgentActivationReview review(UUID org, HumanIdentity human, UUID agent) {
     // Public configuration read joins this transaction, including the repeatable-read GET snapshot.
     var config = configurations.get(org, human, agent);
@@ -147,7 +178,11 @@ public class AgentActivationService {
     Team team = teams.isEmpty() ? null : teams.getFirst();
     String limitsProblem = structuredLimits(config);
     String envelopeProblem = teamEnvelope(team, config);
-    boolean modelRequested = text(a.model(), 2000) && a.model().length() <= 2000;
+    var modelAuthorization = discoveryEnabled ? modelGrants.authorization(org, agent) : null;
+    var binding = modelAuthorization == null ? null : modelAuthorization.binding();
+    String requestedModel = binding == null ? a.model() : binding.modelId();
+    boolean modelRequested =
+        binding != null || (text(requestedModel, 2000) && requestedModel.length() <= 2000);
     var checks =
         List.of(
             check(
@@ -173,7 +208,7 @@ public class AgentActivationService {
                 "Requested model",
                 modelRequested ? null : "Request a model using 1 to 2000 characters.",
                 modelRequested
-                    ? "Requested model: " + a.model() + "; this does not authorize its use."
+                    ? "Requested model: " + requestedModel + "; this does not authorize its use."
                     : ""),
             check(
                 "STRUCTURED_LIMITS",
@@ -210,11 +245,7 @@ public class AgentActivationService {
                         + team.budget().toPlainString()
                         + " USD; this does not allocate or enforce resources."
                     : ""),
-            new Check(
-                "MODEL_AUTHORIZATION",
-                "Model authorization",
-                Status.UNAVAILABLE,
-                "Model authorization is not available. A requested model does not grant access."),
+            modelAuthorizationCheck(modelAuthorization),
             new Check(
                 "TOOL_AUTHORIZATION",
                 "Tool authorization",
