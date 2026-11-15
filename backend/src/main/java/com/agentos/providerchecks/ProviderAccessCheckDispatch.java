@@ -213,7 +213,7 @@ where organization_id=? and id=? and worker_owner_id is null and completed_at is
             """
 select c.* from provider_access_checks c
 join provider_access_check_outbox o on o.check_id=c.id and o.organization_id=c.organization_id
-where c.organization_id=? and c.id=? and c.completed_at is null
+where c.organization_id=? and c.id=? and c.check_kind='ACCESS_CHECK' and c.completed_at is null
 """,
             (rs, n) ->
                 new Check(

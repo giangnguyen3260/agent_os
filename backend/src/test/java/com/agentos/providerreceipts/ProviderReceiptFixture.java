@@ -115,6 +115,9 @@ abstract class ProviderReceiptFixture {
 
   @AfterEach
   void cleanup() {
+    jdbc.update("delete from provider_model_discovery_entries where organization_id=?", org);
+    jdbc.update("delete from provider_model_discovery_snapshots where organization_id=?", org);
+    jdbc.update("delete from provider_model_discovery_pages where organization_id=?", org);
     jdbc.update("delete from provider_access_check_events where organization_id=?", org);
     jdbc.update("delete from provider_access_check_receipts where organization_id=?", org);
     jdbc.update("delete from provider_access_check_outbox where organization_id=?", org);
@@ -919,6 +922,133 @@ abstract class ProviderReceiptFixture {
                 OffsetDateTime.class,
                 first))
         .isEqualTo(accepted.plusSeconds(60));
+  }
+
+  @Test
+  void discoverySharesAdmissionAndKeepsItsPagesAndSnapshotScoped() {
+    create();
+    UUID accessCheck = UUID.randomUUID(), discovery = UUID.randomUUID();
+    UUID owner = UUID.randomUUID(), token = UUID.randomUUID();
+    var accepted = OffsetDateTime.now().withNano(0);
+    var deadline = accepted.plusSeconds(30);
+    insertAccessCheck(accessCheck, accepted);
+    insertAccessCheck(discovery, accepted);
+    assertThat(
+            jdbc.queryForObject(
+                "select check_kind from provider_access_checks where id=?",
+                String.class,
+                accessCheck))
+        .isEqualTo("ACCESS_CHECK");
+    jdbc.update(
+        "update provider_access_checks set check_kind='MODEL_DISCOVERY' where id=?", discovery);
+    String outbox = "insert into provider_access_check_outbox values (?,?,?,1,1,3)";
+    jdbc.update(outbox, org, id, discovery);
+    assertThatThrownBy(() -> jdbc.update(outbox, org, id, accessCheck))
+        .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+    var dispatch = new ProviderAccessCheckDispatch(jdbc.getDataSource());
+    assertThat(dispatch.claim(org, discovery, owner)).isNull();
+    assertThatThrownBy(() -> service.accessCheckStatus(human, org, id, discovery))
+        .isInstanceOfSatisfying(
+            ProviderReceiptFailure.class,
+            failure -> assertThat(failure.code()).isEqualTo("NOT_FOUND"));
+    jdbc.update(
+        """
+        update provider_access_checks
+        set worker_owner_id=?, dispatch_token=?, started_at=?, dispatch_deadline=?, authorized_at=?
+        where id=?
+        """,
+        owner,
+        token,
+        accepted,
+        deadline,
+        accepted,
+        discovery);
+    String page =
+        """
+        insert into provider_model_discovery_pages
+          (organization_id,connection_id,check_id,page_ordinal,worker_owner_id,dispatch_token,
+           started_at,dispatch_deadline,authorized_at,request_deadline)
+        values (?,?,?,?,?,?,?,?,?,?)
+        """;
+    assertThatThrownBy(
+            () ->
+                jdbc.update(
+                    page,
+                    org,
+                    id,
+                    discovery,
+                    1,
+                    owner,
+                    UUID.randomUUID(),
+                    accepted,
+                    deadline,
+                    accepted,
+                    accepted.plusSeconds(10)))
+        .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+    assertThatThrownBy(
+            () ->
+                jdbc.update(
+                    page,
+                    org,
+                    id,
+                    discovery,
+                    1,
+                    owner,
+                    token,
+                    accepted,
+                    deadline,
+                    accepted,
+                    accepted.plusSeconds(11)))
+        .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+    jdbc.update(
+        page,
+        org,
+        id,
+        discovery,
+        1,
+        owner,
+        token,
+        accepted,
+        deadline,
+        accepted,
+        accepted.plusSeconds(10));
+    assertThatThrownBy(
+            () ->
+                jdbc.update(
+                    page,
+                    org,
+                    id,
+                    discovery,
+                    1,
+                    owner,
+                    token,
+                    accepted,
+                    deadline,
+                    accepted,
+                    accepted.plusSeconds(10)))
+        .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+    String snapshot =
+        """
+        insert into provider_model_discovery_snapshots
+          (organization_id,connection_id,check_id,catalogue_state) values (?,?,?,'COMPLETE')
+        """;
+    assertThatThrownBy(() -> jdbc.update(snapshot, org, id, discovery))
+        .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+    jdbc.update(
+        "update provider_access_checks set outcome='ACCESSIBLE', completed_at=? where id=?",
+        accepted.plusSeconds(1),
+        discovery);
+    jdbc.update(snapshot, org, id, discovery);
+    String entry =
+        """
+        insert into provider_model_discovery_entries
+          (organization_id,connection_id,check_id,model_ordinal,model_id) values (?,?,?,?,?)
+        """;
+    jdbc.update(entry, org, id, discovery, 1, "fixture-model");
+    assertThatThrownBy(() -> jdbc.update(entry, org, id, discovery, 2, "fixture-model"))
+        .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+    assertThatThrownBy(() -> jdbc.update(entry, UUID.randomUUID(), id, discovery, 2, "other"))
+        .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
   }
 
   private void insertAccessCheck(UUID check, OffsetDateTime accepted) {
