@@ -215,6 +215,11 @@ public final class ProviderCompletionBoundary {
     return executeWrite(actor, org, key, command, prepared, null, null, Operation.ACCESS_CHECK);
   }
 
+  public WriteOutcome executeModelDiscoveryPrepared(
+      HumanIdentity actor, UUID org, UUID key, CredentialCommand command, Metadata prepared) {
+    return executeWrite(actor, org, key, command, prepared, null, null, Operation.MODEL_DISCOVERY);
+  }
+
   private WriteOutcome executeWrite(
       HumanIdentity actor,
       UUID org,
@@ -249,6 +254,9 @@ public final class ProviderCompletionBoundary {
             receipts.executeRotateGoverned(actor, org, key, (Rotate) command, prepared, credential);
       } else if (governance == Operation.ACCESS_CHECK) {
         result = receipts.acceptAccessCheck(actor, org, key, (CredentialCommand) command, prepared);
+      } else if (governance == Operation.MODEL_DISCOVERY) {
+        result =
+            receipts.acceptModelDiscovery(actor, org, key, (CredentialCommand) command, prepared);
       } else {
         result = receipts.execute(actor, org, key, command, prepared, createId, credential);
       }

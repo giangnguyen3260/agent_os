@@ -7,6 +7,7 @@ import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mockingDetails;
 
 import com.agentos.auth.HumanIdentity;
+import com.agentos.provideradmission.ProviderWriteAdmission;
 import com.agentos.providerchecks.ProviderAccessCheckDispatch;
 import com.agentos.providerchecks.ProviderAccessCheckPoller;
 import com.agentos.providerchecks.ProviderAccessCheckRunner;
@@ -22,8 +23,12 @@ import com.agentos.providercommands.CommandBoundary.Rename;
 import com.agentos.providercommands.CommandBoundary.RevisionCommand;
 import com.agentos.providercommands.CommandBoundary.Rotate;
 import com.agentos.providercommands.CommandBoundary.Scope;
+import com.agentos.providercompletion.ProviderCompletionBoundary;
+import com.agentos.providercompletion.ProviderCompletionBoundary.Code;
+import com.agentos.providercompletion.ProviderCompletionBoundary.WriteState;
 import com.agentos.providerconnections.ProviderConnectionService;
 import com.agentos.providercredentials.CredentialBoundary;
+import com.agentos.providermetadata.ProviderMetadataCoordinator;
 import com.fasterxml.jackson.annotation.JsonIgnoreType;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -573,8 +578,11 @@ abstract class ProviderReceiptFixture {
     assertThat(snapshot()).isEqualTo(before);
   }
 
-  @Test
-  void accessCheckPinsHistoricalReceiptAndRollsBackOnReceiptOrEventFailure() {
+  @ParameterizedTest
+  @EnumSource(
+      value = Operation.class,
+      names = {"ACCESS_CHECK", "MODEL_DISCOVERY"})
+  void checkPinsHistoricalReceiptAndRollsBackOnReceiptOrEventFailure(Operation kind) {
     boolean seededPolicy =
         jdbc.queryForObject("select count(*) from provider_deployment_policy", Long.class) == 0;
     if (seededPolicy)
@@ -592,8 +600,12 @@ abstract class ProviderReceiptFixture {
                 ? Provider.ANTHROPIC
                 : Provider.GOOGLE_GEMINI;
     var create = createCommand(provider);
-    var command = new CredentialCommand(Operation.ACCESS_CHECK, id, 1, 1);
+    var command = new CredentialCommand(kind, id, 1, 1);
+    var otherKind =
+        kind == Operation.ACCESS_CHECK ? Operation.MODEL_DISCOVERY : Operation.ACCESS_CHECK;
+    var other = new CredentialCommand(otherKind, id, 1, 1);
     var proof = prepare(command);
+    var otherProof = prepare(other);
     UUID checkKey = UUID.randomUUID();
     doReturn(Boolean.TRUE)
         .when(jdbc)
@@ -610,10 +622,7 @@ abstract class ProviderReceiptFixture {
               + id
               + "')");
       try {
-        error(
-            () -> service.acceptAccessCheck(human, org, checkKey, command, proof),
-            500,
-            "RECEIPT_UNAVAILABLE");
+        error(() -> acceptPreparedCheck(checkKey, command, proof), 500, "RECEIPT_UNAVAILABLE");
       } finally {
         jdbc.execute(
             "alter table provider_access_check_receipts drop constraint test_reject_check");
@@ -628,10 +637,7 @@ abstract class ProviderReceiptFixture {
               + id
               + "')");
       try {
-        error(
-            () -> service.acceptAccessCheck(human, org, checkKey, command, proof),
-            500,
-            "RECEIPT_UNAVAILABLE");
+        error(() -> acceptPreparedCheck(checkKey, command, proof), 500, "RECEIPT_UNAVAILABLE");
       } finally {
         jdbc.execute(
             "alter table provider_access_check_events drop constraint test_reject_check_event");
@@ -641,40 +647,73 @@ abstract class ProviderReceiptFixture {
       assertThat(count("provider_access_check_receipts")).isZero();
       assertThat(count("provider_access_check_events")).isZero();
       assertThat(service.findOwn(human, org, checkKey)).isNull();
-      var accepted = service.acceptAccessCheck(human, org, checkKey, command, proof);
+      var coordinator =
+          new ProviderMetadataCoordinator(
+              service,
+              new ProviderCompletionBoundary(transactions, jdbc, service),
+              boundary,
+              new ProviderWriteAdmission(jdbc.getDataSource()));
+      var initial =
+          kind == Operation.MODEL_DISCOVERY
+              ? coordinator.discoverModels(human, org, checkKey, command)
+              : coordinator.accessCheck(human, org, checkKey, command);
+      assertThat(initial.state()).isEqualTo(WriteState.COMMITTED);
+      var accepted = initial.result();
       assertThat(accepted.replayed()).isFalse();
       assertThat(accepted.receipt().checkId()).isNotNull();
+      assertThat(accepted.receipt().operation()).isEqualTo(kind);
       assertThat(accepted.receipt().before()).isEqualTo(accepted.receipt().after());
       assertThat(accepted.receipt().after().revision()).isEqualTo(1);
       error(
-          () -> service.acceptAccessCheck(human, org, UUID.randomUUID(), command, proof),
+          () -> acceptPreparedCheck(UUID.randomUUID(), other, otherProof),
           409,
           "CHECK_IN_PROGRESS");
-      error(
-          () -> service.acceptAccessCheck(human, org, key, command, proof),
-          409,
-          "IDEMPOTENCY_CONFLICT");
+      error(() -> acceptPreparedCheck(checkKey, other, otherProof), 409, "IDEMPOTENCY_CONFLICT");
+      error(() -> acceptPreparedCheck(key, command, proof), 409, "IDEMPOTENCY_CONFLICT");
       var rename = new Rename(id, 1, "After check");
-      var renameProof = prepare(rename);
       error(
-          () -> service.execute(human, org, checkKey, rename, renameProof, null, null),
+          () -> service.execute(human, org, checkKey, rename, proof, null, null),
           409,
           "IDEMPOTENCY_CONFLICT");
       connections.rename(human, org, id, 1, "After check");
       assertThat(service.findOwn(human, org, checkKey).receipt()).isEqualTo(accepted.receipt());
-      assertThat(service.acceptAccessCheck(human, org, checkKey, command, proof).replayed())
-          .isTrue();
+      var replay =
+          kind == Operation.MODEL_DISCOVERY
+              ? coordinator.discoverModels(human, org, checkKey, command)
+              : coordinator.accessCheck(human, org, checkKey, command);
+      assertThat(replay.state()).isEqualTo(WriteState.COMMITTED);
+      assertThat(replay.result().replayed()).isTrue();
+      assertThat(replay.result().receipt()).isEqualTo(accepted.receipt());
       assertThat(count("provider_access_checks")).isEqualTo(1);
       assertThat(count("provider_access_check_outbox")).isEqualTo(1);
       assertThat(count("provider_access_check_receipts")).isEqualTo(1);
-      var status = service.accessCheckStatus(human, org, id, accepted.receipt().checkId());
-      assertThat(status.connectionRevision()).isEqualTo(1);
-      assertThat(status.startedAt()).isNull();
-      assertThat(status.completedAt()).isNull();
-      error(
-          () -> service.accessCheckStatus(human, org, UUID.randomUUID(), status.id()),
-          404,
-          "NOT_FOUND");
+      if (kind == Operation.ACCESS_CHECK) {
+        var status = service.accessCheckStatus(human, org, id, accepted.receipt().checkId());
+        assertThat(status.connectionRevision()).isEqualTo(1);
+        assertThat(status.startedAt()).isNull();
+        assertThat(status.completedAt()).isNull();
+        error(
+            () -> service.accessCheckStatus(human, org, UUID.randomUUID(), status.id()),
+            404,
+            "NOT_FOUND");
+      } else {
+        error(
+            () -> service.accessCheckStatus(human, org, id, accepted.receipt().checkId()),
+            404,
+            "NOT_FOUND");
+        assertThat(
+                new ProviderAccessCheckDispatch(jdbc.getDataSource())
+                    .claim(org, accepted.receipt().checkId(), UUID.randomUUID()))
+            .isNull();
+        jdbc.update(
+            "update organization_memberships set role='MEMBER' where organization_id=? and"
+                + " account_id=?",
+            org,
+            actor);
+        var unauthorized = coordinator.discoverModels(human, org, checkKey, command);
+        assertThat(unauthorized.state()).isEqualTo(WriteState.REJECTED);
+        assertThat(unauthorized.failure().code()).isEqualTo(Code.FORBIDDEN);
+      }
       assertThat(count("provider_access_check_events")).isEqualTo(1);
       var event =
           jdbc.queryForMap(
@@ -689,6 +728,13 @@ abstract class ProviderReceiptFixture {
     } finally {
       if (seededPolicy) jdbc.update("delete from provider_deployment_policy where id=1");
     }
+  }
+
+  private ProviderReceiptService.Result acceptPreparedCheck(
+      UUID key, CredentialCommand command, Metadata proof) {
+    return command.operation() == Operation.MODEL_DISCOVERY
+        ? service.acceptModelDiscovery(human, org, key, command, proof)
+        : service.acceptAccessCheck(human, org, key, command, proof);
   }
 
   @Test

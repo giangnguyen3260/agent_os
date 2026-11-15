@@ -181,16 +181,30 @@ public class ProviderReceiptService {
 
   public Result acceptAccessCheck(
       HumanIdentity actor, UUID org, UUID key, CredentialCommand command, Metadata prepared) {
+    return acceptCheck(actor, org, key, command, prepared, Operation.ACCESS_CHECK);
+  }
+
+  public Result acceptModelDiscovery(
+      HumanIdentity actor, UUID org, UUID key, CredentialCommand command, Metadata prepared) {
+    return acceptCheck(actor, org, key, command, prepared, Operation.MODEL_DISCOVERY);
+  }
+
+  private Result acceptCheck(
+      HumanIdentity actor,
+      UUID org,
+      UUID key,
+      CredentialCommand command,
+      Metadata prepared,
+      Operation kind) {
     return safe(
         () -> {
           var policy = authority(actor, org, true, true);
-          if (command == null || command.operation() != Operation.ACCESS_CHECK)
-            throw fail(400, "INVALID_COMMAND");
+          if (command == null || command.operation() != kind) throw fail(400, "INVALID_COMMAND");
           validKey(key);
           if (prepared == null) throw fail(400, "INVALID_PREPARATION");
           var historical = own(org, actor.id(), key);
           if (historical != null) {
-            if (historical.result().receipt().operation() != Operation.ACCESS_CHECK
+            if (historical.result().receipt().operation() != kind
                 || !command.target().equals(historical.result().receipt().connectionId()))
               throw fail(409, "IDEMPOTENCY_CONFLICT");
             if (!historical.metadata().keyVersion().equals(prepared.keyVersion()))
@@ -235,8 +249,8 @@ public class ProviderReceiptService {
                       """
 insert into provider_access_checks
   (id,organization_id,connection_id,actor_id,actor_credential_version,
-   connection_revision,credential_revision,policy_revision,accepted_at,queue_expires_at)
-values (?,?,?,?,?,?,?,?,?,?)
+   connection_revision,credential_revision,policy_revision,accepted_at,queue_expires_at,check_kind)
+values (?,?,?,?,?,?,?,?,?,?,?)
 """,
                       check,
                       org,
@@ -247,7 +261,8 @@ values (?,?,?,?,?,?,?,?,?,?)
                       parent.credentialRevision(),
                       policyRevision,
                       accepted,
-                      accepted.plusSeconds(60))
+                      accepted.plusSeconds(60),
+                      kind.name())
                   == 1);
           require(
               jdbc.update(
@@ -298,15 +313,7 @@ values (?,?,?,?,?,?,?,?,?,?,?)
                   == 1);
           return new Result(
               new Receipt(
-                  org,
-                  commandId,
-                  Operation.ACCESS_CHECK,
-                  target,
-                  actor.id(),
-                  accepted,
-                  snapshot,
-                  snapshot,
-                  check),
+                  org, commandId, kind, target, actor.id(), accepted, snapshot, snapshot, check),
               false);
         });
   }
@@ -364,7 +371,7 @@ values (?,?,?,?,?,?,?,?,?,?,?)
           if (prepared == null) throw fail(400, "INVALID_PREPARATION");
           Probe stored = own(org, actor.id(), key);
           if (stored != null) {
-            if (stored.result().receipt().operation() == Operation.ACCESS_CHECK
+            if (isCheckOperation(stored.result().receipt().operation())
                 || (requiresMatchingOperation(governance)
                     && stored.result().receipt().operation() != governance))
               throw fail(409, "IDEMPOTENCY_CONFLICT");
@@ -654,7 +661,7 @@ values (?,?,?,?,?,?,?,?,?,?,?)
     var checks =
         jdbc.query(
             """
-select r.*, c.accepted_at, c.connection_revision, c.credential_revision
+select r.*, c.accepted_at, c.connection_revision, c.credential_revision, c.check_kind
 from provider_access_check_receipts r
 join provider_access_checks c on c.id=r.check_id and c.organization_id=r.organization_id
   and c.connection_id=r.connection_id and c.actor_id=r.actor_id
@@ -667,8 +674,10 @@ where r.organization_id=? and r.actor_id=? and r.idempotency_key=?
                       eventId(org, target, id(rs, "snapshot_event_id")),
                       eventId(org, target, id(rs, "creation_event_id")));
               var accepted = rs.getObject("accepted_at", OffsetDateTime.class);
+              var kind = Operation.valueOf(rs.getString("check_kind"));
               require(
-                  "ENABLED".equals(snapshot.state())
+                  isCheckOperation(kind)
+                      && "ENABLED".equals(snapshot.state())
                       && snapshot.revision() == rs.getLong("connection_revision")
                       && snapshot.credentialRevision() == rs.getLong("credential_revision")
                       && accepted != null
@@ -677,7 +686,7 @@ where r.organization_id=? and r.actor_id=? and r.idempotency_key=?
                   new Receipt(
                       org,
                       id(rs, "command_id"),
-                      Operation.ACCESS_CHECK,
+                      kind,
                       target,
                       actor,
                       accepted,
@@ -983,8 +992,12 @@ where r.organization_id=? and r.actor_id=? and r.idempotency_key=?
 
   private static Operation operation(String value) {
     Operation op = Operation.valueOf(value);
-    require(op != Operation.ACCESS_CHECK && op != Operation.MODEL_DISCOVERY);
+    require(!isCheckOperation(op));
     return op;
+  }
+
+  private static boolean isCheckOperation(Operation operation) {
+    return operation == Operation.ACCESS_CHECK || operation == Operation.MODEL_DISCOVERY;
   }
 
   private static void require(boolean valid) {
