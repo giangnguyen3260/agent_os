@@ -138,12 +138,7 @@ public class AgentModelBindingService {
 
   @Transactional(isolation = Isolation.READ_COMMITTED)
   public State put(UUID organization, HumanIdentity actor, UUID agent, UUID key, Request request) {
-    // Reject unauthorized callers before holding the global policy lock. Recheck under locks.
-    drafts.authorize(organization, actor, true, false);
-    jdbc.queryForList("select id from organizations where id=? for update", organization);
-    jdbc.queryForList("select id from provider_deployment_policy where id=1 for update");
-    drafts.authorize(organization, actor, true, true);
-    boolean draft = editable(organization, agent, true);
+    boolean draft = lockEditable(organization, actor, agent);
     String digest = digest(request);
     var receipts =
         jdbc.query(
@@ -225,12 +220,25 @@ public class AgentModelBindingService {
     return committed;
   }
 
-  private void validateSelection(UUID organization, Selection selected) {
+  boolean lockEditable(UUID organization, HumanIdentity actor, UUID agent) {
+    // Reject unauthorized callers before holding the global policy lock. Recheck under locks.
+    drafts.authorize(organization, actor, true, false);
+    jdbc.queryForList("select id from organizations where id=? for update", organization);
+    jdbc.queryForList("select id from provider_deployment_policy where id=1 for update");
+    drafts.authorize(organization, actor, true, true);
+    return editable(organization, agent, true);
+  }
+
+  void lockConnection(UUID organization, UUID connection) {
     // Evidence publication also fences on the provider connection row.
     jdbc.queryForList(
         "select id from provider_connections where organization_id=? and id=? for update",
         organization,
-        selected.connectionId());
+        connection);
+  }
+
+  private void validateSelection(UUID organization, Selection selected) {
+    lockConnection(organization, selected.connectionId());
     var exists =
         jdbc.queryForObject(
             "select count(*)>0\n" + CANDIDATE_SOURCE + " and c.id=? and k.id=? and e.model_id=?",
@@ -255,7 +263,7 @@ public class AgentModelBindingService {
     return "DRAFT".equals(statuses.getFirst());
   }
 
-  private State state(UUID organization, UUID agent, boolean editable) {
+  State state(UUID organization, UUID agent, boolean editable) {
     var rows =
         jdbc.query(
             """

@@ -1,0 +1,98 @@
+@if (state() || error()) {
+  <section class="model-grant" aria-labelledby="model-grant-title">
+    <h3 id="model-grant-title">Quyền dùng model</h3>
+    @if (state(); as grant) {
+      @if (grant.bindingRevision === bindingRevision() && !needsRefresh()) {
+        <p data-testid="agent-model-grant-state">{{ labels[grant.state] }}</p>
+        @if (review(); as reviewed) {
+          <div class="grant-review">
+            @if (reviewed.enabled) {
+              <p>
+                Cấp quyền cho Agent dùng model <code>{{ modelId() }}</code
+                >.
+              </p>
+            } @else {
+              <p>Thu hồi quyền dùng model đã cấp cho Agent này.</p>
+            }
+            @if (!attempt()) {
+              <div class="grant-actions">
+                <button
+                  type="button"
+                  class="button"
+                  [disabled]="busy() || blocked()"
+                  (click)="confirm()"
+                >
+                  {{
+                    reviewed.enabled ? 'Xác nhận cấp quyền' : 'Xác nhận thu hồi'
+                  }}
+                </button>
+                <button
+                  type="button"
+                  class="button secondary"
+                  [disabled]="busy()"
+                  (click)="cancel()"
+                >
+                  Hủy
+                </button>
+              </div>
+            }
+          </div>
+        } @else {
+          <div class="grant-actions">
+            @if (grant.canGrant && modelId()) {
+              <button
+                type="button"
+                class="button"
+                [disabled]="busy() || blocked()"
+                (click)="prepare(true)"
+              >
+                Cấp quyền dùng model
+              </button>
+            }
+            @if (grant.canRevoke) {
+              <button
+                type="button"
+                class="button secondary"
+                [disabled]="busy() || blocked()"
+                (click)="prepare(false)"
+              >
+                Thu hồi quyền dùng model
+              </button>
+            }
+          </div>
+        }
+      }
+    }
+    @if (busy()) {
+      <p role="status">Đang xử lý quyền dùng model…</p>
+    }
+    @if (notice()) {
+      <p role="status">{{ notice() }}</p>
+    }
+    @if (error()) {
+      <p role="alert" class="auth-error">{{ error() }}</p>
+      <div class="grant-actions">
+        @if (attempt(); as pending) {
+          @if (pending.sends < 2) {
+            <button
+              type="button"
+              class="button"
+              [disabled]="busy() || blocked()"
+              (click)="confirm()"
+            >
+              Thử lại yêu cầu quyền
+            </button>
+          }
+        }
+        <button
+          type="button"
+          class="button secondary"
+          [disabled]="busy()"
+          (click)="reload()"
+        >
+          Tải lại quyền dùng model
+        </button>
+      </div>
+    }
+  </section>
+}

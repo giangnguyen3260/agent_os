@@ -5,6 +5,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -14,6 +15,7 @@ import com.agentos.auth.HumanIdentity;
 import com.agentos.providermetadata.ProviderMetadataCoordinator;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.BooleanNode;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
@@ -264,6 +266,93 @@ values (?,?,?,?,0,1,1,1,current_timestamp,current_timestamp + interval '60' seco
         .andExpect(jsonPath("$.data.binding.status").value("STALE"));
   }
 
+  @Test
+  void grantPinsTheBindingRevisionAndCannotBeSilentlyReusedForAnotherModel() throws Exception {
+    var catalogue = catalogue(org, OffsetDateTime.now().minusMinutes(1));
+    assertGrant(data(mvc.perform(get(grantPath()).with(auth()))), 0, 0, "ABSENT", false, false);
+    mvc.perform(saveGrant(UUID.randomUUID(), 0, 0, true).with(csrf()))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.error.code").value("MODEL_UNAVAILABLE"));
+
+    data(mvc.perform(save(UUID.randomUUID(), 0, catalogue, MODEL).with(csrf())));
+    assertGrant(data(mvc.perform(get(grantPath()).with(auth()))), 0, 1, "ABSENT", true, false);
+    UUID originalKey = UUID.randomUUID();
+    var granted = data(mvc.perform(saveGrant(originalKey, 0, 1, true).with(csrf())));
+    assertGrant(granted, 1, 1, "GRANTED", false, true);
+    mvc.perform(saveGrant(UUID.randomUUID(), 1, 1, true).with(csrf()))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.error.code").value("NO_CHANGE"));
+
+    data(mvc.perform(save(UUID.randomUUID(), 1, catalogue, OTHER_MODEL).with(csrf())));
+    assertGrant(data(mvc.perform(get(grantPath()).with(auth()))), 1, 2, "STALE", true, true);
+    mvc.perform(saveGrant(UUID.randomUUID(), 1, 1, true).with(csrf()))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.error.code").value("CONFIGURATION_CONFLICT"));
+    assertThat(data(mvc.perform(saveGrant(originalKey, 0, 1, true).with(csrf()))))
+        .isEqualTo(granted);
+    assertGrant(data(mvc.perform(get(grantPath()).with(auth()))), 1, 2, "STALE", true, true);
+
+    var renewed = data(mvc.perform(saveGrant(UUID.randomUUID(), 1, 2, true).with(csrf())));
+    assertGrant(renewed, 2, 2, "GRANTED", false, true);
+    assertThat(data(mvc.perform(get(grantPath()).with(auth())))).isEqualTo(renewed);
+  }
+
+  @Test
+  void requiresAdminAndCsrfWhileAllowingExplicitRevocationOutsideDraft() throws Exception {
+    var catalogue = catalogue(org, OffsetDateTime.now().minusMinutes(1));
+    data(mvc.perform(save(UUID.randomUUID(), 0, catalogue, MODEL).with(csrf())));
+    var foreignOrg = organization();
+    jdbc.update(
+        "insert into organization_memberships values (?,?,'ADMIN')", human.id(), foreignOrg);
+    mvc.perform(get(grantPath()).with(auth()))
+        .andExpect(status().isOk())
+        .andExpect(header().string("Cache-Control", "no-store"));
+    mvc.perform(get(grantPath())).andExpect(status().isUnauthorized());
+    mvc.perform(get(grantPath().replace(org.toString(), foreignOrg.toString())).with(auth()))
+        .andExpect(status().isNotFound());
+    UUID originalKey = UUID.randomUUID();
+    mvc.perform(saveGrant(originalKey, 0, 1, true)).andExpect(status().isForbidden());
+    var granted = data(mvc.perform(saveGrant(originalKey, 0, 1, true).with(csrf())));
+    jdbc.update("update agents set status='ACTIVE' where id=?", agent);
+    jdbc.update(
+        "update provider_connections set state='DISABLED',configuration_revision=2 where id=?",
+        catalogue.connection());
+    assertGrant(data(mvc.perform(get(grantPath()).with(auth()))), 1, 1, "UNAVAILABLE", false, true);
+    UUID revokeKey = UUID.randomUUID();
+    var revoked = data(mvc.perform(saveGrant(revokeKey, 1, 1, false).with(csrf())));
+    assertGrant(revoked, 2, 1, "REVOKED", false, false);
+    mvc.perform(saveGrant(UUID.randomUUID(), 2, 1, true).with(csrf()))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.error.code").value("AGENT_NOT_EDITABLE"));
+    assertThat(data(mvc.perform(saveGrant(revokeKey, 1, 1, false).with(csrf()))))
+        .isEqualTo(revoked);
+    assertThat(data(mvc.perform(saveGrant(originalKey, 0, 1, true).with(csrf()))))
+        .isEqualTo(granted);
+    mvc.perform(saveGrant(revokeKey, 1, 1, true).with(csrf()))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.error.code").value("IDEMPOTENCY_CONFLICT"));
+    assertThat(data(mvc.perform(get(grantPath()).with(auth())))).isEqualTo(revoked);
+
+    jdbc.update("update organization_memberships set role='MEMBER' where account_id=?", human.id());
+    mvc.perform(get(grantPath()).with(auth())).andExpect(status().isForbidden());
+    mvc.perform(saveGrant(revokeKey, 1, 1, false).with(csrf())).andExpect(status().isForbidden());
+  }
+
+  private static void assertGrant(
+      JsonNode value,
+      int revision,
+      int bindingRevision,
+      String state,
+      boolean canGrant,
+      boolean canRevoke) {
+    assertThat(value.size()).isEqualTo(5);
+    assertThat(value.path("revision").asInt(-1)).isEqualTo(revision);
+    assertThat(value.path("bindingRevision").asInt(-1)).isEqualTo(bindingRevision);
+    assertThat(value.path("state").asText()).isEqualTo(state);
+    assertThat(value.path("canGrant")).isEqualTo(BooleanNode.valueOf(canGrant));
+    assertThat(value.path("canRevoke")).isEqualTo(BooleanNode.valueOf(canRevoke));
+  }
+
   private Catalogue catalogue(UUID organization, OffsetDateTime completedAt) {
     UUID connection = UUID.randomUUID();
     UUID check = UUID.randomUUID();
@@ -340,6 +429,10 @@ values (?,?,?,?,0,1,1,1,?,?,?,?,?,?,?,?,'ACCESSIBLE','MODEL_DISCOVERY')
     return "/api/v1/organizations/" + org + "/agents/" + agent + "/model-binding";
   }
 
+  private String grantPath() {
+    return "/api/v1/organizations/" + org + "/agents/" + agent + "/model-grant";
+  }
+
   private RequestPostProcessor auth() {
     return authentication(new UsernamePasswordAuthenticationToken(human, null, List.of()));
   }
@@ -358,6 +451,20 @@ values (?,?,?,?,0,1,1,1,?,?,?,?,?,?,?,?,'ACCESSIBLE','MODEL_DISCOVERY')
         .header("Idempotency-Key", key)
         .contentType(MediaType.APPLICATION_JSON)
         .content(body.toString());
+  }
+
+  private MockHttpServletRequestBuilder saveGrant(
+      UUID key, int expectedRevision, int expectedBindingRevision, boolean enabled) {
+    return put(grantPath())
+        .with(auth())
+        .header("Idempotency-Key", key)
+        .contentType(MediaType.APPLICATION_JSON)
+        .content(
+            json.createObjectNode()
+                .put("expectedRevision", expectedRevision)
+                .put("expectedBindingRevision", expectedBindingRevision)
+                .put("enabled", enabled)
+                .toString());
   }
 
   private JsonNode data(ResultActions response) throws Exception {

@@ -170,7 +170,7 @@
             <button
               class="button"
               type="button"
-              [disabled]="busy()"
+              [disabled]="busy() || grantInProgress()"
               (click)="choose()"
             >
               Chọn model
@@ -179,7 +179,7 @@
               <button
                 class="button secondary"
                 type="button"
-                [disabled]="busy()"
+                [disabled]="busy() || grantInProgress()"
                 (click)="reviewModel(true)"
               >
                 Bỏ gắn model
@@ -188,6 +188,20 @@
           </div>
         }
       }
+      <app-agent-model-grant
+        [organizationId]="organizationId()"
+        [agentId]="agentId()"
+        [bindingRevision]="status.revision"
+        [modelId]="status.binding?.modelId ?? null"
+        [blocked]="
+          busy() ||
+          requiresRefresh() ||
+          !!connections() ||
+          !!review() ||
+          !!attempt()
+        "
+        (refreshBinding)="refresh()"
+      />
     }
     @if (busy()) {
       <p role="status">Đang xử lý…</p>
