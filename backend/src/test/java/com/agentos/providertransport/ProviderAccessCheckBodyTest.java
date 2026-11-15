@@ -31,6 +31,21 @@ class ProviderAccessCheckBodyTest {
   }
 
   @Test
+  void discoveryBindsTheRouteOperationAndRejectsExtraFields() {
+    var command = ProviderAccessCheckBody.readDiscovery(target, bytes(VALID));
+    assertThat(command.operation()).isEqualTo(Operation.MODEL_DISCOVERY);
+    assertThat(command.target()).isEqualTo(target);
+    assertThat(command.expectedRevision()).isEqualTo(Long.MAX_VALUE);
+    assertThat(command.expectedCredentialRevision()).isEqualTo(9007199254740993L);
+    assertThatThrownBy(
+            () ->
+                ProviderAccessCheckBody.readDiscovery(
+                    target, bytes(VALID.replace("{", "{\"operation\":\"ACCESS_CHECK\","))))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessage("INVALID_INPUT");
+  }
+
+  @Test
   void rejectsNoncanonicalValuesAndNonexactObjectsWithTheFixedError() {
     for (String body :
         new String[] {

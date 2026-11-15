@@ -1,3 +1,4 @@
+import {DatePipe} from '@angular/common';
 import {HttpClient, HttpErrorResponse} from '@angular/common/http';
 import {
   Component,
@@ -23,8 +24,11 @@ import {
 } from './provider-create-wire';
 import {ProviderConnectionItem} from './provider-list-wire';
 import {
-  accessCheckId,
-  accessCheckStatus,
+  CheckStatus,
+  discoveryModelPage,
+  ModelPage,
+  providerCheckId,
+  providerCheckStatus,
   receiptFoundDisable,
   receiptFoundEnable,
   receiptFoundRename,
@@ -45,11 +49,17 @@ interface Scope {
   connection: ProviderConnectionItem;
   closed: Subject<void>;
 }
+const checkKinds = {
+  'access-checks': 'ACCESS_CHECK',
+  'model-discoveries': 'MODEL_DISCOVERY',
+} as const;
+type CheckReview = ReviewedRotate & {operation: keyof typeof checkKinds};
 type Review =
   | (ReviewedRename & {operation: 'rename'; beforeName: string})
   | (ReviewedDisable & {operation: 'disable'})
   | (ReviewedEnable & {operation: 'enable'})
-  | (ReviewedRotate & {operation: 'rotate' | 'access-checks'});
+  | (ReviewedRotate & {operation: 'rotate'})
+  | CheckReview;
 interface Pending {
   key: string;
   review: Review;
@@ -62,7 +72,15 @@ const operationNames = {
   enable: 'bật lại kết nối',
   rotate: 'thay API key',
   'access-checks': 'kiểm tra kết nối',
+  'model-discoveries': 'khám phá model',
 } as const;
+
+function isCheckReview(review: Review): review is CheckReview {
+  return (
+    review.operation === 'access-checks' ||
+    review.operation === 'model-discoveries'
+  );
+}
 const verifyReceipt = {
   rename: verifyRenamed,
   disable: verifyDisabled,
@@ -79,6 +97,7 @@ const findReceipt = {
 @Component({
   selector: 'app-provider-rename',
   standalone: true,
+  imports: [DatePipe],
   templateUrl: './provider-rename.component.html',
   styleUrl: './provider-rename.component.css',
 })
@@ -98,10 +117,13 @@ export class ProviderRenameComponent {
   readonly disableEnabled = signal(false);
   readonly enableVisible = signal(false);
   readonly canCheck = signal(false);
-  readonly currentCheck = signal<{id: string; review: ReviewedRotate} | null>(
+  readonly canDiscover = signal(false);
+  readonly currentCheck = signal<{id: string; review: CheckReview} | null>(
     null,
   );
-  readonly checkResult = signal<{message: string; done: boolean} | null>(null);
+  readonly checkResult = signal<CheckStatus | null>(null);
+  readonly modelPage = signal<ModelPage | null>(null);
+  readonly modelPageError = signal<number | null>(null);
   readonly rotateEnabled = signal(false);
   readonly enableUnavailable = signal('');
   readonly editing = signal(false);
@@ -136,6 +158,11 @@ export class ProviderRenameComponent {
       (!operation && !this.enabled() && this.canCheck())
     )
       return 'Kiểm tra kết nối';
+    if (
+      operation === 'model-discoveries' ||
+      (!operation && !this.enabled() && this.canDiscover())
+    )
+      return 'Khám phá model';
     return 'Đổi tên kết nối';
   });
 
@@ -190,12 +217,19 @@ export class ProviderRenameComponent {
               this.rotateEnabled.set(
                 response.headers.get('X-Provider-Rotate-Enabled') === 'true',
               );
+              const canReadProvider =
+                connection.state === 'ENABLED' &&
+                connection.credentialState === 'PRESENT' &&
+                availableProviders.includes(connection.provider);
               this.canCheck.set(
-                response.headers.get('X-Provider-Access-Check-Enabled') ===
-                  'true' &&
-                  connection.state === 'ENABLED' &&
-                  connection.credentialState === 'PRESENT' &&
-                  availableProviders.includes(connection.provider),
+                canReadProvider &&
+                  response.headers.get('X-Provider-Access-Check-Enabled') ===
+                    'true',
+              );
+              this.canDiscover.set(
+                canReadProvider &&
+                  response.headers.get('X-Provider-Model-Discovery-Enabled') ===
+                    'true',
               );
               const offerEnable =
                 connection.state === 'DISABLED' &&
@@ -283,8 +317,12 @@ export class ProviderRenameComponent {
     this.prepareStateReview('access-checks');
   }
 
+  prepareModelDiscovery(): void {
+    this.prepareStateReview('model-discoveries');
+  }
+
   private prepareStateReview(
-    operation: 'disable' | 'enable' | 'rotate' | 'access-checks',
+    operation: Exclude<Review['operation'], 'rename'>,
   ): void {
     const scope = this.scope;
     if (
@@ -305,7 +343,9 @@ export class ProviderRenameComponent {
       name: scope.connection.name,
     };
     this.review.set(
-      operation === 'rotate' || operation === 'access-checks'
+      operation === 'rotate' ||
+        operation === 'access-checks' ||
+        operation === 'model-discoveries'
         ? {
             ...common,
             operation,
@@ -354,6 +394,8 @@ export class ProviderRenameComponent {
     this.error.set('');
     this.currentCheck.set(null);
     this.checkResult.set(null);
+    this.modelPage.set(null);
+    this.modelPageError.set(null);
     let key: string | undefined;
     let sent = false;
     try {
@@ -378,7 +420,7 @@ export class ProviderRenameComponent {
               ? {expectedRevision: review.expectedRevision, name: review.name}
               : review.operation === 'rotate'
                 ? {expectedRevision: review.expectedRevision, apiKey}
-                : review.operation === 'access-checks'
+                : isCheckReview(review)
                   ? {
                       expectedRevision: review.expectedRevision,
                       expectedCredentialRevision:
@@ -402,14 +444,15 @@ export class ProviderRenameComponent {
       if (!this.current(scope)) return;
       if (response.status !== 201 && response.status !== 200)
         throw new Error('Invalid metadata response');
-      if (review.operation === 'access-checks') {
-        const id = accessCheckId(
+      if (isCheckReview(review)) {
+        const id = providerCheckId(
           response.body,
           scope.organization,
           scope.actor.id,
           review,
+          checkKinds[review.operation],
         );
-        if (!id) throw new Error('Missing Access Check');
+        if (!id) throw new Error('Missing provider check');
         await this.openCheck(scope, id, review);
         return;
       }
@@ -458,12 +501,13 @@ export class ProviderRenameComponent {
       if (response.status !== 200)
         throw new Error('Invalid metadata receipt response');
       const review = pending.review;
-      if (review.operation === 'access-checks') {
-        const id = accessCheckId(
+      if (isCheckReview(review)) {
+        const id = providerCheckId(
           response.body,
           scope.organization,
           scope.actor.id,
           review,
+          checkKinds[review.operation],
           true,
         );
         if (id) {
@@ -472,7 +516,7 @@ export class ProviderRenameComponent {
         }
       }
       const found =
-        review.operation !== 'access-checks' &&
+        !isCheckReview(review) &&
         findReceipt[review.operation](
           response.body,
           scope.organization,
@@ -498,7 +542,7 @@ export class ProviderRenameComponent {
   private async openCheck(
     scope: Scope,
     id: string,
-    review: ReviewedRotate,
+    review: CheckReview,
   ): Promise<void> {
     this.review.set(null);
     this.pending.set(null);
@@ -521,7 +565,7 @@ export class ProviderRenameComponent {
   private async readCheck(
     scope: Scope,
     id: string,
-    review: ReviewedRotate,
+    review: CheckReview,
   ): Promise<void> {
     try {
       const value = await firstValueFrom(
@@ -532,16 +576,85 @@ export class ProviderRenameComponent {
           )
           .pipe(takeUntil(scope.closed)),
       );
-      if (this.current(scope))
-        this.checkResult.set(
-          accessCheckStatus(value, scope.organization, id, review),
-        );
+      if (!this.current(scope)) return;
+      const result = providerCheckStatus(
+        value,
+        scope.organization,
+        id,
+        review,
+        checkKinds[review.operation],
+      );
+      this.checkResult.set(result);
+      if (result.catalogue)
+        await this.readModelPage(scope, id, review, result.catalogue, 0);
     } catch (failure) {
       if (this.current(scope) && !this.deny(failure))
         this.checkResult.set({
           message: 'Không thể đọc trạng thái. Vui lòng thử lại.',
           done: false,
         });
+    }
+  }
+
+  async loadModelPage(page: number): Promise<void> {
+    const scope = this.scope;
+    const check = this.currentCheck();
+    const catalogue = this.checkResult()?.catalogue;
+    if (
+      !scope ||
+      !check ||
+      !catalogue ||
+      !this.current(scope) ||
+      this.busy() ||
+      !Number.isInteger(page) ||
+      page < 0 ||
+      (page > 0 && page * 20 >= catalogue.count)
+    )
+      return;
+    this.busy.set(true);
+    try {
+      await this.readModelPage(scope, check.id, check.review, catalogue, page);
+    } finally {
+      if (this.current(scope)) this.busy.set(false);
+    }
+  }
+
+  private async readModelPage(
+    scope: Scope,
+    id: string,
+    review: CheckReview,
+    catalogue: NonNullable<CheckStatus['catalogue']>,
+    page: number,
+  ): Promise<void> {
+    this.modelPageError.set(null);
+    try {
+      const value = await firstValueFrom(
+        this.http
+          .get<unknown>(
+            this.base(scope) +
+              '/' +
+              review.connectionId +
+              '/checks/' +
+              id +
+              '/models',
+            {headers, params: {page}, timeout: readTimeout},
+          )
+          .pipe(takeUntil(scope.closed)),
+      );
+      if (this.current(scope))
+        this.modelPage.set(
+          discoveryModelPage(
+            value,
+            scope.organization,
+            id,
+            review,
+            catalogue,
+            page,
+          ),
+        );
+    } catch (failure) {
+      if (this.current(scope) && !this.deny(failure))
+        this.modelPageError.set(page);
     }
   }
 
@@ -568,12 +681,14 @@ export class ProviderRenameComponent {
         enable: 'trước khi bật lại.',
         rotate: 'trước khi thay API key.',
         'access-checks': 'trước khi kiểm tra lại.',
+        'model-discoveries': 'trước khi khám phá lại.',
       };
       message = `Kết nối đã thay đổi. Vui lòng tải lại kết nối ${next[operation]}`;
       this.needsRefresh.set(true);
     } else if (
       operation !== 'rotate' &&
       operation !== 'access-checks' &&
+      operation !== 'model-discoveries' &&
       failure.status === 409 &&
       code === 'NO_CHANGE'
     ) {
@@ -593,7 +708,9 @@ export class ProviderRenameComponent {
           ? 'Yêu cầu đổi tên bị xung đột. Vui lòng kiểm tra tên rồi xem lại.'
           : `Yêu cầu ${action} bị xung đột. Vui lòng xem lại.`;
     else if (
-      (operation === 'enable' || operation === 'access-checks') &&
+      (operation === 'enable' ||
+        operation === 'access-checks' ||
+        operation === 'model-discoveries') &&
       failure.status === 409 &&
       (code === 'CREDENTIAL_UNAVAILABLE' || code === 'PROVIDER_DISABLED')
     ) {
@@ -603,7 +720,7 @@ export class ProviderRenameComponent {
           : 'Chưa có bằng chứng lưu trữ khóa hợp lệ. Vui lòng tải lại kết nối để kiểm tra trạng thái khóa.';
       this.needsRefresh.set(true);
     } else if (
-      operation === 'access-checks' &&
+      (operation === 'access-checks' || operation === 'model-discoveries') &&
       failure.status === 409 &&
       (code === 'CHECK_IN_PROGRESS' || code === 'CONNECTION_DISABLED')
     ) {
@@ -668,6 +785,7 @@ export class ProviderRenameComponent {
     if (operation === 'disable') return this.disableEnabled();
     if (operation === 'rotate') return this.rotateEnabled();
     if (operation === 'access-checks') return this.canCheck();
+    if (operation === 'model-discoveries') return this.canDiscover();
     return this.enableVisible() && !this.enableUnavailable();
   }
   private clearOptions(): void {
@@ -676,6 +794,7 @@ export class ProviderRenameComponent {
     this.enableVisible.set(false);
     this.rotateEnabled.set(false);
     this.canCheck.set(false);
+    this.canDiscover.set(false);
     this.enableUnavailable.set('');
   }
   private reset(): void {
@@ -689,6 +808,8 @@ export class ProviderRenameComponent {
     this.needsRefresh.set(false);
     this.currentCheck.set(null);
     this.checkResult.set(null);
+    this.modelPage.set(null);
+    this.modelPageError.set(null);
     this.receiptMessage.set('');
   }
   private complete(operation: Review['operation']): void {

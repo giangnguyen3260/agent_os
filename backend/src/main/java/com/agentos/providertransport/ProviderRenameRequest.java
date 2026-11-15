@@ -40,6 +40,11 @@ public final class ProviderRenameRequest {
     return validate(request, organization, target, csrfHeaderName, "access-checks");
   }
 
+  public static UUID validateModelDiscovery(
+      HttpServletRequest request, String organization, String target, String csrfHeaderName) {
+    return validate(request, organization, target, csrfHeaderName, "model-discoveries");
+  }
+
   private static UUID validate(
       HttpServletRequest request,
       String organization,

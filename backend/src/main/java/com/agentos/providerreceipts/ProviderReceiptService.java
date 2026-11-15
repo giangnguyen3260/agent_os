@@ -17,6 +17,7 @@ import com.agentos.providerconnections.ProviderConnectionFailure;
 import com.agentos.providerconnections.ProviderConnectionService;
 import com.agentos.providercredentials.CredentialBoundary;
 import com.fasterxml.jackson.annotation.JsonIgnoreType;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
@@ -579,7 +580,26 @@ values (?,?,?,?,?,?,?,?,?,?,?)
       OffsetDateTime startedAt,
       OffsetDateTime completedAt,
       String outcome,
-      String errorCode) {}
+      String errorCode,
+      String kind,
+      String catalogueState,
+      Integer modelCount) {}
+
+  @JsonInclude(JsonInclude.Include.ALWAYS)
+  public record Model(String id, String displayName) {}
+
+  public record ModelPage(
+      UUID organizationId,
+      UUID connectionId,
+      UUID checkId,
+      String credentialRevision,
+      int page,
+      int pageSize,
+      int total,
+      String catalogueState,
+      List<Model> items) {}
+
+  private static final int MODEL_PAGE_SIZE = 20;
 
   @Transactional(
       readOnly = true,
@@ -587,36 +607,131 @@ values (?,?,?,?,?,?,?,?,?,?,?)
       isolation = Isolation.REPEATABLE_READ)
   public AccessCheckStatus accessCheckStatus(
       HumanIdentity actor, UUID org, UUID target, UUID check) {
+    return safe(() -> readCheck(actor, org, target, check, true, false));
+  }
+
+  @Transactional(
+      readOnly = true,
+      propagation = Propagation.REQUIRED,
+      isolation = Isolation.REPEATABLE_READ)
+  public AccessCheckStatus checkStatus(
+      HumanIdentity actor, UUID org, UUID target, UUID check, boolean access, boolean discovery) {
+    return safe(() -> readCheck(actor, org, target, check, access, discovery));
+  }
+
+  @Transactional(
+      readOnly = true,
+      propagation = Propagation.REQUIRED,
+      isolation = Isolation.REPEATABLE_READ)
+  public ModelPage discoveryModels(
+      HumanIdentity actor, UUID org, UUID target, UUID check, int page, boolean accessEnabled) {
     return safe(
         () -> {
-          authority(actor, org, false);
-          var rows =
+          var value = readCheck(actor, org, target, check, accessEnabled, true);
+          if (page < 0 || page > 100_000) throw fail(400, "BAD_REQUEST");
+          if (value.modelCount() == null) throw fail(409, "RESULT_NOT_AVAILABLE");
+          int offset = page * MODEL_PAGE_SIZE;
+          var items =
               jdbc.query(
                   """
-                  select connection_revision, credential_revision, policy_revision,
-                         accepted_at, started_at, completed_at, outcome, error_code
-                  from provider_access_checks where organization_id=? and connection_id=? and id=?
-                    and check_kind='ACCESS_CHECK'
+                  select model_id, display_name from provider_model_discovery_entries
+                  where organization_id=? and connection_id=? and check_id=?
+                  order by model_ordinal limit ? offset ?
                   """,
-                  (rs, n) ->
-                      new AccessCheckStatus(
-                          org,
-                          target,
-                          check,
-                          rs.getLong("connection_revision"),
-                          rs.getLong("credential_revision"),
-                          rs.getLong("policy_revision"),
-                          rs.getObject("accepted_at", OffsetDateTime.class),
-                          rs.getObject("started_at", OffsetDateTime.class),
-                          rs.getObject("completed_at", OffsetDateTime.class),
-                          rs.getString("outcome"),
-                          rs.getString("error_code")),
+                  (rs, n) -> new Model(rs.getString("model_id"), rs.getString("display_name")),
                   org,
                   target,
-                  check);
-          if (rows.isEmpty()) throw fail(404, "NOT_FOUND");
-          return rows.getFirst();
+                  check,
+                  MODEL_PAGE_SIZE,
+                  offset);
+          require(
+              items.size() == Math.max(0, Math.min(MODEL_PAGE_SIZE, value.modelCount() - offset)));
+          return new ModelPage(
+              org,
+              target,
+              check,
+              Long.toString(value.credentialRevision()),
+              page,
+              MODEL_PAGE_SIZE,
+              value.modelCount(),
+              value.catalogueState(),
+              List.copyOf(items));
         });
+  }
+
+  private AccessCheckStatus readCheck(
+      HumanIdentity actor, UUID org, UUID target, UUID check, boolean access, boolean discovery) {
+    authority(actor, org, false);
+    var rows =
+        jdbc.query(
+            """
+            select connection_revision, credential_revision, policy_revision,
+                   accepted_at, started_at, completed_at, outcome, error_code, check_kind
+            from provider_access_checks where organization_id=? and connection_id=? and id=?
+              and ((check_kind='ACCESS_CHECK' and ?) or (check_kind='MODEL_DISCOVERY' and ?))
+            """,
+            (rs, n) ->
+                new AccessCheckStatus(
+                    org,
+                    target,
+                    check,
+                    rs.getLong("connection_revision"),
+                    rs.getLong("credential_revision"),
+                    rs.getLong("policy_revision"),
+                    rs.getObject("accepted_at", OffsetDateTime.class),
+                    rs.getObject("started_at", OffsetDateTime.class),
+                    rs.getObject("completed_at", OffsetDateTime.class),
+                    rs.getString("outcome"),
+                    rs.getString("error_code"),
+                    rs.getString("check_kind"),
+                    "NOT_REQUESTED",
+                    null),
+            org,
+            target,
+            check,
+            access,
+            discovery);
+    if (rows.isEmpty()) throw fail(404, "NOT_FOUND");
+    var status = rows.getFirst();
+    if ("ACCESS_CHECK".equals(status.kind())) return status;
+    if (status.completedAt() == null) return withCatalogue(status, "PENDING", null);
+    if (!"ACCESSIBLE".equals(status.outcome())) return withCatalogue(status, "UNAVAILABLE", null);
+    var snapshots =
+        jdbc.query(
+            """
+            select s.catalogue_state, count(e.model_ordinal) as model_count
+            from provider_model_discovery_snapshots s
+            left join provider_model_discovery_entries e on e.organization_id=s.organization_id
+              and e.connection_id=s.connection_id and e.check_id=s.check_id
+            where s.organization_id=? and s.connection_id=? and s.check_id=?
+            group by s.catalogue_state
+            """,
+            (rs, n) ->
+                withCatalogue(status, rs.getString("catalogue_state"), rs.getInt("model_count")),
+            org,
+            target,
+            check);
+    require(snapshots.size() == 1);
+    return snapshots.getFirst();
+  }
+
+  private static AccessCheckStatus withCatalogue(
+      AccessCheckStatus status, String catalogueState, Integer modelCount) {
+    return new AccessCheckStatus(
+        status.organizationId(),
+        status.connectionId(),
+        status.id(),
+        status.connectionRevision(),
+        status.credentialRevision(),
+        status.policyRevision(),
+        status.acceptedAt(),
+        status.startedAt(),
+        status.completedAt(),
+        status.outcome(),
+        status.errorCode(),
+        status.kind(),
+        catalogueState,
+        modelCount);
   }
 
   private Probe own(UUID org, UUID actor, UUID key) {

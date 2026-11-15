@@ -43,7 +43,7 @@ record ProviderConnectionChangeReceipt(
     return switch (operation) {
       case ENABLE -> "DISABLED".equals(before) && "ENABLED".equals(after);
       case DISABLE -> "ENABLED".equals(before) && "DISABLED".equals(after);
-      case ROTATE, ACCESS_CHECK -> before.equals(after);
+      case ROTATE, ACCESS_CHECK, MODEL_DISCOVERY -> before.equals(after);
       default -> false;
     };
   }

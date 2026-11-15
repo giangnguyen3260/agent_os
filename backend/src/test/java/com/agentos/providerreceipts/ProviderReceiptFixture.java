@@ -975,6 +975,13 @@ abstract class ProviderReceiptFixture {
               .acceptModelDiscovery(human, org, UUID.randomUUID(), command, prepare(command))
               .receipt()
               .checkId();
+      var queued = service.checkStatus(human, org, id, check, false, true);
+      assertThat(queued.kind()).isEqualTo("MODEL_DISCOVERY");
+      assertThat(queued.catalogueState()).isEqualTo("PENDING");
+      error(
+          () -> service.discoveryModels(human, org, id, check, 0, false),
+          409,
+          "RESULT_NOT_AVAILABLE");
       var borrowed = new java.util.concurrent.atomic.AtomicReference<byte[]>();
       var sends = new java.util.concurrent.atomic.AtomicInteger();
       var dispatch = ProviderAccessCheckDispatch.forDiscovery(jdbc.getDataSource());
@@ -1045,6 +1052,19 @@ abstract class ProviderReceiptFixture {
                   check);
           if (scenario.equals("CUTOFF")) assertThat(ids).containsExactly("alpha", "zeta");
           else assertThat(ids).containsExactly("alpha", "beta", "zeta");
+          var history = service.discoveryModels(human, org, id, check, 0, false);
+          assertThat(history.pageSize()).isEqualTo(20);
+          assertThat(history.total()).isEqualTo(ids.size());
+          assertThat(history.items())
+              .extracting(ProviderReceiptService.Model::id)
+              .containsExactlyElementsOf(ids);
+          var emptyPage = service.discoveryModels(human, org, id, check, 1, false);
+          assertThat(emptyPage.total()).isEqualTo(ids.size());
+          assertThat(emptyPage.items()).isEmpty();
+          error(
+              () -> service.discoveryModels(human, org, UUID.randomUUID(), check, 0, false),
+              404,
+              "NOT_FOUND");
         }
         case "REVOKED" ->
             assertThat(state)

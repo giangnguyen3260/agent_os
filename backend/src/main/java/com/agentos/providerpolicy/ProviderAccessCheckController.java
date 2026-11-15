@@ -11,7 +11,8 @@ import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeFormatterBuilder;
 import java.util.UUID;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -20,15 +21,24 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@ConditionalOnProperty(name = "agentos.provider-access-check.http-enabled", havingValue = "true")
+@ConditionalOnExpression(
+    "${agentos.provider-access-check.http-enabled:false} ||"
+        + " ${agentos.provider-model-discovery.http-enabled:false}")
 public class ProviderAccessCheckController {
   private static final String ROOT = "/api/v1/organizations/";
   private static final DateTimeFormatter TIME =
       new DateTimeFormatterBuilder().appendInstant(6).toFormatter();
   private final ProviderReceiptService receipts;
+  private final boolean accessEnabled;
+  private final boolean discoveryEnabled;
 
-  ProviderAccessCheckController(ProviderReceiptService receipts) {
+  ProviderAccessCheckController(
+      ProviderReceiptService receipts,
+      @Value("${agentos.provider-access-check.http-enabled:false}") boolean accessEnabled,
+      @Value("${agentos.provider-model-discovery.http-enabled:false}") boolean discoveryEnabled) {
     this.receipts = receipts;
+    this.accessEnabled = accessEnabled;
+    this.discoveryEnabled = discoveryEnabled;
   }
 
   @GetMapping(ROOT + "{org}/provider-connections/{target}/checks/{check}")
@@ -39,24 +49,17 @@ public class ProviderAccessCheckController {
       @PathVariable String check,
       HttpServletRequest request)
       throws IOException {
-    if (!OptionsGate.admitted(request)) throw PolicyFailure.forbidden();
-    if (!OptionsWire.canonicalUuid(target)
-        || !OptionsWire.canonicalUuid(check)
-        || !request
-            .getRequestURI()
-            .equals(
-                request.getContextPath()
-                    + ROOT
-                    + org
-                    + "/provider-connections/"
-                    + target
-                    + "/checks/"
-                    + check)) throw OptionsWire.bad();
+    validatePath(request, org, target, check, "");
     OptionsWire.validate(request, org);
     try {
       var value =
-          receipts.accessCheckStatus(
-              actor, UUID.fromString(org), UUID.fromString(target), UUID.fromString(check));
+          receipts.checkStatus(
+              actor,
+              UUID.fromString(org),
+              UUID.fromString(target),
+              UUID.fromString(check),
+              accessEnabled,
+              discoveryEnabled);
       String state =
           value.completedAt() != null
               ? "COMPLETED"
@@ -70,7 +73,7 @@ public class ProviderAccessCheckController {
                       value.organizationId(),
                       value.connectionId(),
                       value.id(),
-                      "ACCESS_CHECK",
+                      value.kind(),
                       Long.toString(value.connectionRevision()),
                       Long.toString(value.credentialRevision()),
                       Long.toString(value.policyRevision()),
@@ -83,13 +86,69 @@ public class ProviderAccessCheckController {
                       state,
                       value.outcome(),
                       value.errorCode(),
-                      "NOT_REQUESTED",
-                      null)));
+                      value.catalogueState(),
+                      value.modelCount())));
     } catch (ProviderReceiptFailure failure) {
-      if (failure.status() == 401 || failure.status() == 403 || failure.status() == 404)
-        throw new PolicyFailure(failure.status(), failure.code());
-      throw PolicyFailure.unavailable();
+      throw readFailure(failure);
     }
+  }
+
+  @GetMapping(ROOT + "{org}/provider-connections/{target}/checks/{check}/models")
+  ResponseEntity<ApiResponse<ProviderReceiptService.ModelPage>> models(
+      @AuthenticationPrincipal HumanIdentity actor,
+      @PathVariable String org,
+      @PathVariable String target,
+      @PathVariable String check,
+      HttpServletRequest request)
+      throws IOException {
+    if (!discoveryEnabled) throw new PolicyFailure(404, "NOT_FOUND");
+    validatePath(request, org, target, check, "/models");
+    int page = ProviderListWire.validate(request, org);
+    try {
+      var value =
+          receipts.discoveryModels(
+              actor,
+              UUID.fromString(org),
+              UUID.fromString(target),
+              UUID.fromString(check),
+              page,
+              accessEnabled);
+      return ResponseEntity.ok()
+          .header("Cache-Control", "no-store")
+          .contentType(MediaType.APPLICATION_JSON)
+          .body(ApiResponse.ok(value));
+    } catch (ProviderReceiptFailure failure) {
+      throw readFailure(failure);
+    }
+  }
+
+  private static void validatePath(
+      HttpServletRequest request, String org, String target, String check, String suffix) {
+    if (!OptionsGate.admitted(request)) throw PolicyFailure.forbidden();
+    if (!OptionsWire.canonicalUuid(target)
+        || !OptionsWire.canonicalUuid(check)
+        || !request
+            .getRequestURI()
+            .equals(
+                request.getContextPath()
+                    + ROOT
+                    + org
+                    + "/provider-connections/"
+                    + target
+                    + "/checks/"
+                    + check
+                    + suffix)) throw OptionsWire.bad();
+  }
+
+  private static PolicyFailure readFailure(ProviderReceiptFailure failure) {
+    return switch (failure.status()) {
+      case 401, 403, 404 -> new PolicyFailure(failure.status(), failure.code());
+      case 409 ->
+          "RESULT_NOT_AVAILABLE".equals(failure.code())
+              ? new PolicyFailure(409, "RESULT_NOT_AVAILABLE")
+              : PolicyFailure.unavailable();
+      default -> PolicyFailure.unavailable();
+    };
   }
 
   private static String time(OffsetDateTime value) {

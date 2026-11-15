@@ -1,5 +1,6 @@
 import {
   exact,
+  text,
   timestamp,
   uuid,
 } from '../task-dependencies/task-dependencies-validation';
@@ -37,9 +38,22 @@ const operationLabels = {
   ENABLE: 'Enable',
   ROTATE: 'Rotate',
   ACCESS_CHECK: 'Access Check',
+  MODEL_DISCOVERY: 'Model Discovery',
 } as const;
 type MetadataOperation = keyof typeof operationLabels;
+export type CheckKind = 'ACCESS_CHECK' | 'MODEL_DISCOVERY';
 type ReviewedCommand = ReviewedEnable | ReviewedRotate;
+
+type CatalogueState = 'COMPLETE' | 'TRUNCATED';
+export interface CheckStatus {
+  message: string;
+  done: boolean;
+  catalogue?: {state: CatalogueState; count: number; completedAt: string};
+}
+export interface ModelPage {
+  page: number;
+  items: {id: string; displayName: string | null}[];
+}
 
 interface HistoricalSnapshot {
   organizationId: string;
@@ -137,7 +151,7 @@ function receiptMatches(
     value['connectionId'] !== submitted.connectionId ||
     !uuid(value['commandId']) ||
     value['operation'] !== operation ||
-    (operation === 'ACCESS_CHECK'
+    (operation === 'ACCESS_CHECK' || operation === 'MODEL_DISCOVERY'
       ? !uuid(value['checkId'])
       : value['checkId'] !== null) ||
     !wireTime(value['committedAt']) ||
@@ -147,7 +161,7 @@ function receiptMatches(
     return false;
   const before = value['before'];
   const after = value['after'];
-  if (operation === 'ACCESS_CHECK') {
+  if (operation === 'ACCESS_CHECK' || operation === 'MODEL_DISCOVERY') {
     return (
       'expectedCredentialRevision' in submitted &&
       before.revision === submitted.expectedRevision &&
@@ -316,22 +330,23 @@ export function receiptFoundRotate(
   return receiptFound(value, org, actor, target, expectedCommand, 'ROTATE');
 }
 
-export function accessCheckId(
+export function providerCheckId(
   value: unknown,
   org: string,
   actor: string,
   review: ReviewedRotate,
+  kind: CheckKind,
   lookup = false,
 ): string | null {
-  let receipt = data(value, 'Access Check');
+  const label = operationLabels[kind];
+  let receipt = data(value, label);
   if (lookup) {
-    if (!exact(receipt, 'receipt'))
-      throw new Error('Invalid Access Check lookup');
+    if (!exact(receipt, 'receipt')) throw new Error(`Invalid ${label} lookup`);
     receipt = receipt['receipt'];
     if (receipt === null) return null;
   }
-  if (!receiptMatches(receipt, org, actor, review, 'ACCESS_CHECK'))
-    throw new Error('Invalid Access Check receipt');
+  if (!receiptMatches(receipt, org, actor, review, kind))
+    throw new Error(`Invalid ${label} receipt`);
   return (receipt as {checkId: string}).checkId;
 }
 
@@ -342,13 +357,22 @@ const outcomes = {
   UNKNOWN: 'Chưa xác định được quyền truy cập.',
   SUPERSEDED: 'Kết nối hoặc quyền truy cập đã thay đổi trong lúc kiểm tra.',
 } as const;
-export function accessCheckStatus(
+const discoveryOutcomes = {
+  DENIED: 'Nhà cung cấp từ chối yêu cầu khám phá model.',
+  FAILED: 'Khám phá model thất bại.',
+  UNKNOWN: 'Chưa xác định được kết quả khám phá model.',
+  SUPERSEDED: 'Kết nối hoặc quyền truy cập đã thay đổi trong lúc khám phá.',
+} as const;
+
+export function providerCheckStatus(
   value: unknown,
   org: string,
   id: string,
   review: ReviewedRotate,
-): {message: string; done: boolean} {
-  const result = data(value, 'Access Check');
+  kind: CheckKind,
+): CheckStatus {
+  const label = operationLabels[kind];
+  const result = data(value, label);
   if (
     !exact(
       result,
@@ -357,17 +381,23 @@ export function accessCheckStatus(
     result['organizationId'] !== org ||
     result['connectionId'] !== review.connectionId ||
     result['id'] !== id ||
-    result['kind'] !== 'ACCESS_CHECK' ||
+    result['kind'] !== kind ||
     result['connectionRevision'] !== review.expectedRevision ||
     result['credentialRevision'] !== review.expectedCredentialRevision ||
     !positiveRevision(result['policyRevision']) ||
-    !wireTime(result['acceptedAt']) ||
-    result['catalogueState'] !== 'NOT_REQUESTED' ||
-    result['modelCount'] !== null
+    !wireTime(result['acceptedAt'])
   )
-    throw new Error('Invalid Access Check status');
+    throw new Error(`Invalid ${label} status`);
+  const discovery = kind === 'MODEL_DISCOVERY';
+  const catalogueState = result['catalogueState'];
+  const modelCount = result['modelCount'];
   const state = result['state'];
   const outcome = result['outcome'];
+  const expectedCatalogue = !discovery
+    ? 'NOT_REQUESTED'
+    : state === 'COMPLETED'
+      ? 'UNAVAILABLE'
+      : 'PENDING';
   if (
     state === 'COMPLETED' &&
     typeof outcome === 'string' &&
@@ -384,8 +414,38 @@ export function accessCheckStatus(
       ? result['errorCode'] === null && result['startedAt'] !== null
       : typeof result['errorCode'] === 'string' &&
         /^[A-Z_]{1,32}$/.test(result['errorCode']))
-  )
-    return {message: outcomes[outcome as keyof typeof outcomes], done: true};
+  ) {
+    if (discovery && outcome === 'ACCESSIBLE') {
+      if (
+        (catalogueState !== 'COMPLETE' && catalogueState !== 'TRUNCATED') ||
+        typeof modelCount !== 'number' ||
+        !Number.isInteger(modelCount) ||
+        modelCount < 0 ||
+        modelCount > 1000
+      )
+        throw new Error(`Invalid ${label} catalogue`);
+      return {
+        message:
+          catalogueState === 'COMPLETE'
+            ? 'Đã tải danh sách model.'
+            : 'Danh sách model đã được giới hạn.',
+        done: true,
+        catalogue: {
+          state: catalogueState,
+          count: modelCount,
+          completedAt: result['completedAt'],
+        },
+      };
+    }
+    if (catalogueState === expectedCatalogue && modelCount === null) {
+      return {
+        message: discovery
+          ? discoveryOutcomes[outcome as keyof typeof discoveryOutcomes]
+          : outcomes[outcome as keyof typeof outcomes],
+        done: true,
+      };
+    }
+  }
   if (
     (state === 'QUEUED' || state === 'RUNNING') &&
     (state === 'QUEUED'
@@ -395,12 +455,69 @@ export function accessCheckStatus(
     outcome === null &&
     result['errorCode'] === null &&
     result['completedAt'] === null &&
-    result['expiresAt'] === null
+    result['expiresAt'] === null &&
+    catalogueState === expectedCatalogue &&
+    modelCount === null
   )
     return {
-      message:
-        state === 'QUEUED' ? 'Đang chờ kiểm tra.' : 'Đang kiểm tra kết nối.',
+      message: discovery
+        ? state === 'QUEUED'
+          ? 'Đang chờ khám phá model.'
+          : 'Đang khám phá model.'
+        : state === 'QUEUED'
+          ? 'Đang chờ kiểm tra.'
+          : 'Đang kiểm tra kết nối.',
       done: false,
     };
-  throw new Error('Invalid Access Check status');
+  throw new Error(`Invalid ${label} status`);
+}
+
+export function discoveryModelPage(
+  value: unknown,
+  org: string,
+  id: string,
+  review: ReviewedRotate,
+  catalogue: NonNullable<CheckStatus['catalogue']>,
+  page: number,
+): ModelPage {
+  const result = data(value, 'Model Discovery');
+  if (
+    !exact(
+      result,
+      'organizationId connectionId checkId credentialRevision page pageSize total catalogueState items',
+    ) ||
+    result['organizationId'] !== org ||
+    result['connectionId'] !== review.connectionId ||
+    result['checkId'] !== id ||
+    result['credentialRevision'] !== review.expectedCredentialRevision ||
+    result['page'] !== page ||
+    result['pageSize'] !== 20 ||
+    result['total'] !== catalogue.count ||
+    result['catalogueState'] !== catalogue.state ||
+    !Array.isArray(result['items']) ||
+    result['items'].length !==
+      Math.max(0, Math.min(20, catalogue.count - page * 20))
+  )
+    throw new Error('Invalid Model Discovery page');
+
+  const items: ModelPage['items'] = [];
+  let previous: string | undefined;
+  for (const item of result['items'] as unknown[]) {
+    if (
+      !exact(item, 'id displayName') ||
+      !modelText(item['id'], 256) ||
+      (previous !== undefined && item['id'] <= previous) ||
+      (item['displayName'] !== null && !modelText(item['displayName'], 255))
+    )
+      throw new Error('Invalid Model Discovery model');
+    previous = item['id'];
+    items.push({id: item['id'], displayName: item['displayName']});
+  }
+  return {page, items};
+}
+
+function modelText(value: unknown, maximum: number): value is string {
+  return (
+    text(value, maximum) && value.length > 0 && !/[\u2028\u2029]/.test(value)
+  );
 }

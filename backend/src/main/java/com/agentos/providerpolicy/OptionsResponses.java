@@ -16,6 +16,7 @@ final class OptionsResponses {
       case 403 -> "Request denied";
       case 404 -> "Provider check not found";
       case 405 -> "Method not allowed";
+      case 409 -> "Model discovery result is unavailable";
       case 429 -> "Too many requests";
       default -> "Provider settings are unavailable";
     };

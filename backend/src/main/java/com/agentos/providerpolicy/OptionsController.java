@@ -21,6 +21,7 @@ public class OptionsController {
   private final boolean enableEnabled;
   private final boolean rotateEnabled;
   private final boolean accessCheckEnabled;
+  private final boolean modelDiscoveryEnabled;
 
   public OptionsController(
       PolicyService policies,
@@ -29,7 +30,9 @@ public class OptionsController {
       @Value("${agentos.provider-disable.http-enabled:false}") boolean disableEnabled,
       @Value("${agentos.provider-enable.http-enabled:false}") boolean enableEnabled,
       @Value("${agentos.provider-rotate.http-enabled:false}") boolean rotateEnabled,
-      @Value("${agentos.provider-access-check.http-enabled:false}") boolean accessCheckEnabled) {
+      @Value("${agentos.provider-access-check.http-enabled:false}") boolean accessCheckEnabled,
+      @Value("${agentos.provider-model-discovery.http-enabled:false}")
+          boolean modelDiscoveryEnabled) {
     this.policies = policies;
     this.createEnabled = createEnabled;
     this.renameEnabled = renameEnabled;
@@ -37,6 +40,7 @@ public class OptionsController {
     this.enableEnabled = enableEnabled;
     this.rotateEnabled = rotateEnabled;
     this.accessCheckEnabled = accessCheckEnabled;
+    this.modelDiscoveryEnabled = modelDiscoveryEnabled;
   }
 
   @GetMapping("/api/v1/organizations/{organizationId}/provider-connections/options")
@@ -61,6 +65,7 @@ public class OptionsController {
         .header("X-Provider-Disable-Enabled", Boolean.toString(disableEnabled))
         .header("X-Provider-Enable-Enabled", Boolean.toString(enableEnabled))
         .header("X-Provider-Access-Check-Enabled", Boolean.toString(accessCheckEnabled))
+        .header("X-Provider-Model-Discovery-Enabled", Boolean.toString(modelDiscoveryEnabled))
         .header("X-Provider-Rotate-Enabled", Boolean.toString(rotateEnabled))
         .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
         .body(ApiResponse.ok(result));
