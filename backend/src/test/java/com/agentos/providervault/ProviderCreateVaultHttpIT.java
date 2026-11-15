@@ -617,7 +617,7 @@ class ProviderCreateVaultHttpIT {
               },
               clock);
       var poller = new ProviderAccessCheckPoller(runtime.datasource(), dispatch, runner);
-      var worker = new ProviderAccessCheckWorkerConfiguration.Worker(poller, 100);
+      var worker = new ProviderAccessCheckWorkerConfiguration.Worker(poller::poll, null, 100);
       try {
         runConnectionBrowser("access_check", org, actor, connection);
       } finally {

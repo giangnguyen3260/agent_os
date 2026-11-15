@@ -2,18 +2,25 @@ package com.agentos.providerchecks;
 
 import com.agentos.providerchecks.ProviderAccessCheckDispatch.Result;
 import com.agentos.providercredentials.CredentialBoundary.Provider;
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.JsonToken;
 import com.fasterxml.jackson.core.StreamReadFeature;
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.json.JsonMapper;
+import java.io.ByteArrayInputStream;
+import java.io.FilterInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.InetAddress;
+import java.net.URI;
+import java.net.URLEncoder;
 import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.OffsetDateTime;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -27,13 +34,13 @@ import org.apache.hc.core5.http.HttpHost;
 import org.apache.hc.core5.http.protocol.BasicHttpContext;
 import org.apache.hc.core5.util.Timeout;
 
-/** Performs the first models-list request using a fixed HTTPS route for each provider. */
+/** Reads a bounded models-list page using a fixed HTTPS route for each provider. */
 public final class ProviderModelsTransport implements ProviderAccessCheckRunner.Transport {
   private static final int BODY_LIMIT = 1_048_576;
-  private static final ObjectMapper JSON =
-      JsonMapper.builder()
+  private static final JsonFactory JSON =
+      JsonFactory.builder()
           .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
-          .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
+          .disable(StreamReadFeature.AUTO_CLOSE_SOURCE)
           .build();
 
   private final Clock clock;
@@ -44,32 +51,69 @@ public final class ProviderModelsTransport implements ProviderAccessCheckRunner.
     this.cancellations = Objects.requireNonNull(cancellations);
   }
 
-  private record Route(String host, String path) {}
+  public record Model(String id, String displayName) {}
+
+  public record Page(Result result, List<Model> models, String nextCursor, int bodyBytes) {
+    public Page {
+      models = List.copyOf(models);
+    }
+
+    @Override
+    public String toString() {
+      return "Page[" + result + "]";
+    }
+  }
+
+  private record Route(String origin, String path, String cursorParameter) {}
 
   private static Route route(Provider provider) {
     return switch (provider) {
-      case OPENAI -> new Route("api.openai.com", "/v1/models");
-      case ANTHROPIC -> new Route("api.anthropic.com", "/v1/models?limit=100");
+      case OPENAI -> new Route("api.openai.com", "/v1/models", null);
+      case ANTHROPIC -> new Route("api.anthropic.com", "/v1/models?limit=100", "after_id");
       case GOOGLE_GEMINI ->
-          new Route("generativelanguage.googleapis.com", "/v1beta/models?pageSize=100");
+          new Route(
+              "generativelanguage.googleapis.com", "/v1beta/models?pageSize=100", "pageToken");
     };
+  }
+
+  static URI requestUri(Provider provider, String cursor) {
+    var route = route(provider);
+    String url = "https://" + route.origin() + route.path();
+    if (cursor == null) return URI.create(url);
+    if (route.cursorParameter() == null || !validCursor(provider, cursor))
+      throw new IllegalArgumentException("Invalid provider cursor");
+    String encoded = URLEncoder.encode(cursor, StandardCharsets.UTF_8).replace("+", "%20");
+    return URI.create(url + "&" + route.cursorParameter() + "=" + encoded);
   }
 
   @Override
   public Result request(Provider provider, String workspace, byte[] key, OffsetDateTime deadline) {
+    return requestPage(provider, workspace, key, deadline, null, BODY_LIMIT).result();
+  }
+
+  public Page requestPage(
+      Provider provider,
+      String workspace,
+      byte[] key,
+      OffsetDateTime deadline,
+      String cursor,
+      int remainingBytes) {
+    if (remainingBytes <= 0) return failure(Result.RESPONSE_LIMIT, 0);
     var route = route(provider);
     if (workspace != null
         && (provider != Provider.ANTHROPIC || !workspace.matches("wrkspc_[a-zA-Z0-9]{1,128}")))
-      return Result.PROTOCOL_ERROR;
+      return failure(Result.PROTOCOL_ERROR, 0);
+    if (cursor != null && (route.cursorParameter() == null || !validCursor(provider, cursor)))
+      return failure(Result.PROTOCOL_ERROR, 0);
     long remaining =
         Math.min(10_000, Duration.between(clock.instant(), deadline.toInstant()).toMillis());
-    if (remaining <= 0) return Result.UNKNOWN;
+    if (remaining <= 0) return failure(Result.UNKNOWN, 0);
 
     // Pass only the validated DNS answer to the actual connector. Never resolve the name twice.
     var dns =
         new DnsResolver() {
           public InetAddress[] resolve(String host) throws UnknownHostException {
-            if (!route.host().equals(host)) throw new UnknownHostException();
+            if (!route.origin().equals(host)) throw new UnknownHostException();
             InetAddress[] found = InetAddress.getAllByName(host);
             if (!deadline.toInstant().isAfter(clock.instant())) throw new UnknownHostException();
             for (var address : found) if (!publicAddress(address)) throw new UnknownHostException();
@@ -77,11 +121,11 @@ public final class ProviderModelsTransport implements ProviderAccessCheckRunner.
           }
 
           public String resolveCanonicalHostname(String host) throws UnknownHostException {
-            if (!route.host().equals(host)) throw new UnknownHostException();
+            if (!route.origin().equals(host)) throw new UnknownHostException();
             return host;
           }
         };
-    var request = new HttpGet("https://" + route.host() + route.path());
+    var request = new HttpGet(requestUri(provider, cursor));
     request.setHeader("Accept", "application/json");
     request.setHeader("Accept-Encoding", "identity");
     String credential = new String(key, StandardCharsets.US_ASCII);
@@ -114,22 +158,22 @@ public final class ProviderModelsTransport implements ProviderAccessCheckRunner.
             .disableContentCompression()
             .disableAuthCaching()
             .build()) {
+      if (!deadline.toInstant().isAfter(clock.instant())) return failure(Result.UNKNOWN, 0);
       try (var response =
           client.executeOpen(
-              new HttpHost("https", route.host(), 443), request, new BasicHttpContext())) {
+              new HttpHost("https", route.origin(), 443), request, new BasicHttpContext())) {
         try {
-          if (response.getCode() != 200) return status(response.getCode());
+          if (response.getCode() != 200) return failure(status(response.getCode()), 0);
           var entity = response.getEntity();
           if (entity == null
               || entity.getContentType() == null
               || !entity.getContentType().matches("(?i)application/json(?:\\s*;.*)?")
               || (entity.getContentEncoding() != null
                   && !entity.getContentEncoding().equalsIgnoreCase("identity")))
-            return Result.PROTOCOL_ERROR;
-          if (entity.getContentLength() > BODY_LIMIT) return Result.RESPONSE_LIMIT;
-          byte[] body = entity.getContent().readNBytes(BODY_LIMIT + 1);
-          if (body.length > BODY_LIMIT) return Result.RESPONSE_LIMIT;
-          return body(provider, body);
+            return failure(Result.PROTOCOL_ERROR, 0);
+          int limit = Math.min(BODY_LIMIT, remainingBytes);
+          if (entity.getContentLength() > limit) return failure(Result.RESPONSE_LIMIT, 0);
+          return page(provider, entity.getContent(), cursor, limit);
         } finally {
           // Abort before closing the response so an unread body is never drained.
           request.cancel();
@@ -138,11 +182,13 @@ public final class ProviderModelsTransport implements ProviderAccessCheckRunner.
     } catch (UnknownHostException
         | java.net.ConnectException
         | javax.net.ssl.SSLHandshakeException failure) {
-      return deadline.toInstant().isAfter(clock.instant())
-          ? Result.NETWORK_UNAVAILABLE
-          : Result.UNKNOWN;
+      return failure(
+          deadline.toInstant().isAfter(clock.instant())
+              ? Result.NETWORK_UNAVAILABLE
+              : Result.UNKNOWN,
+          0);
     } catch (IOException failure) {
-      return Result.UNKNOWN;
+      return failure(Result.UNKNOWN, 0);
     } finally {
       timeout.cancel(false);
       request.removeHeaders("Authorization");
@@ -162,53 +208,160 @@ public final class ProviderModelsTransport implements ProviderAccessCheckRunner.
 
   static Result body(Provider provider, byte[] body) {
     try {
-      var root = JSON.readTree(body);
-      if (root == null || !root.isObject()) return Result.PROTOCOL_ERROR;
-      boolean gemini = provider == Provider.GOOGLE_GEMINI;
-      var models = root.path(gemini ? "models" : "data");
-      if (!models.isArray()) return Result.PROTOCOL_ERROR;
-      var seen = new HashMap<String, String>();
-      int limit = provider == Provider.OPENAI ? 1000 : 100;
-      int count = 0;
-      String last = null;
-      for (var model : models) {
-        if (++count > limit) return Result.RESPONSE_LIMIT;
-        var id = model.path(gemini ? "name" : "id");
-        var display = model.path(gemini ? "displayName" : "display_name");
-        if (!id.isTextual()
-            || !safeText(id.textValue(), 256)
-            || (gemini && (!id.textValue().startsWith("models/") || id.textValue().length() == 7))
-            || (provider != Provider.OPENAI
-                && !display.isMissingNode()
-                && !display.isNull()
-                && (!display.isTextual() || !safeText(display.textValue(), 255))))
-          return Result.PROTOCOL_ERROR;
-        last = id.textValue();
-        String label =
-            provider != Provider.OPENAI && display.isTextual() ? display.textValue() : "";
-        String previous = seen.putIfAbsent(last, label);
-        if (previous != null && !previous.equals(label)) return Result.PROTOCOL_ERROR;
-      }
-      if (provider == Provider.ANTHROPIC) {
-        var more = root.path("has_more");
-        var cursor = root.path("last_id");
-        if (!more.isBoolean()
-            || (!cursor.isNull()
-                && !cursor.isMissingNode()
-                && (!cursor.isTextual() || !safeText(cursor.textValue(), 256)))
-            || (more.booleanValue() && (last == null || !last.equals(cursor.textValue()))))
-          return Result.PROTOCOL_ERROR;
-      }
-      var token = root.path("nextPageToken");
-      if (gemini
-          && !token.isMissingNode()
-          && (!token.isTextual()
-              || !safeText(token.textValue(), 2048)
-              || token.textValue().getBytes(StandardCharsets.UTF_8).length > 2048))
-        return Result.PROTOCOL_ERROR;
-      return Result.ACCESSIBLE;
+      return page(provider, new ByteArrayInputStream(body), null, BODY_LIMIT).result();
     } catch (IOException failure) {
       return Result.PROTOCOL_ERROR;
+    }
+  }
+
+  static Page page(Provider provider, InputStream input, String cursor, int limit)
+      throws IOException {
+    var body = new BoundedBody(input, limit);
+    try (var parser = JSON.createParser(body)) {
+      return decodePage(provider, parser, cursor, body);
+    } catch (BodyLimit failure) {
+      return failure(Result.RESPONSE_LIMIT, body.consumed());
+    } catch (JsonProcessingException failure) {
+      return failure(Result.PROTOCOL_ERROR, body.consumed());
+    }
+  }
+
+  private static Page decodePage(
+      Provider provider, JsonParser parser, String cursor, BoundedBody body) throws IOException {
+    if (parser.nextToken() != JsonToken.START_OBJECT)
+      return failure(Result.PROTOCOL_ERROR, body.consumed());
+    boolean gemini = provider == Provider.GOOGLE_GEMINI;
+    String modelField = gemini ? "models" : "data";
+    int modelLimit = provider == Provider.OPENAI ? 1000 : 100;
+    var models = new LinkedHashMap<String, Model>();
+    boolean hasModels = false;
+    Boolean hasMore = null;
+    String lastId = null;
+    String nextCursor = null;
+    for (var field = parser.nextToken();
+        field != JsonToken.END_OBJECT;
+        field = parser.nextToken()) {
+      if (field != JsonToken.FIELD_NAME) return failure(Result.PROTOCOL_ERROR, body.consumed());
+      String name = parser.currentName();
+      var value = parser.nextToken();
+      if (name.equals(modelField)) {
+        if (value != JsonToken.START_ARRAY) return failure(Result.PROTOCOL_ERROR, body.consumed());
+        hasModels = true;
+        int count = 0;
+        for (var item = parser.nextToken();
+            item != JsonToken.END_ARRAY;
+            item = parser.nextToken()) {
+          if (item == null) return failure(Result.PROTOCOL_ERROR, body.consumed());
+          if (++count > modelLimit) return failure(Result.RESPONSE_LIMIT, body.consumed());
+          Model model = decodeModel(provider, parser);
+          if (model == null) return failure(Result.PROTOCOL_ERROR, body.consumed());
+          lastId = model.id();
+          Model previous = models.putIfAbsent(lastId, model);
+          if (previous != null && !previous.equals(model))
+            return failure(Result.PROTOCOL_ERROR, body.consumed());
+        }
+      } else if (provider == Provider.ANTHROPIC && name.equals("has_more")) {
+        if (value != JsonToken.VALUE_TRUE && value != JsonToken.VALUE_FALSE)
+          return failure(Result.PROTOCOL_ERROR, body.consumed());
+        hasMore = value == JsonToken.VALUE_TRUE;
+      } else if (provider == Provider.ANTHROPIC && name.equals("last_id")) {
+        if (value != JsonToken.VALUE_NULL) {
+          if (value != JsonToken.VALUE_STRING || !validCursor(provider, parser.getText()))
+            return failure(Result.PROTOCOL_ERROR, body.consumed());
+          nextCursor = parser.getText();
+        }
+      } else if (gemini && name.equals("nextPageToken")) {
+        if (value != JsonToken.VALUE_STRING || !validCursor(provider, parser.getText()))
+          return failure(Result.PROTOCOL_ERROR, body.consumed());
+        nextCursor = parser.getText();
+      } else {
+        parser.skipChildren();
+      }
+    }
+    if (!hasModels) return failure(Result.PROTOCOL_ERROR, body.consumed());
+    if (provider == Provider.ANTHROPIC) {
+      if (hasMore == null || (hasMore && (lastId == null || !lastId.equals(nextCursor))))
+        return failure(Result.PROTOCOL_ERROR, body.consumed());
+      if (!hasMore) nextCursor = null;
+    }
+    if (nextCursor != null && nextCursor.equals(cursor))
+      return failure(Result.PROTOCOL_ERROR, body.consumed());
+    if (parser.nextToken() != null) return failure(Result.PROTOCOL_ERROR, body.consumed());
+    return new Page(Result.ACCESSIBLE, List.copyOf(models.values()), nextCursor, body.consumed());
+  }
+
+  private static Model decodeModel(Provider provider, JsonParser parser) throws IOException {
+    if (parser.currentToken() != JsonToken.START_OBJECT) return null;
+    boolean gemini = provider == Provider.GOOGLE_GEMINI;
+    String id = null;
+    String label = null;
+    for (var field = parser.nextToken();
+        field != JsonToken.END_OBJECT;
+        field = parser.nextToken()) {
+      if (field != JsonToken.FIELD_NAME) return null;
+      String name = parser.currentName();
+      var value = parser.nextToken();
+      if (name.equals(gemini ? "name" : "id")) {
+        if (value != JsonToken.VALUE_STRING || !safeText(parser.getText(), 256)) return null;
+        id = parser.getText();
+        if (gemini && (!id.startsWith("models/") || id.length() == 7)) return null;
+      } else if (provider != Provider.OPENAI
+          && name.equals(gemini ? "displayName" : "display_name")) {
+        if (value == JsonToken.VALUE_NULL) continue;
+        if (value != JsonToken.VALUE_STRING || !safeText(parser.getText(), 255)) return null;
+        label = parser.getText();
+      } else {
+        parser.skipChildren();
+      }
+    }
+    return id == null ? null : new Model(id, label);
+  }
+
+  private static Page failure(Result result, int consumed) {
+    return new Page(result, List.of(), null, consumed);
+  }
+
+  private static boolean validCursor(Provider provider, String cursor) {
+    int limit = provider == Provider.ANTHROPIC ? 256 : 2048;
+    return safeText(cursor, limit) && cursor.getBytes(StandardCharsets.UTF_8).length <= 2048;
+  }
+
+  private static final class BodyLimit extends IOException {}
+
+  /** Counts parsed response bytes while admitting only a single unretained overflow sentinel. */
+  private static final class BoundedBody extends FilterInputStream {
+    private final int limit;
+    private int consumed;
+
+    private BoundedBody(InputStream source, int limit) {
+      super(source);
+      this.limit = limit;
+    }
+
+    @Override
+    public int read() throws IOException {
+      if (consumed == limit) return overflow();
+      int next = in.read();
+      if (next >= 0) consumed++;
+      return next;
+    }
+
+    @Override
+    public int read(byte[] buffer, int offset, int length) throws IOException {
+      if (length == 0) return 0;
+      if (consumed == limit) return overflow();
+      int next = in.read(buffer, offset, Math.min(length, limit - consumed));
+      if (next > 0) consumed += next;
+      return next;
+    }
+
+    private int overflow() throws IOException {
+      if (in.read() < 0) return -1;
+      throw new BodyLimit();
+    }
+
+    private int consumed() {
+      return consumed;
     }
   }
 

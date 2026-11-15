@@ -9,8 +9,12 @@ import static org.mockito.Mockito.mockingDetails;
 import com.agentos.auth.HumanIdentity;
 import com.agentos.provideradmission.ProviderWriteAdmission;
 import com.agentos.providerchecks.ProviderAccessCheckDispatch;
+import com.agentos.providerchecks.ProviderAccessCheckDispatch.Result;
 import com.agentos.providerchecks.ProviderAccessCheckPoller;
 import com.agentos.providerchecks.ProviderAccessCheckRunner;
+import com.agentos.providerchecks.ProviderModelDiscoveryRunner;
+import com.agentos.providerchecks.ProviderModelsTransport.Model;
+import com.agentos.providerchecks.ProviderModelsTransport.Page;
 import com.agentos.providercommands.CommandBoundary;
 import com.agentos.providercommands.CommandBoundary.Command;
 import com.agentos.providercommands.CommandBoundary.Create;
@@ -838,34 +842,7 @@ abstract class ProviderReceiptFixture {
           new ProviderAccessCheckRunner(
               dispatch,
               connections,
-              new CredentialBoundary(
-                  new CredentialBoundary.Keys() {
-                    public String currentVersion() {
-                      throw new AssertionError("Read only");
-                    }
-
-                    public javax.crypto.SecretKey key(String version) {
-                      outside();
-                      assertThat(version).isEqualTo("credential-v1");
-                      return new SecretKeySpec(new byte[32], "HmacSHA256");
-                    }
-                  },
-                  new CredentialBoundary.Secrets() {
-                    public CredentialBoundary.Reference store(
-                        CredentialBoundary.Scope scope, byte[] bytes) {
-                      throw new AssertionError("Read only");
-                    }
-
-                    public byte[] read(CredentialBoundary.Reference reference) {
-                      outside();
-                      return SECRET.getBytes(java.nio.charset.StandardCharsets.US_ASCII);
-                    }
-
-                    public void preparationFailed(
-                        CredentialBoundary.Scope scope, CredentialBoundary.Reference reference) {
-                      throw new AssertionError("Read only");
-                    }
-                  }),
+              readOnlyCredentialFixture(),
               (kind, workspace, bytes, deadline) -> {
                 outside();
                 assertThat(borrowed.compareAndSet(null, bytes)).isTrue();
@@ -922,6 +899,172 @@ abstract class ProviderReceiptFixture {
           .containsEntry("outcome", "ACCESSIBLE");
       assertThat(count("provider_access_check_outbox")).isZero();
     } finally {
+      if (seeded) jdbc.update("delete from provider_deployment_policy where id=1");
+    }
+  }
+
+  private static CredentialBoundary readOnlyCredentialFixture() {
+    return new CredentialBoundary(
+        new CredentialBoundary.Keys() {
+          public String currentVersion() {
+            throw new AssertionError("Read only");
+          }
+
+          public javax.crypto.SecretKey key(String version) {
+            outside();
+            assertThat(version).isEqualTo("credential-v1");
+            return new SecretKeySpec(new byte[32], "HmacSHA256");
+          }
+        },
+        new CredentialBoundary.Secrets() {
+          public CredentialBoundary.Reference store(CredentialBoundary.Scope scope, byte[] bytes) {
+            throw new AssertionError("Read only");
+          }
+
+          public byte[] read(CredentialBoundary.Reference reference) {
+            outside();
+            return SECRET.getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+          }
+
+          public void preparationFailed(
+              CredentialBoundary.Scope scope, CredentialBoundary.Reference reference) {
+            throw new AssertionError("Read only");
+          }
+        });
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"COMPLETE", "CUTOFF", "REPEAT_CURSOR", "REVOKED", "PUBLISH_FAILURE"})
+  void discoveryWorkerOnlyPublishesAuthorizedWholePages(String scenario) {
+    boolean seeded =
+        jdbc.queryForObject("select count(*) from provider_deployment_policy", Long.class) == 0;
+    if (seeded)
+      jdbc.update(
+          """
+          insert into provider_deployment_policy
+            (id,revision,openai_enabled,anthropic_enabled,gemini_enabled,created_at,updated_at)
+          values (1,3,true,true,true,current_timestamp,current_timestamp)
+          """);
+    boolean publicationFailure = scenario.equals("PUBLISH_FAILURE");
+    if (publicationFailure)
+      jdbc.execute(
+          "alter table provider_model_discovery_entries add constraint reject_discovery_entry"
+              + " check (organization_id <> '"
+              + org
+              + "')");
+    try {
+      var policy = jdbc.queryForMap("select * from provider_deployment_policy where id=1");
+      Provider provider =
+          Boolean.TRUE.equals(policy.get("anthropic_enabled"))
+              ? Provider.ANTHROPIC
+              : Boolean.TRUE.equals(policy.get("gemini_enabled"))
+                  ? Provider.GOOGLE_GEMINI
+                  : Provider.OPENAI;
+      var creation = createCommand(provider);
+      service.execute(human, org, key, creation, prepare(creation), id, credential(provider, 1));
+      doReturn(Boolean.TRUE)
+          .when(jdbc)
+          .queryForObject(
+              "select agentos_list_read.credential_available(?::uuid,?::uuid)",
+              Boolean.class,
+              org,
+              id);
+      var command = new CredentialCommand(Operation.MODEL_DISCOVERY, id, 1, 1);
+      var check =
+          service
+              .acceptModelDiscovery(human, org, UUID.randomUUID(), command, prepare(command))
+              .receipt()
+              .checkId();
+      var borrowed = new java.util.concurrent.atomic.AtomicReference<byte[]>();
+      var sends = new java.util.concurrent.atomic.AtomicInteger();
+      var dispatch = ProviderAccessCheckDispatch.forDiscovery(jdbc.getDataSource());
+      var runner =
+          new ProviderModelDiscoveryRunner(
+              dispatch,
+              connections,
+              readOnlyCredentialFixture(),
+              (kind, workspace, bytes, deadline, cursor, remaining) -> {
+                outside();
+                int page = sends.incrementAndGet();
+                assertThat(count("provider_model_discovery_pages")).isEqualTo(page);
+                if (page == 1) {
+                  assertThat(cursor).isNull();
+                  assertThat(remaining).isEqualTo(4 * 1024 * 1024);
+                  borrowed.set(bytes);
+                  if (scenario.equals("REVOKED"))
+                    jdbc.update("update human_accounts set credential_version=1 where id=?", actor);
+                  return new Page(
+                      Result.ACCESSIBLE,
+                      List.of(new Model("zeta", "Z"), new Model("alpha", null)),
+                      "next",
+                      17);
+                }
+                assertThat(cursor).isEqualTo("next");
+                assertThat(remaining).isEqualTo(4 * 1024 * 1024 - 17);
+                return switch (scenario) {
+                  case "CUTOFF" -> new Page(Result.RESPONSE_LIMIT, List.of(), null, 30);
+                  case "REPEAT_CURSOR" -> new Page(Result.ACCESSIBLE, List.of(), "next", 30);
+                  default ->
+                      new Page(
+                          Result.ACCESSIBLE,
+                          List.of(new Model("beta", "B"), new Model("alpha", null)),
+                          null,
+                          30);
+                };
+              },
+              java.time.Clock.systemUTC());
+      var poller = ProviderAccessCheckPoller.forDiscovery(jdbc.getDataSource(), dispatch, runner);
+      if (publicationFailure)
+        assertThatThrownBy(poller::poll)
+            .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+      else poller.poll();
+      poller.poll();
+
+      int expectedSends = scenario.equals("REVOKED") ? 1 : 2;
+      assertThat(sends.get()).isEqualTo(expectedSends);
+      assertThat(count("provider_model_discovery_pages")).isEqualTo(expectedSends);
+      assertThat(borrowed.get()).isNotNull().containsOnly((byte) 0);
+      var state =
+          jdbc.queryForMap(
+              "select outcome,error_code from provider_access_checks where id=?", check);
+      switch (scenario) {
+        case "COMPLETE", "CUTOFF" -> {
+          assertThat(state).containsEntry("outcome", "ACCESSIBLE");
+          assertThat(
+                  jdbc.queryForObject(
+                      "select catalogue_state from provider_model_discovery_snapshots where"
+                          + " check_id=?",
+                      String.class,
+                      check))
+              .isEqualTo(scenario.equals("CUTOFF") ? "TRUNCATED" : "COMPLETE");
+          var ids =
+              jdbc.queryForList(
+                  "select model_id from provider_model_discovery_entries where check_id=? order by"
+                      + " model_ordinal",
+                  String.class,
+                  check);
+          if (scenario.equals("CUTOFF")) assertThat(ids).containsExactly("alpha", "zeta");
+          else assertThat(ids).containsExactly("alpha", "beta", "zeta");
+        }
+        case "REVOKED" ->
+            assertThat(state)
+                .containsEntry("outcome", "SUPERSEDED")
+                .containsEntry("error_code", "AUTHORITY_LOST");
+        case "REPEAT_CURSOR" ->
+            assertThat(state)
+                .containsEntry("outcome", "FAILED")
+                .containsEntry("error_code", "PROVIDER_PROTOCOL_ERROR");
+        default -> assertThat(state).containsEntry("outcome", null);
+      }
+      if (!scenario.equals("COMPLETE") && !scenario.equals("CUTOFF")) {
+        assertThat(count("provider_model_discovery_snapshots")).isZero();
+        assertThat(count("provider_model_discovery_entries")).isZero();
+      }
+      assertThat(count("provider_access_check_outbox")).isEqualTo(publicationFailure ? 1 : 0);
+    } finally {
+      if (publicationFailure)
+        jdbc.execute(
+            "alter table provider_model_discovery_entries drop constraint reject_discovery_entry");
       if (seeded) jdbc.update("delete from provider_deployment_policy where id=1");
     }
   }
