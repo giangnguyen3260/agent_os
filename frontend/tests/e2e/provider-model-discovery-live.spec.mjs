@@ -6,7 +6,7 @@ test.skip(
   'Requires disposable PostgreSQL, TLS Vault and the managed Model Discovery worker.',
 );
 
-test('Model Discovery recovers a request and binds a stored catalogue model in Agent Studio', async ({
+test('Model Discovery supplies a model which can be bound, granted and revoked in Agent Studio', async ({
   page,
   request,
 }) => {
@@ -201,4 +201,63 @@ test('Model Discovery recovers a request and binds a stored catalogue model in A
   const persisted = await page.request.get(binding);
   expect(persisted.status()).toBe(200);
   expect((await persisted.json()).data).toEqual(historical);
+
+  const grantPath = binding.replace(/model-binding$/, 'model-grant');
+  const permissions = studio.getByRole('region', {
+    name: 'Quyền dùng model',
+    exact: true,
+  });
+  const current = permissions.getByTestId('agent-model-grant-state');
+  const grantWrite = () =>
+    page.waitForResponse(
+      response =>
+        response.request().method() === 'PUT' &&
+        new URL(response.url()).pathname === grantPath,
+    );
+  await permissions
+    .getByRole('button', {name: 'Cấp quyền dùng model', exact: true})
+    .click();
+  const granted = grantWrite();
+  await permissions
+    .getByRole('button', {name: 'Xác nhận cấp quyền', exact: true})
+    .click();
+  const grantedResponse = await granted;
+  expect(grantedResponse.status()).toBe(200);
+  expect(grantedResponse.request().postDataJSON()).toEqual({
+    expectedRevision: 0,
+    expectedBindingRevision: 1,
+    enabled: true,
+  });
+  expect((await grantedResponse.json()).data).toMatchObject({
+    revision: 1,
+    bindingRevision: 1,
+    state: 'GRANTED',
+  });
+  await expect(current).toHaveText('Đã cấp quyền');
+
+  await permissions
+    .getByRole('button', {name: 'Thu hồi quyền dùng model', exact: true})
+    .click();
+  const revoked = grantWrite();
+  await permissions
+    .getByRole('button', {name: 'Xác nhận thu hồi', exact: true})
+    .click();
+  const revokedResponse = await revoked;
+  expect(revokedResponse.status()).toBe(200);
+  expect(revokedResponse.request().postDataJSON()).toEqual({
+    expectedRevision: 1,
+    expectedBindingRevision: 1,
+    enabled: false,
+  });
+  expect((await revokedResponse.json()).data).toMatchObject({
+    revision: 2,
+    bindingRevision: 1,
+    state: 'REVOKED',
+  });
+  await expect(current).toHaveText('Đã thu hồi quyền');
+  await page.reload();
+  await expect(current).toHaveText('Đã thu hồi quyền');
+  await expect(studio.getByTestId('agent-saved-model')).toHaveText(
+    'fixture-model-01',
+  );
 });

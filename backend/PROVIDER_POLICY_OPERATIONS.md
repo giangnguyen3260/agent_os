@@ -269,7 +269,7 @@ the provider connection and credential revision reviewed by the administrator.
 
 ### Agent model binding
 
-Apply V034 before enabling Model Discovery HTTP on the updated application.
+Apply V034 and V035 before enabling Model Discovery HTTP on the updated application.
 An organization ADMIN can configure the model binding in Agent Studio while
 the Agent is a Draft. Choices come from the latest eligible discovery for each
 connection and are revalidated at save time. A saved choice can be replaced or
@@ -283,6 +283,19 @@ and INSERT on `agent_model_binding_receipts`. Its locking reads also need UPDATE
 privilege on a key column of organizations, the provider policy, accounts,
 organization memberships, Agents and provider connections. The binding API
 does not need access to credential material in Vault.
+
+### Agent model grants
+
+An organization ADMIN can grant a Draft Agent permission for its currently
+available model binding, and can revoke a stored grant after the Agent or
+binding changes. Grants are versioned separately from bindings. Changing or
+clearing the binding makes the previous grant stale. A grant pins the binding
+revision and cannot authorize a provider call by itself. Execution also requires
+the runtime claim, current grant check and budget gates.
+
+The binding API database role also needs SELECT, INSERT and UPDATE on
+`agent_model_grants` and SELECT and INSERT on `agent_model_grant_receipts`.
+It uses the same locking and credential evidence privileges as model binding.
 
 ### Verify Access Check against OpenAI
 

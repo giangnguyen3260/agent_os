@@ -52,10 +52,65 @@ const {verifyCreated} = load(path.join(directory, 'provider-create-wire.ts'));
 const {bindingState, bindingConnections, confirmedBinding} = load(
   path.resolve(directory, '../agents/agent-model-binding-wire.ts'),
 );
+const {modelGrant, confirmedModelGrant} = load(
+  path.resolve(directory, '../agents/agent-model-grant-wire.ts'),
+);
 const org = '11111111-1111-4111-8111-111111111111';
 const actor = '22222222-2222-4222-8222-222222222222';
 const target = '33333333-3333-4333-8333-333333333333';
 const foreign = '44444444-4444-4444-8444-444444444444';
+
+test('Agent model grant accepts only known states and exact revision fields', () => {
+  const data = {
+    revision: 2,
+    bindingRevision: 3,
+    state: 'STALE',
+    canGrant: false,
+    canRevoke: true,
+  };
+  const value = {data, meta: {requestId: actor}};
+  assert.equal(modelGrant(value).state, 'STALE');
+  for (const update of [
+    {revision: 1.5},
+    {bindingRevision: '3'},
+    {state: 'ACTIVE'},
+    {canGrant: 1},
+    {credential: 'unexpected'},
+  ])
+    assert.throws(() => modelGrant({...value, data: {...data, ...update}}));
+  assert.throws(() => modelGrant({...value, meta: {requestId: 'invalid'}}));
+});
+
+test('Agent model grant checks receipt revision, binding and reviewed action', () => {
+  const request = {
+    expectedRevision: 2,
+    expectedBindingRevision: 3,
+    enabled: true,
+  };
+  const data = {
+    revision: 3,
+    bindingRevision: 3,
+    state: 'GRANTED',
+    canGrant: false,
+    canRevoke: true,
+  };
+  const value = {data, meta: {requestId: actor}};
+  assert.equal(confirmedModelGrant(value, request).revision, 3);
+  assert.throws(() =>
+    confirmedModelGrant(value, {...request, expectedRevision: 0}),
+  );
+  assert.throws(() =>
+    confirmedModelGrant(value, {...request, expectedBindingRevision: 4}),
+  );
+  assert.throws(() => confirmedModelGrant(value, {...request, enabled: false}));
+  assert.equal(
+    confirmedModelGrant(
+      {...value, data: {...data, state: 'REVOKED', canRevoke: false}},
+      {...request, enabled: false},
+    ).state,
+    'REVOKED',
+  );
+});
 
 test('Agent binding confirms only the reviewed catalogue and revision', () => {
   const selection = {

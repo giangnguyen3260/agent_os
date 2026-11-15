@@ -6,6 +6,7 @@ import {
   input,
   signal,
   untracked,
+  viewChild,
 } from '@angular/core';
 import {RouterLink} from '@angular/router';
 import {firstValueFrom, Subject, takeUntil, timeout} from 'rxjs';
@@ -24,6 +25,7 @@ import {
   ModelBindingState,
   sameBinding,
 } from './agent-model-binding-wire';
+import {AgentModelGrantComponent} from './agent-model-grant.component';
 
 interface Scope {
   organization: string;
@@ -45,7 +47,7 @@ interface Attempt {
 
 @Component({
   selector: 'app-agent-model-binding',
-  imports: [RouterLink],
+  imports: [RouterLink, AgentModelGrantComponent],
   templateUrl: './agent-model-binding.component.html',
   styleUrl: './agent-model-binding.component.css',
 })
@@ -54,6 +56,7 @@ export class AgentModelBindingComponent {
   readonly agentId = input.required<string>();
   private readonly http = inject(HttpClient);
   private readonly auth = inject(AuthService);
+  private readonly grant = viewChild(AgentModelGrantComponent);
   private scope: Scope | null = null;
   readonly state = signal<ModelBindingState | null>(null);
   readonly connections = signal<ModelBindingConnection[] | null>(null);
@@ -91,7 +94,16 @@ export class AgentModelBindingComponent {
   }
 
   dirty(): boolean {
-    return !!(this.model() || this.review() || this.attempt());
+    return !!(
+      this.model() ||
+      this.review() ||
+      this.attempt() ||
+      this.grant()?.dirty()
+    );
+  }
+
+  grantInProgress(): boolean {
+    return !!(this.grant()?.dirty() || this.grant()?.busy());
   }
 
   async refresh(): Promise<void> {
@@ -173,7 +185,8 @@ export class AgentModelBindingComponent {
       !!this.state()?.editable &&
       !this.requiresRefresh() &&
       !this.busy() &&
-      !this.attempt()
+      !this.attempt() &&
+      !this.grantInProgress()
     );
   }
 

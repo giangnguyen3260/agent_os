@@ -626,7 +626,7 @@ class ProviderCreateVaultHttpIT {
   }
 
   @Test
-  void browserDiscoversAndBindsAModelThroughAgentStudio() throws Exception {
+  void browserDiscoversBindsGrantsAndRevokesAModelThroughAgentStudio() throws Exception {
     UUID org = UUID.randomUUID(), actor = UUID.randomUUID();
     var human = seedCheckBrowserAdmin(org, actor, "Model Discovery");
     UUID draft = UUID.randomUUID();
@@ -714,6 +714,23 @@ class ProviderCreateVaultHttpIT {
                   draft))
           .containsEntry("connection_id", connection)
           .containsEntry("model_id", "fixture-model-01");
+      assertThat(
+              jdbc.queryForMap(
+                  "select revision,enabled,binding_revision from agent_model_grants"
+                      + " where organization_id=? and agent_id=?",
+                  org,
+                  draft))
+          .containsEntry("revision", 2)
+          .containsEntry("enabled", false)
+          .containsEntry("binding_revision", 1);
+      assertThat(
+              jdbc.queryForObject(
+                  "select count(*) from agent_model_grant_receipts"
+                      + " where organization_id=? and agent_id=?",
+                  Long.class,
+                  org,
+                  draft))
+          .isEqualTo(2L);
       assertThat(
               jdbc.queryForObject(
                   "select model from agent_draft_config where agent_id=?", String.class, draft))
@@ -1412,6 +1429,10 @@ class ProviderCreateVaultHttpIT {
           "grant select,insert,update on public.agent_model_bindings to vault_browser_web");
       statement.execute(
           "grant select,insert on public.agent_model_binding_receipts to vault_browser_web");
+      statement.execute(
+          "grant select,insert,update on public.agent_model_grants to vault_browser_web");
+      statement.execute(
+          "grant select,insert on public.agent_model_grant_receipts to vault_browser_web");
       statement.execute(
           "grant update(id) on"
               + " public.organizations,public.human_accounts,public.agents,public.provider_deployment_policy,public.provider_connections"
