@@ -589,6 +589,7 @@ values (?,?,?,?,?,?,?,?,?,?,?)
                   select connection_revision, credential_revision, policy_revision,
                          accepted_at, started_at, completed_at, outcome, error_code
                   from provider_access_checks where organization_id=? and connection_id=? and id=?
+                    and check_kind='ACCESS_CHECK'
                   """,
                   (rs, n) ->
                       new AccessCheckStatus(

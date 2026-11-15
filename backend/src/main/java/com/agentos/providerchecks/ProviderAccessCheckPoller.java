@@ -25,8 +25,9 @@ public final class ProviderAccessCheckPoller {
     for (var candidate :
         candidates(
             """
-            where (c.worker_owner_id is null and c.queue_expires_at <= current_timestamp)
-               or c.dispatch_deadline <= current_timestamp
+            where c.check_kind='ACCESS_CHECK'
+              and ((c.worker_owner_id is null and c.queue_expires_at <= current_timestamp)
+                   or c.dispatch_deadline <= current_timestamp)
             order by coalesce(c.dispatch_deadline, c.queue_expires_at), c.id limit ?
             """,
             EXPIRY_BATCH)) {
@@ -36,7 +37,8 @@ public final class ProviderAccessCheckPoller {
     var ready =
         candidates(
             """
-            where c.worker_owner_id is null and c.queue_expires_at > current_timestamp
+            where c.check_kind='ACCESS_CHECK'
+              and c.worker_owner_id is null and c.queue_expires_at > current_timestamp
             order by c.accepted_at, c.id limit ?
             """,
             1);
