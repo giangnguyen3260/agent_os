@@ -250,3 +250,21 @@ submission, own receipt recovery and the scoped check status endpoint.
 The web reader also needs SELECT on `provider_access_checks` and
 `provider_access_check_receipts`. Run the Access Check worker in the same
 deployment or as a separately configured process before exposing the UI.
+
+### Verify Access Check against OpenAI
+
+The disposable Vault acceptance suite uses a simulated provider response by
+default. To exercise OpenAI's live models endpoint, set
+`AGENTOS_ACCESS_CHECK_OPENAI_KEY_FILE` to the absolute path of a readable file
+containing an OpenAI test API key, then run the same suite from the repository
+root on a machine with provider HTTPS egress.
+
+```bash
+AGENTOS_ACCESS_CHECK_OPENAI_KEY_FILE=/absolute/path/to/test-key bash scripts/check-vault-local.sh
+```
+
+Use the same Vault image and built frontend prerequisites as the
+`vault-local.yml` workflow. The browser submits the check without the key.
+The worker reads the key from the disposable Vault and makes one models-list
+request. The suite expects the browser to display a successful result and
+verifies that PostgreSQL holds exactly one completed check.

@@ -6,6 +6,7 @@ import com.agentos.auth.HumanIdentity;
 import com.agentos.providerchecks.ProviderAccessCheckDispatch;
 import com.agentos.providerchecks.ProviderAccessCheckPoller;
 import com.agentos.providerchecks.ProviderAccessCheckRunner;
+import com.agentos.providerchecks.ProviderModelsTransport;
 import com.agentos.providercompletion.ProviderCompletionBoundary.WriteState;
 import com.agentos.providercreation.ProviderCreateCoordinator;
 import com.agentos.providercredentials.CredentialBoundary;
@@ -16,6 +17,7 @@ import com.agentos.providerpreparation.ProviderPreparationJournal;
 import com.agentos.providerpublication.ProviderPublicationClient;
 import com.agentos.providertransport.ProviderCreateBody;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.ByteArrayOutputStream;
 import java.io.EOFException;
 import java.io.IOException;
 import java.net.CookieManager;
@@ -41,6 +43,7 @@ import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.net.ssl.SSLContext;
@@ -580,14 +583,9 @@ class ProviderCreateVaultHttpIT {
             + " (?,?,'ADMIN')",
         actor,
         org);
+    String keyFile = System.getenv("AGENTOS_ACCESS_CHECK_OPENAI_KEY_FILE");
     UUID connection;
-    try (var body =
-        ProviderCreateBody.consume(
-            ("{\"provider\":\"OPENAI\",\"credentialMode\":\"OPENAI_API_KEY\","
-                    + "\"name\":\"Access Check fixture\",\"options\":{},\"apiKey\":\""
-                    + SECRET
-                    + "\"}")
-                .getBytes(StandardCharsets.UTF_8))) {
+    try (var body = accessCheckCreateBody(keyFile)) {
       var created =
           creates.create(
               new HumanIdentity(actor, email, "Access Check", 0), org, UUID.randomUUID(), body);
@@ -600,26 +598,31 @@ class ProviderCreateVaultHttpIT {
     var runtime = configured.runtime();
     var dispatch = new ProviderAccessCheckDispatch(runtime.datasource());
     var sent = new AtomicInteger();
-    var runner =
-        new ProviderAccessCheckRunner(
-            dispatch,
-            runtime.connections(),
-            configured.credentials(),
-            (provider, workspace, key, deadline) -> {
-              if (provider != Provider.OPENAI
-                  || workspace != null
-                  || !Arrays.equals(key, SECRET.getBytes(StandardCharsets.US_ASCII)))
-                return ProviderAccessCheckDispatch.Result.PROTOCOL_ERROR;
-              sent.incrementAndGet();
-              return ProviderAccessCheckDispatch.Result.ACCESSIBLE;
-            },
-            Clock.systemUTC());
-    var poller = new ProviderAccessCheckPoller(runtime.datasource(), dispatch, runner);
-    var worker = new ProviderAccessCheckWorkerConfiguration.Worker(poller, 100);
-    try {
-      runConnectionBrowser("access_check", org, actor, connection);
-    } finally {
-      worker.destroy();
+    var clock = Clock.systemUTC();
+    try (var cancellations = Executors.newSingleThreadScheduledExecutor()) {
+      var live = new ProviderModelsTransport(clock, cancellations);
+      var runner =
+          new ProviderAccessCheckRunner(
+              dispatch,
+              runtime.connections(),
+              configured.credentials(),
+              (provider, workspace, key, deadline) -> {
+                if (provider != Provider.OPENAI || workspace != null)
+                  return ProviderAccessCheckDispatch.Result.PROTOCOL_ERROR;
+                sent.incrementAndGet();
+                if (keyFile != null) return live.request(provider, workspace, key, deadline);
+                return Arrays.equals(key, SECRET.getBytes(StandardCharsets.US_ASCII))
+                    ? ProviderAccessCheckDispatch.Result.ACCESSIBLE
+                    : ProviderAccessCheckDispatch.Result.PROTOCOL_ERROR;
+              },
+              clock);
+      var poller = new ProviderAccessCheckPoller(runtime.datasource(), dispatch, runner);
+      var worker = new ProviderAccessCheckWorkerConfiguration.Worker(poller, 100);
+      try {
+        runConnectionBrowser("access_check", org, actor, connection);
+      } finally {
+        worker.destroy();
+      }
     }
     assertThat(sent.get()).isEqualTo(1);
     assertThat(
@@ -636,6 +639,37 @@ class ProviderCreateVaultHttpIT {
                 Long.class,
                 org))
         .isZero();
+  }
+
+  private ProviderCreateBody accessCheckCreateBody(String keyFile) throws IOException {
+    char[] key =
+        keyFile == null
+            ? SECRET.toCharArray()
+            : ProviderVaultConfiguration.readToken(Path.of(keyFile));
+    // The JSON copy is consumed by the body decoder. Clear the generator's output buffer too.
+    var encoded =
+        new ByteArrayOutputStream() {
+          void clear() {
+            Arrays.fill(buf, (byte) 0);
+          }
+        };
+    try {
+      try (var writer = json.getFactory().createGenerator(encoded)) {
+        writer.writeStartObject();
+        writer.writeStringField("provider", "OPENAI");
+        writer.writeStringField("credentialMode", "OPENAI_API_KEY");
+        writer.writeStringField("name", "Access Check fixture");
+        writer.writeObjectFieldStart("options");
+        writer.writeEndObject();
+        writer.writeFieldName("apiKey");
+        writer.writeString(key, 0, key.length);
+        writer.writeEndObject();
+      }
+      return ProviderCreateBody.consume(encoded.toByteArray());
+    } finally {
+      Arrays.fill(key, '\0');
+      encoded.clear();
+    }
   }
 
   private void publishAccessCheckEvidence(UUID org, UUID connection) {
