@@ -6,13 +6,14 @@ test.skip(
   'Requires disposable PostgreSQL, TLS Vault and the managed Model Discovery worker.',
 );
 
-test('Model Discovery recovers a committed request and pages through the stored catalogue', async ({
+test('Model Discovery recovers a request and binds a stored catalogue model in Agent Studio', async ({
   page,
   request,
 }) => {
   test.setTimeout(90_000);
   const organization = process.env.PROVIDER_VAULT_ORG;
   const connection = process.env.PROVIDER_MODEL_DISCOVERY_CONNECTION;
+  const agent = process.env.PROVIDER_MODEL_DISCOVERY_AGENT;
   const email = process.env.PROVIDER_VAULT_EMAIL;
   const password = process.env.PROVIDER_VAULT_PASSWORD;
   if (!organization || !connection || !email || !password)
@@ -149,4 +150,55 @@ test('Model Discovery recovers a committed request and pages through the stored 
   );
   expect(wrongConnection.status()).toBe(404);
   expect(submissions).toHaveLength(1);
+
+  if (!agent) throw new Error('Missing disposable Agent Studio fixture');
+  const binding = `/api/v1/organizations/${organization}/agents/${agent}/model-binding`;
+  await page.goto(`/workspace/${organization}/agents/${agent}/studio`);
+  const studio = page.getByRole('region', {
+    name: 'Gắn model cho Agent',
+    exact: true,
+  });
+  await studio.getByRole('button', {name: 'Chọn model', exact: true}).click();
+  await studio
+    .getByRole('combobox', {name: 'Kết nối nhà cung cấp', exact: true})
+    .selectOption(connection);
+  await studio
+    .getByRole('combobox', {name: 'Model', exact: true})
+    .selectOption('fixture-model-01');
+  await studio
+    .getByRole('button', {name: 'Xem lại lựa chọn', exact: true})
+    .click();
+  const saved = page.waitForResponse(
+    response =>
+      response.request().method() === 'PUT' &&
+      new URL(response.url()).pathname === binding,
+  );
+  await studio.getByRole('button', {name: 'Lưu model', exact: true}).click();
+  const result = await saved;
+  expect(result.status()).toBe(200);
+  expect(result.request().postDataJSON()).toEqual({
+    expectedRevision: 0,
+    selection: {
+      connectionId: connection,
+      checkId: acceptedReceipt.checkId,
+      modelId: 'fixture-model-01',
+    },
+  });
+  const historical = (await result.json()).data;
+  expect(historical.binding).toMatchObject({
+    connectionId: connection,
+    checkId: acceptedReceipt.checkId,
+    modelId: 'fixture-model-01',
+    status: 'CURRENT',
+  });
+  await expect(studio.getByTestId('agent-saved-model')).toHaveText(
+    'fixture-model-01',
+  );
+  await page.reload();
+  await expect(
+    studio.getByText('fixture-model-01', {exact: true}),
+  ).toBeVisible();
+  const persisted = await page.request.get(binding);
+  expect(persisted.status()).toBe(200);
+  expect((await persisted.json()).data).toEqual(historical);
 });

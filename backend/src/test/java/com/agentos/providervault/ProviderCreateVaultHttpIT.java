@@ -626,9 +626,26 @@ class ProviderCreateVaultHttpIT {
   }
 
   @Test
-  void browserDiscoversAndReadsTheCommittedCatalogueThroughTheManagedWorker() throws Exception {
+  void browserDiscoversAndBindsAModelThroughAgentStudio() throws Exception {
     UUID org = UUID.randomUUID(), actor = UUID.randomUUID();
     var human = seedCheckBrowserAdmin(org, actor, "Model Discovery");
+    UUID draft = UUID.randomUUID();
+    jdbc.update(
+        """
+        insert into agents
+          (id,organization_id,name,role,level,status,autonomy_level,created_at,updated_at)
+        values (?,?,'Discovery fixture Agent','Reviewer','MID','DRAFT','OBSERVE',
+                current_timestamp,current_timestamp)
+        """,
+        draft,
+        org);
+    jdbc.update(
+        """
+        insert into agent_draft_config
+          (agent_id,responsibilities,expected_input,output_format,acceptance_criteria,model)
+        values (?,'Review','Notes','Summary','Complete','Legacy model label')
+        """,
+        draft);
     boolean enabled =
         Boolean.TRUE.equals(
             jdbc.queryForObject(
@@ -683,12 +700,26 @@ class ProviderCreateVaultHttpIT {
           new ProviderAccessCheckWorkerConfiguration.Worker(
               poller::dispatchNext, poller::expireOutstanding, 100);
       try {
-        runConnectionBrowser("model_discovery", org, actor, connection);
+        runConnectionBrowser("model_discovery", org, actor, connection, draft);
       } finally {
         worker.destroy();
       }
 
       assertThat(sends.get()).isEqualTo(2);
+      assertThat(
+              jdbc.queryForMap(
+                  "select connection_id,model_id from agent_model_bindings"
+                      + " where organization_id=? and agent_id=?",
+                  org,
+                  draft))
+          .containsEntry("connection_id", connection)
+          .containsEntry("model_id", "fixture-model-01");
+      assertThat(
+              jdbc.queryForObject(
+                  "select model from agent_draft_config where agent_id=?", String.class, draft))
+          .isEqualTo("Legacy model label");
+      assertThat(jdbc.queryForObject("select status from agents where id=?", String.class, draft))
+          .isEqualTo("DRAFT");
       assertThat(
               jdbc.queryForList(
                   "select outcome from provider_access_checks where organization_id=?"
@@ -914,6 +945,11 @@ class ProviderCreateVaultHttpIT {
 
   private void runConnectionBrowser(String operation, UUID org, UUID actor, UUID connection)
       throws Exception {
+    runConnectionBrowser(operation, org, actor, connection, null);
+  }
+
+  private void runConnectionBrowser(
+      String operation, UUID org, UUID actor, UUID connection, UUID draft) throws Exception {
     Path frontend = Path.of(System.getProperty("user.dir")).toAbsolutePath().resolve("frontend");
     if (!Files.isDirectory(frontend))
       frontend = frontend.getParent().getParent().resolve("frontend");
@@ -959,6 +995,8 @@ class ProviderCreateVaultHttpIT {
       command.environment().put("PROVIDER_VAULT_EMAIL", actor + "@example.test");
       command.environment().put("PROVIDER_VAULT_PASSWORD", PASSWORD);
       command.environment().put(prefix + "_CONNECTION", connection.toString());
+      if (draft != null)
+        command.environment().put("PROVIDER_MODEL_DISCOVERY_AGENT", draft.toString());
       Path diagnostics =
           Files.createTempFile(
               "provider-" + operation + "-browser-",
@@ -1368,7 +1406,18 @@ class ProviderCreateVaultHttpIT {
       statement.execute(
           "grant select on public.provider_model_discovery_snapshots,"
               + "public.provider_model_discovery_entries to vault_browser_web");
-      statement.execute("grant update(id) on public.human_accounts to vault_browser_web");
+      statement.execute(
+          "grant select on public.agents,public.agent_draft_config to vault_browser_web");
+      statement.execute(
+          "grant select,insert,update on public.agent_model_bindings to vault_browser_web");
+      statement.execute(
+          "grant select,insert on public.agent_model_binding_receipts to vault_browser_web");
+      statement.execute(
+          "grant update(id) on"
+              + " public.organizations,public.human_accounts,public.agents,public.provider_deployment_policy,public.provider_connections"
+              + " to vault_browser_web");
+      statement.execute(
+          "grant update(account_id) on public.organization_memberships to vault_browser_web");
       statement.execute(
           "grant select,insert,update on public.authentication_attempts,"
               + "public.provider_read_admission to vault_browser_web");
