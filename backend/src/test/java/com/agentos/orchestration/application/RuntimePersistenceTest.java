@@ -269,7 +269,7 @@ values (?,?,?,?,?,?,'CREATED')
     assertThatThrownBy(() -> tx.executeWithoutResult(status -> store.invalidate(token)))
         .isInstanceOf(IllegalStateException.class);
     tx.executeWithoutResult(status -> store.requireCurrent(next));
-    verifyBudget(jdbc, tx, store, next, team, agent, mission, controls, scope);
+    var pending = verifyBudget(jdbc, tx, store, next, team, agent, mission, controls, scope);
     assertThat(
             tx.<Long>execute(
                 status ->
@@ -293,9 +293,49 @@ values (?,?,?,?,?,?,'CREATED')
         .isEqualTo("RUNNING");
     assertThatThrownBy(() -> tx.executeWithoutResult(status -> store.requireCurrent(next)))
         .isInstanceOf(IllegalStateException.class);
+
+    assertThatThrownBy(() -> tx.execute(status -> controls.acknowledgeCancellation(scope, 6)))
+        .hasMessage("Mission execution control is unavailable.");
+    // Simulate trusted reconciliation of the Attempt, retaining the resulting outcome.
+    jdbc.update(
+        "update execution_attempts set status='SUCCEEDED',outcome_slot=3 where id=?",
+        next.attempt());
+    assertThatThrownBy(() -> tx.execute(status -> controls.acknowledgeCancellation(scope, 6)))
+        .hasMessage("Mission execution control is unavailable.");
+    tx.executeWithoutResult(status -> store.invalidate(next));
+    var budgets = new ExecutionBudgetStore(jdbc, store);
+    tx.executeWithoutResult(status -> budgets.markUnknown(org, run, pending));
+    assertThatThrownBy(() -> tx.execute(status -> controls.acknowledgeCancellation(scope, 6)))
+        .hasMessage("Mission execution control is unavailable.");
+    tx.executeWithoutResult(status -> budgets.settleVerified(org, run, pending, 0));
+
+    jdbc.update(
+        """
+        update tasks set status='BLOCKED',pending_reason='Awaiting cancellation',
+          waiting_since=current_timestamp,resolver='Runtime'
+        where id=(select task_id from execution_runs where id=?)
+        """,
+        run);
+    assertThatThrownBy(() -> tx.execute(status -> controls.acknowledgeCancellation(scope, 5)))
+        .hasMessage("Mission execution control is unavailable.");
+    assertThat(tx.<Long>execute(status -> controls.acknowledgeCancellation(scope, 6))).isEqualTo(7);
+    assertThat(jdbc.queryForObject("select status from missions where id=?", String.class, mission))
+        .isEqualTo("CANCELLED");
+    assertThat(
+            jdbc.queryForObject("select status from execution_runs where id=?", String.class, run))
+        .isEqualTo("CANCELLED");
+    assertThat(
+            jdbc.queryForList("select status from tasks where mission_id=?", String.class, mission))
+        .containsExactlyInAnyOrder("DRAFT", "CANCELLED");
+    assertThat(
+            jdbc.queryForObject(
+                "select status from execution_attempts where id=?", String.class, next.attempt()))
+        .isEqualTo("SUCCEEDED");
+    assertThatThrownBy(() -> tx.execute(status -> controls.acknowledgeCancellation(scope, 6)))
+        .hasMessage("Mission execution control is unavailable.");
   }
 
-  private void verifyBudget(
+  private UUID verifyBudget(
       JdbcTemplate jdbc,
       TransactionTemplate tx,
       ExecutionClaimStore claims,
@@ -540,6 +580,13 @@ values (?,?,'OPENAI','OPENAI_API_KEY','Fixture','ENABLED',1,1,current_timestamp,
                         budget.settleModelUsage(
                             org, token.run(), rejected, connection, "req_late", 0, 0, 0)))
         .isInstanceOf(IllegalStateException.class);
+    jdbc.update(
+        "update execution_budget_reservations set admitted_at=? where action_id=?",
+        OffsetDateTime.now().minusMinutes(2),
+        rejected);
+    var pending = UUID.randomUUID();
+    assertThat(tx.<Boolean>execute(status -> budget.reserve(token, pending, 1))).isTrue();
+    return pending;
   }
 
   private ExecutionClaimStore.Token tryIssue(
