@@ -1,6 +1,11 @@
 package com.agentos.orchestration.application;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.OffsetDateTime;
+import java.util.HexFormat;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
@@ -15,6 +20,9 @@ class ExecutionBudgetStore {
       UUID id, String scope, int maxConcurrent, int maxAdmissions, int windowSeconds) {}
 
   private record Usage(long concurrent, long recent) {}
+
+  private record ModelUsage(
+      UUID connection, String requestSha256, long inputTokens, long outputTokens) {}
 
   private record Reservation(UUID attempt, long fence, long reserved, String status, Long actual) {}
 
@@ -144,6 +152,75 @@ where current_bucket.id=? and (r.admitted_at>? or r.status in ('HELD','UNKNOWN')
         action);
   }
 
+  // Called after trusted reconciliation verifies the provider response against the action.
+  void settleModelUsage(
+      UUID organization,
+      UUID run,
+      UUID action,
+      UUID connection,
+      String providerRequestId,
+      long inputTokens,
+      long outputTokens,
+      long actual) {
+    if (connection == null
+        || providerRequestId == null
+        || providerRequestId.isBlank()
+        || providerRequestId.length() > 512
+        || inputTokens < 0
+        || outputTokens < 0
+        || actual < 0) {
+      throw unavailable();
+    }
+    claims.lockRun(organization, run, false);
+    var reservation = requireReservation(run, action);
+    var usage =
+        new ModelUsage(connection, hashRequestId(providerRequestId), inputTokens, outputTokens);
+    if ("SETTLED".equals(reservation.status())) {
+      var existing =
+          jdbc.query(
+              """
+              select connection_id,provider_request_sha256,input_tokens,output_tokens
+              from execution_model_usage where run_id=? and action_id=?
+              """,
+              (rs, row) ->
+                  new ModelUsage(
+                      rs.getObject(1, UUID.class), rs.getString(2), rs.getLong(3), rs.getLong(4)),
+              run,
+              action);
+      if (reservation.actual() == actual && existing.equals(List.of(usage))) return;
+      throw unavailable();
+    }
+
+    // The database rejects a foreign connection or reuse of the same provider receipt.
+    jdbc.update(
+        """
+        insert into execution_model_usage
+          (organization_id,run_id,action_id,connection_id,provider_request_sha256,
+           input_tokens,output_tokens,recorded_at)
+        values (?,?,?,?,?,?,?,?)
+        """,
+        organization,
+        run,
+        action,
+        usage.connection(),
+        usage.requestSha256(),
+        usage.inputTokens(),
+        usage.outputTokens(),
+        claims.now());
+    settle(organization, run, action, reservation, actual);
+  }
+
+  private static String hashRequestId(String requestId) {
+    try {
+      return HexFormat.of()
+          .formatHex(
+              MessageDigest.getInstance("SHA-256")
+                  .digest(requestId.getBytes(StandardCharsets.UTF_8)));
+    } catch (NoSuchAlgorithmException exception) {
+      throw new IllegalStateException("SHA-256 unavailable", exception);
+    }
+  }
+
   // Only a trusted reconciliation command can attest the final actual amount.
   void settleVerified(UUID organization, UUID run, UUID action, long actual) {
     if (actual < 0) throw unavailable();
@@ -153,6 +230,11 @@ where current_bucket.id=? and (r.admitted_at>? or r.status in ('HELD','UNKNOWN')
       if (reservation.actual() == actual) return;
       throw unavailable();
     }
+    settle(organization, run, action, reservation, actual);
+  }
+
+  private void settle(
+      UUID organization, UUID run, UUID action, Reservation reservation, long actual) {
     var buckets =
         jdbc.queryForList(
             """
