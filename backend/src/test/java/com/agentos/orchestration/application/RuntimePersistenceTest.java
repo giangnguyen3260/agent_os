@@ -98,6 +98,7 @@ values (?,?,?,'Agent','Reviewer','MID','DRAFT','OBSERVE',current_timestamp,curre
           "execution_claims",
           "execution_budget_buckets",
           "execution_capacity_limits",
+          "execution_model_usage",
           "execution_budget_reservations",
           "execution_budget_reservation_buckets"
         }) {
@@ -313,8 +314,56 @@ values (?,?,?,?,?,?,'CREATED')
                 tx.executeWithoutResult(
                     status -> budget.settleVerified(UUID.randomUUID(), token.run(), action, 55)))
         .isInstanceOf(IllegalStateException.class);
-    tx.executeWithoutResult(status -> budget.settleVerified(org, token.run(), action, 55));
-    tx.executeWithoutResult(status -> budget.settleVerified(org, token.run(), action, 55));
+    var connection = UUID.randomUUID();
+    jdbc.update(
+        """
+insert into provider_credential_versions
+  (organization_id,connection_id,provider,credential_revision,external_locator,
+   external_key_version,hmac_key_version,hmac_domain_version,verifier,created_at)
+values (?,?,'OPENAI',1,'fixture-locator','fixture-key','fixture-hmac','v2',?,current_timestamp)
+""",
+        org,
+        connection,
+        "0".repeat(44));
+    jdbc.update(
+        """
+insert into provider_connections
+  (id,organization_id,provider,mode,name,state,configuration_revision,
+   credential_revision,created_at,updated_at)
+values (?,?,'OPENAI','OPENAI_API_KEY','Fixture','DISABLED',1,1,current_timestamp,current_timestamp)
+""",
+        connection,
+        org);
+    String requestId = "req_fixture";
+    assertThatThrownBy(
+            () ->
+                tx.executeWithoutResult(
+                    status ->
+                        budget.settleModelUsage(
+                            org, token.run(), action, UUID.randomUUID(), requestId, 17, 6, 55)))
+        .isInstanceOf(DataIntegrityViolationException.class);
+    assertThat(jdbc.queryForList("select held_microusd from execution_budget_buckets", Long.class))
+        .containsExactly(40L, 40L, 40L, 40L);
+    tx.executeWithoutResult(
+        status ->
+            budget.settleModelUsage(org, token.run(), action, connection, requestId, 17, 6, 55));
+    tx.executeWithoutResult(
+        status ->
+            budget.settleModelUsage(org, token.run(), action, connection, requestId, 17, 6, 55));
+    assertThatThrownBy(
+            () ->
+                tx.executeWithoutResult(
+                    status ->
+                        budget.settleModelUsage(
+                            org, token.run(), action, connection, requestId, 18, 6, 55)))
+        .isInstanceOf(IllegalStateException.class);
+    assertThat(jdbc.queryForMap("select input_tokens,output_tokens from execution_model_usage"))
+        .containsEntry("input_tokens", 17L)
+        .containsEntry("output_tokens", 6L);
+    assertThat(
+            jdbc.queryForObject(
+                "select provider_request_sha256 from execution_model_usage", String.class))
+        .matches("[0-9a-f]{64}");
     assertThatThrownBy(
             () ->
                 tx.executeWithoutResult(
@@ -347,6 +396,42 @@ values (?,?,?,?,?,?,'CREATED')
         OffsetDateTime.now().minusMinutes(2),
         action);
     assertThat(tx.<Boolean>execute(status -> budget.reserve(token, rejected, 1))).isTrue();
+    assertThatThrownBy(
+            () ->
+                tx.executeWithoutResult(
+                    status ->
+                        budget.settleModelUsage(
+                            org, token.run(), rejected, connection, requestId, 17, 6, 55)))
+        .isInstanceOf(DataIntegrityViolationException.class);
+    assertThat(
+            jdbc.queryForObject(
+                "select status from execution_budget_reservations where action_id=?",
+                String.class,
+                rejected))
+        .isEqualTo("HELD");
+    assertThatThrownBy(
+            () ->
+                tx.executeWithoutResult(
+                    status -> {
+                      jdbc.update(
+                          "delete from execution_budget_reservation_buckets where action_id=? and"
+                              + " bucket_id in (select id from execution_budget_buckets where"
+                              + " scope='ORGANIZATION')",
+                          rejected);
+                      budget.settleModelUsage(
+                          org, token.run(), rejected, connection, "req_rollback", 3, 2, 1);
+                    }))
+        .hasMessage("Execution budget is unavailable.");
+    assertThat(jdbc.queryForObject("select count(*) from execution_model_usage", Integer.class))
+        .isEqualTo(1);
+    tx.executeWithoutResult(status -> budget.settleVerified(org, token.run(), rejected, 0));
+    assertThatThrownBy(
+            () ->
+                tx.executeWithoutResult(
+                    status ->
+                        budget.settleModelUsage(
+                            org, token.run(), rejected, connection, "req_late", 0, 0, 0)))
+        .isInstanceOf(IllegalStateException.class);
   }
 
   private ExecutionClaimStore.Token tryIssue(

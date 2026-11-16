@@ -23,3 +23,9 @@ An unknown outcome retains the full hold. A trusted reconciliation transaction r
 V039 requires an explicit capacity policy for each organization, Team, Agent and Mission matched by the reservation. The budget store checks all four policies under the organization lock in the same transaction as the claim and budget hold. Rate counts committed action admissions in a rolling window. Concurrency counts held and unknown reservations until verified settlement. Both counts span budget-window changes. A matching hold replay creates no admission, and a rolled-back hold consumes no capacity. Existing reservations without admission timestamps count from migration time for rate purposes.
 
 Policy writers must use the same organization lock as admission. The migration creates no default policies. Capacity represents locally admitted actions and is conservative for uncertain provider outcomes. Provider dispatch remains gated.
+
+## Verified model usage
+
+V040 records model input and output token counts for a settled action. A trusted reconciliation caller verifies the provider response against the action before submitting it. The store writes the token receipt and settles the corresponding budget reservation in one transaction. An exact replay preserves the first result, and a conflicting replay or reuse of the same provider request for another action fails. The receipt stores a SHA-256 digest of the request identifier and a same-organization provider connection reference. Cost-only settlements remain readable and cannot be retroactively turned into model receipts.
+
+This slice adds accounting storage. Provider response verification and dispatch require the future outbound authorization ledger.
