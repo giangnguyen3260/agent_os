@@ -2,7 +2,10 @@ package com.agentos.orchestration.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
+import com.agentos.agent.application.AgentModelGrantService;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -99,6 +102,7 @@ values (?,?,?,'Agent','Reviewer','MID','DRAFT','OBSERVE',current_timestamp,curre
           "execution_budget_buckets",
           "execution_capacity_limits",
           "execution_model_usage",
+          "execution_model_authorizations",
           "execution_budget_reservations",
           "execution_budget_reservation_buckets"
         }) {
@@ -285,7 +289,61 @@ values (?,?,?,?,?,?,'CREATED')
     assertThatThrownBy(() -> tx.execute(status -> budget.reserve(token, action, 40)))
         .hasMessage("Execution capacity is unavailable.");
     jdbc.update(insertLimit, org, "MISSION", mission);
-    assertThat(tx.<Boolean>execute(status -> budget.reserve(token, action, 40))).isTrue();
+    var connection = UUID.randomUUID();
+    jdbc.update(
+        """
+insert into provider_credential_versions
+  (organization_id,connection_id,provider,credential_revision,external_locator,
+   external_key_version,hmac_key_version,hmac_domain_version,verifier,created_at)
+values (?,?,'OPENAI',1,'fixture-locator','fixture-key','fixture-hmac','v2',?,current_timestamp)
+""",
+        org,
+        connection,
+        "0".repeat(44));
+    jdbc.update(
+        """
+insert into provider_connections
+  (id,organization_id,provider,mode,name,state,configuration_revision,
+   credential_revision,created_at,updated_at)
+values (?,?,'OPENAI','OPENAI_API_KEY','Fixture','ENABLED',1,1,current_timestamp,current_timestamp)
+""",
+        connection,
+        org);
+    var grants = mock(AgentModelGrantService.class);
+    var authorizations = new ExecutionModelAuthorizationStore(jdbc, claims, budget, grants, true);
+    var request =
+        new ExecutionModelAuthorizationStore.Request(
+            action, connection, "fixture-model", "a".repeat(64), 40);
+    assertThatThrownBy(
+            () -> tx.executeWithoutResult(status -> authorizations.authorize(token, request)))
+        .hasMessage("Model action authorization is unavailable.");
+    jdbc.update("update agents set status='ACTIVE' where id=?", agent);
+    jdbc.update("update missions set status='RUNNING' where id=?", mission);
+    jdbc.update(
+        "update tasks set status='RUNNING',owner_agent_id=? where id="
+            + "(select task_id from execution_runs where id=?)",
+        agent,
+        token.run());
+    jdbc.update(
+        """
+        insert into provider_deployment_policy
+          (id,revision,openai_enabled,anthropic_enabled,gemini_enabled,created_at,updated_at)
+        values (1,1,true,false,false,current_timestamp,current_timestamp)
+        """);
+    assertThatThrownBy(
+            () -> tx.executeWithoutResult(status -> authorizations.authorize(token, request)))
+        .hasMessage("Model action authorization is unavailable.");
+    when(grants.hasCurrentGrant(org, agent, connection, "fixture-model")).thenReturn(true);
+    tx.executeWithoutResult(status -> authorizations.authorize(token, request));
+    assertThatThrownBy(
+            () -> tx.executeWithoutResult(status -> authorizations.authorize(token, request)))
+        .hasMessage("Model action authorization is unavailable.");
+    assertThat(
+            jdbc.queryForMap(
+                "select fence,model_id,request_sha256 from execution_model_authorizations"))
+        .containsEntry("fence", token.fence())
+        .containsEntry("model_id", request.model())
+        .containsEntry("request_sha256", request.sha256());
     assertThat(tx.<Boolean>execute(status -> budget.reserve(token, action, 40))).isFalse();
     assertThatThrownBy(() -> tx.execute(status -> budget.reserve(token, action, 39)))
         .isInstanceOf(IllegalStateException.class);
@@ -314,26 +372,6 @@ values (?,?,?,?,?,?,'CREATED')
                 tx.executeWithoutResult(
                     status -> budget.settleVerified(UUID.randomUUID(), token.run(), action, 55)))
         .isInstanceOf(IllegalStateException.class);
-    var connection = UUID.randomUUID();
-    jdbc.update(
-        """
-insert into provider_credential_versions
-  (organization_id,connection_id,provider,credential_revision,external_locator,
-   external_key_version,hmac_key_version,hmac_domain_version,verifier,created_at)
-values (?,?,'OPENAI',1,'fixture-locator','fixture-key','fixture-hmac','v2',?,current_timestamp)
-""",
-        org,
-        connection,
-        "0".repeat(44));
-    jdbc.update(
-        """
-insert into provider_connections
-  (id,organization_id,provider,mode,name,state,configuration_revision,
-   credential_revision,created_at,updated_at)
-values (?,?,'OPENAI','OPENAI_API_KEY','Fixture','DISABLED',1,1,current_timestamp,current_timestamp)
-""",
-        connection,
-        org);
     String requestId = "req_fixture";
     assertThatThrownBy(
             () ->
@@ -341,7 +379,7 @@ values (?,?,'OPENAI','OPENAI_API_KEY','Fixture','DISABLED',1,1,current_timestamp
                     status ->
                         budget.settleModelUsage(
                             org, token.run(), action, UUID.randomUUID(), requestId, 17, 6, 55)))
-        .isInstanceOf(DataIntegrityViolationException.class);
+        .hasMessage("Execution budget is unavailable.");
     assertThat(jdbc.queryForList("select held_microusd from execution_budget_buckets", Long.class))
         .containsExactly(40L, 40L, 40L, 40L);
     tx.executeWithoutResult(

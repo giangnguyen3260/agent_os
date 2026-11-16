@@ -29,3 +29,9 @@ Policy writers must use the same organization lock as admission. The migration c
 V040 records model input and output token counts for a settled action. A trusted reconciliation caller verifies the provider response against the action before submitting it. The store writes the token receipt and settles the corresponding budget reservation in one transaction. An exact replay preserves the first result, and a conflicting replay or reuse of the same provider request for another action fails. The receipt stores a SHA-256 digest of the request identifier and a same-organization provider connection reference. Cost-only settlements remain readable and cannot be retroactively turned into model receipts.
 
 This slice adds accounting storage. Provider response verification and dispatch require the future outbound authorization ledger.
+
+## Model action authorization
+
+V041 records the exact Run, Attempt, claim fence, accepted owner, provider connection and credential revision, model and canonical request digest. The internal store checks the running Task and accepted revisions, current grant and provider evidence, then acquires the budget hold and writes the decision in the same transaction. Only a fresh hold can authorize an action. Reconciliation must use the recorded connection when a decision exists. Legacy reservations retain their existing reconciliation behavior.
+
+The gateway remains blocked. Before enabling transport, the runtime caller must provide the authenticated worker, serialize Mission execution controls with this decision, and dispatch only the exact committed request. An authorization row alone is insufficient to infer whether a provider received a request.
