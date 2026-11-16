@@ -19,10 +19,12 @@ class ExecutionClaimStore {
       Token token, OffsetDateTime expiresAt, OffsetDateTime deadline, boolean invalidated) {}
 
   private final JdbcTemplate jdbc;
+  private final MissionExecutionControlStore controls;
   private final String wallClockQuery;
 
-  ExecutionClaimStore(JdbcTemplate jdbc) {
+  ExecutionClaimStore(JdbcTemplate jdbc, MissionExecutionControlStore controls) {
     this.jdbc = jdbc;
+    this.controls = controls;
     this.wallClockQuery =
         jdbc.execute(
             (ConnectionCallback<String>)
@@ -40,6 +42,7 @@ class ExecutionClaimStore {
       OffsetDateTime expiresAt,
       OffsetDateTime deadline) {
     lockRun(organization, run, true);
+    controls.requireOpen(organization, run);
     requireRunningAttempt(run, attempt);
     var previous = latest(organization, run);
     if (previous != null

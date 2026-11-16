@@ -103,6 +103,7 @@ values (?,?,?,'Agent','Reviewer','MID','DRAFT','OBSERVE',current_timestamp,curre
           "execution_capacity_limits",
           "execution_model_usage",
           "execution_model_authorizations",
+          "mission_execution_controls",
           "execution_budget_reservations",
           "execution_budget_reservation_buckets"
         }) {
@@ -173,11 +174,34 @@ values (?,?,?,?,?,?,'CREATED')
       throws Exception {
     jdbc.update("update execution_runs set status='RUNNING' where id=?", run);
     var tx = new TransactionTemplate(new DataSourceTransactionManager(jdbc.getDataSource()));
-    var store = new ExecutionClaimStore(jdbc);
+    var controls = new MissionExecutionControlStore(jdbc);
+    var scope = new MissionExecutionControlStore.Scope(org, team, mission);
+    var store = new ExecutionClaimStore(jdbc, controls);
+    jdbc.update("update missions set status='RUNNING' where id=?", mission);
     var deadline = OffsetDateTime.now().plusMinutes(10);
     var expiry = deadline.minusMinutes(2);
     var firstWorker = UUID.randomUUID();
     var secondWorker = UUID.randomUUID();
+    assertThatThrownBy(
+            () ->
+                tx.execute(
+                    status -> store.issueFresh(org, run, attempt, firstWorker, expiry, deadline)))
+        .hasMessage("Mission execution control is unavailable.");
+    tx.executeWithoutResult(status -> controls.initialize(scope));
+    assertThat(
+            tx.<Long>execute(
+                status ->
+                    controls.change(scope, 1, MissionExecutionControlStore.State.PAUSE_REQUESTED)))
+        .isEqualTo(2);
+    assertThatThrownBy(
+            () ->
+                tx.execute(
+                    status -> store.issueFresh(org, run, attempt, firstWorker, expiry, deadline)))
+        .hasMessage("Mission execution control is unavailable.");
+    assertThat(
+            tx.<Long>execute(
+                status -> controls.change(scope, 2, MissionExecutionControlStore.State.OPEN)))
+        .isEqualTo(3);
     var start = new CountDownLatch(1);
     ExecutionClaimStore.Token token;
     try (var pool = Executors.newVirtualThreadPerTaskExecutor()) {
@@ -245,8 +269,28 @@ values (?,?,?,?,?,?,'CREATED')
     assertThatThrownBy(() -> tx.executeWithoutResult(status -> store.invalidate(token)))
         .isInstanceOf(IllegalStateException.class);
     tx.executeWithoutResult(status -> store.requireCurrent(next));
-    verifyBudget(jdbc, tx, store, next, team, agent, mission);
-    jdbc.update("update execution_runs set status='CANCELLING' where id=?", run);
+    verifyBudget(jdbc, tx, store, next, team, agent, mission, controls, scope);
+    assertThat(
+            tx.<Long>execute(
+                status ->
+                    controls.change(scope, 5, MissionExecutionControlStore.State.CANCEL_REQUESTED)))
+        .isEqualTo(6);
+    assertThatThrownBy(
+            () ->
+                tx.execute(
+                    status -> controls.change(scope, 6, MissionExecutionControlStore.State.OPEN)))
+        .hasMessage("Mission execution control is unavailable.");
+    assertThat(
+            jdbc.queryForList(
+                "select status from execution_attempts where run_id=? order by attempt_number",
+                String.class,
+                run))
+        .containsExactly("FAILED", "FAILED", "CANCELLING");
+    assertThat(
+            jdbc.queryForObject("select status from execution_runs where id=?", String.class, run))
+        .isEqualTo("CANCELLING");
+    assertThat(jdbc.queryForObject("select status from missions where id=?", String.class, mission))
+        .isEqualTo("RUNNING");
     assertThatThrownBy(() -> tx.executeWithoutResult(status -> store.requireCurrent(next)))
         .isInstanceOf(IllegalStateException.class);
   }
@@ -258,7 +302,9 @@ values (?,?,?,?,?,?,'CREATED')
       ExecutionClaimStore.Token token,
       UUID team,
       UUID agent,
-      UUID mission) {
+      UUID mission,
+      MissionExecutionControlStore controls,
+      MissionExecutionControlStore.Scope scope) {
     var budget = new ExecutionBudgetStore(jdbc, claims);
     var action = UUID.randomUUID();
     var rejected = UUID.randomUUID();
@@ -310,7 +356,8 @@ values (?,?,'OPENAI','OPENAI_API_KEY','Fixture','ENABLED',1,1,current_timestamp,
         connection,
         org);
     var grants = mock(AgentModelGrantService.class);
-    var authorizations = new ExecutionModelAuthorizationStore(jdbc, claims, budget, grants, true);
+    var authorizations =
+        new ExecutionModelAuthorizationStore(jdbc, claims, budget, controls, grants, true);
     var request =
         new ExecutionModelAuthorizationStore.Request(
             action, connection, "fixture-model", "a".repeat(64), 40);
@@ -334,14 +381,37 @@ values (?,?,'OPENAI','OPENAI_API_KEY','Fixture','ENABLED',1,1,current_timestamp,
             () -> tx.executeWithoutResult(status -> authorizations.authorize(token, request)))
         .hasMessage("Model action authorization is unavailable.");
     when(grants.hasCurrentGrant(org, agent, connection, "fixture-model")).thenReturn(true);
+    assertThat(
+            tx.<Long>execute(
+                status ->
+                    controls.change(scope, 3, MissionExecutionControlStore.State.PAUSE_REQUESTED)))
+        .isEqualTo(4);
+    assertThatThrownBy(
+            () -> tx.executeWithoutResult(status -> authorizations.authorize(token, request)))
+        .hasMessage("Mission execution control is unavailable.");
+    assertThat(
+            jdbc.queryForObject(
+                "select count(*) from execution_budget_reservations", Integer.class))
+        .isZero();
+    assertThatThrownBy(
+            () ->
+                tx.execute(
+                    status -> controls.change(scope, 3, MissionExecutionControlStore.State.OPEN)))
+        .hasMessage("Mission execution control is unavailable.");
+    assertThat(
+            tx.<Long>execute(
+                status -> controls.change(scope, 4, MissionExecutionControlStore.State.OPEN)))
+        .isEqualTo(5);
     tx.executeWithoutResult(status -> authorizations.authorize(token, request));
     assertThatThrownBy(
             () -> tx.executeWithoutResult(status -> authorizations.authorize(token, request)))
         .hasMessage("Model action authorization is unavailable.");
     assertThat(
             jdbc.queryForMap(
-                "select fence,model_id,request_sha256 from execution_model_authorizations"))
+                "select fence,model_id,request_sha256,control_revision from"
+                    + " execution_model_authorizations"))
         .containsEntry("fence", token.fence())
+        .containsEntry("control_revision", 5L)
         .containsEntry("model_id", request.model())
         .containsEntry("request_sha256", request.sha256());
     assertThat(tx.<Boolean>execute(status -> budget.reserve(token, action, 40))).isFalse();

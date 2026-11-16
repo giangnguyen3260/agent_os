@@ -17,6 +17,7 @@ class ExecutionModelAuthorizationStore {
   private final JdbcTemplate jdbc;
   private final ExecutionClaimStore claims;
   private final ExecutionBudgetStore budgets;
+  private final MissionExecutionControlStore controls;
   private final AgentModelGrantService grants;
   private final boolean discoveryEnabled;
 
@@ -24,11 +25,13 @@ class ExecutionModelAuthorizationStore {
       JdbcTemplate jdbc,
       ExecutionClaimStore claims,
       ExecutionBudgetStore budgets,
+      MissionExecutionControlStore controls,
       AgentModelGrantService grants,
       @Value("${agentos.provider-model-discovery.http-enabled:false}") boolean discoveryEnabled) {
     this.jdbc = jdbc;
     this.claims = claims;
     this.budgets = budgets;
+    this.controls = controls;
     this.grants = grants;
     this.discoveryEnabled = discoveryEnabled;
   }
@@ -45,6 +48,7 @@ class ExecutionModelAuthorizationStore {
         || request.sha256() == null
         || !request.sha256().matches("[0-9a-f]{64}")) throw denied();
     claims.requireCurrent(token);
+    long controlRevision = controls.requireOpen(token.organization(), token.run());
     var owners =
         jdbc.queryForList(
             """
@@ -89,8 +93,8 @@ where r.organization_id=? and r.id=? and g.status='ACTIVE' and a.status='ACTIVE'
         """
         insert into execution_model_authorizations
           (organization_id,run_id,action_id,attempt_id,fence,agent_id,connection_id,
-           credential_revision,model_id,request_sha256,authorized_at)
-        values (?,?,?,?,?,?,?,?,?,?,?)
+           credential_revision,model_id,request_sha256,authorized_at,control_revision)
+        values (?,?,?,?,?,?,?,?,?,?,?,?)
         """,
         token.organization(),
         token.run(),
@@ -102,7 +106,8 @@ where r.organization_id=? and r.id=? and g.status='ACTIVE' and a.status='ACTIVE'
         connectionRevisions.getFirst(),
         request.model(),
         request.sha256(),
-        claims.now());
+        claims.now(),
+        controlRevision);
   }
 
   private static IllegalStateException denied() {
