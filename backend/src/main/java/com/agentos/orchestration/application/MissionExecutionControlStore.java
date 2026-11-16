@@ -57,6 +57,84 @@ class MissionExecutionControlStore {
     return expectedRevision + 1;
   }
 
+  long acknowledgeCancellation(Scope scope, long expectedRevision) {
+    if (expectedRevision <= 0 || expectedRevision == Long.MAX_VALUE) throw denied();
+    lockMission(scope);
+    if (!cancellationReady(scope)) throw denied();
+    if (jdbc.update(
+            """
+            update mission_execution_controls set revision=revision+1
+            where organization_id=? and team_id=? and mission_id=? and revision=?
+              and state='CANCEL_REQUESTED'
+            """,
+            scope.organization(),
+            scope.team(),
+            scope.mission(),
+            expectedRevision)
+        != 1) {
+      throw denied();
+    }
+
+    int tasks =
+        jdbc.update(
+            """
+update tasks
+set status='CANCELLED',pending_reason=null,waiting_since=null,resolver=null,
+    updated_at=current_timestamp
+where organization_id=? and team_id=? and mission_id=? and status not in ('COMPLETED','CANCELLED')
+  and id in (select task_id from execution_runs
+    where organization_id=? and team_id=? and mission_id=? and status='CANCELLING')
+""",
+            scope.organization(),
+            scope.team(),
+            scope.mission(),
+            scope.organization(),
+            scope.team(),
+            scope.mission());
+    int runs =
+        jdbc.update(
+            """
+            update execution_runs set status='CANCELLED',revision=revision+1
+            where organization_id=? and team_id=? and mission_id=? and status='CANCELLING'
+            """,
+            scope.organization(),
+            scope.team(),
+            scope.mission());
+    if (tasks != runs) throw denied();
+    jdbc.update(
+        """
+        update missions set status='CANCELLED',updated_at=current_timestamp
+        where organization_id=? and team_id=? and id=?
+        """,
+        scope.organization(),
+        scope.team(),
+        scope.mission());
+    return expectedRevision + 1;
+  }
+
+  private boolean cancellationReady(Scope scope) {
+    return Boolean.TRUE.equals(
+        jdbc.queryForObject(
+            """
+select not exists (
+  select 1 from execution_runs r
+  where r.organization_id=? and r.team_id=? and r.mission_id=? and (
+    r.status not in ('CANCELLING','COMPLETED','CANCELLED')
+    or exists (select 1 from execution_attempts a
+      where a.run_id=r.id and a.status not in ('SUCCEEDED','FAILED','CANCELLED'))
+    or exists (select 1 from execution_claims c
+      where c.run_id=r.id and c.invalidated_at is null and c.expires_at>current_timestamp)
+    or exists (select 1 from execution_budget_reservations b
+      where b.run_id=r.id and b.status<>'SETTLED')
+  )
+)
+""",
+            Boolean.class,
+            scope.organization(),
+            scope.team(),
+            scope.mission()));
+  }
+
   // Claim and authorization callers already hold the organization and Run locks.
   long requireOpen(UUID organization, UUID run) {
     var revisions =
