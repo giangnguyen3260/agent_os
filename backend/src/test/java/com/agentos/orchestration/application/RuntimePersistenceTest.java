@@ -97,6 +97,7 @@ values (?,?,?,'Agent','Reviewer','MID','DRAFT','OBSERVE',current_timestamp,curre
           "execution_attempts",
           "execution_claims",
           "execution_budget_buckets",
+          "execution_capacity_limits",
           "execution_budget_reservations",
           "execution_budget_reservation_buckets"
         }) {
@@ -271,6 +272,18 @@ values (?,?,?,?,?,?,'CREATED')
     jdbc.update(insertBucket, UUID.randomUUID(), org, "TEAM", team, open, close, 100);
     jdbc.update(insertBucket, UUID.randomUUID(), org, "AGENT", agent, open, close, 100);
     jdbc.update(insertBucket, UUID.randomUUID(), org, "MISSION", mission, open, close, 50);
+    String insertLimit =
+        """
+        insert into execution_capacity_limits
+          (organization_id,scope,subject_id,max_concurrent,max_admissions,window_seconds)
+        values (?,?,?,2,2,60)
+        """;
+    jdbc.update(insertLimit, org, "ORGANIZATION", org);
+    jdbc.update(insertLimit, org, "TEAM", team);
+    jdbc.update(insertLimit, org, "AGENT", agent);
+    assertThatThrownBy(() -> tx.execute(status -> budget.reserve(token, action, 40)))
+        .hasMessage("Execution capacity is unavailable.");
+    jdbc.update(insertLimit, org, "MISSION", mission);
     assertThat(tx.<Boolean>execute(status -> budget.reserve(token, action, 40))).isTrue();
     assertThat(tx.<Boolean>execute(status -> budget.reserve(token, action, 40))).isFalse();
     assertThatThrownBy(() -> tx.execute(status -> budget.reserve(token, action, 39)))
@@ -284,7 +297,12 @@ values (?,?,?,?,?,?,'CREATED')
     assertThat(jdbc.queryForList("select held_microusd from execution_budget_buckets", Long.class))
         .containsExactly(40L, 40L, 40L, 40L);
 
+    jdbc.update("update execution_capacity_limits set max_concurrent=1 where scope='MISSION'");
+    assertThatThrownBy(() -> tx.execute(status -> budget.reserve(token, rejected, 1)))
+        .hasMessage("Execution capacity is unavailable.");
     tx.executeWithoutResult(status -> budget.markUnknown(org, token.run(), action));
+    assertThatThrownBy(() -> tx.execute(status -> budget.reserve(token, rejected, 1)))
+        .hasMessage("Execution capacity is unavailable.");
     assertThat(
             jdbc.queryForObject("select status from execution_budget_reservations", String.class))
         .isEqualTo("UNKNOWN");
@@ -307,7 +325,28 @@ values (?,?,?,?,?,?,'CREATED')
     assertThat(jdbc.queryForList("select spent_microusd from execution_budget_buckets", Long.class))
         .containsExactly(55L, 55L, 55L, 55L);
     assertThatThrownBy(() -> tx.execute(status -> budget.reserve(token, rejected, 1)))
-        .isInstanceOf(IllegalStateException.class);
+        .hasMessage("Execution budget is unavailable.");
+
+    jdbc.update("update execution_capacity_limits set max_admissions=1 where scope='MISSION'");
+    jdbc.update(
+        "update execution_budget_buckets set closes_at=? where scope='MISSION'",
+        OffsetDateTime.now().minusMinutes(1));
+    jdbc.update(
+        insertBucket,
+        UUID.randomUUID(),
+        org,
+        "MISSION",
+        mission,
+        OffsetDateTime.now().minusMinutes(1),
+        close,
+        50);
+    assertThatThrownBy(() -> tx.execute(status -> budget.reserve(token, rejected, 1)))
+        .hasMessage("Execution capacity is unavailable.");
+    jdbc.update(
+        "update execution_budget_reservations set admitted_at=? where action_id=?",
+        OffsetDateTime.now().minusMinutes(2),
+        action);
+    assertThat(tx.<Boolean>execute(status -> budget.reserve(token, rejected, 1))).isTrue();
   }
 
   private ExecutionClaimStore.Token tryIssue(
