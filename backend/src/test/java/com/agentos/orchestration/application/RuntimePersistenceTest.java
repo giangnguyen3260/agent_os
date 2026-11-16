@@ -6,6 +6,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.agentos.agent.application.AgentModelGrantService;
+import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -400,7 +401,11 @@ values (?,?,'OPENAI','OPENAI_API_KEY','Fixture','ENABLED',1,1,current_timestamp,
         new ExecutionModelAuthorizationStore(jdbc, claims, budget, controls, grants, true);
     var request =
         new ExecutionModelAuthorizationStore.Request(
-            action, connection, "fixture-model", "a".repeat(64), 40);
+            action,
+            connection,
+            "fixture-model",
+            "c7183c384504fd060c8a5d4b1b6545b830716de8bffbdc2989923a2244f6697d",
+            40);
     assertThatThrownBy(
             () -> tx.executeWithoutResult(status -> authorizations.authorize(token, request)))
         .hasMessage("Model action authorization is unavailable.");
@@ -454,6 +459,7 @@ values (?,?,'OPENAI','OPENAI_API_KEY','Fixture','ENABLED',1,1,current_timestamp,
         .containsEntry("control_revision", 5L)
         .containsEntry("model_id", request.model())
         .containsEntry("request_sha256", request.sha256());
+    verifyHandoff(jdbc, tx, authorizations, token, request, grants);
     assertThat(tx.<Boolean>execute(status -> budget.reserve(token, action, 40))).isFalse();
     assertThatThrownBy(() -> tx.execute(status -> budget.reserve(token, action, 39)))
         .isInstanceOf(IllegalStateException.class);
@@ -587,6 +593,74 @@ values (?,?,'OPENAI','OPENAI_API_KEY','Fixture','ENABLED',1,1,current_timestamp,
     var pending = UUID.randomUUID();
     assertThat(tx.<Boolean>execute(status -> budget.reserve(token, pending, 1))).isTrue();
     return pending;
+  }
+
+  private void verifyHandoff(
+      JdbcTemplate jdbc,
+      TransactionTemplate tx,
+      ExecutionModelAuthorizationStore authorizations,
+      ExecutionClaimStore.Token token,
+      ExecutionModelAuthorizationStore.Request request,
+      AgentModelGrantService grants) {
+    byte[] body = "fixture-body".getBytes(StandardCharsets.UTF_8);
+    assertThatThrownBy(
+            () ->
+                tx.execute(
+                    status ->
+                        authorizations.handoff(
+                            token,
+                            request.action(),
+                            request.connection(),
+                            request.model(),
+                            new byte[] {1})))
+        .hasMessage("Model action authorization is unavailable.");
+
+    var agent =
+        jdbc.queryForObject("select agent_id from execution_model_authorizations", UUID.class);
+    when(grants.hasCurrentGrant(token.organization(), agent, request.connection(), request.model()))
+        .thenReturn(false);
+    assertThatThrownBy(
+            () ->
+                tx.execute(
+                    status ->
+                        authorizations.handoff(
+                            token, request.action(), request.connection(), request.model(), body)))
+        .hasMessage("Model action authorization is unavailable.");
+    when(grants.hasCurrentGrant(token.organization(), agent, request.connection(), request.model()))
+        .thenReturn(true);
+    tx.executeWithoutResult(
+        status -> {
+          authorizations.handoff(
+              token, request.action(), request.connection(), request.model(), body);
+          status.setRollbackOnly();
+        });
+    assertThat(
+            jdbc.queryForObject(
+                "select count(*) from execution_model_authorizations where handed_off_at is not"
+                    + " null",
+                Integer.class))
+        .isZero();
+
+    var handoff =
+        tx.execute(
+            status ->
+                authorizations.handoff(
+                    token, request.action(), request.connection(), request.model(), body));
+    assertThat(handoff.credentialRevision()).isEqualTo(1L);
+    assertThat(handoff.body().isReadOnly()).isTrue();
+    body[0] = 0;
+    assertThat(StandardCharsets.UTF_8.decode(handoff.body()).toString()).isEqualTo("fixture-body");
+    assertThatThrownBy(
+            () ->
+                tx.execute(
+                    status ->
+                        authorizations.handoff(
+                            token,
+                            request.action(),
+                            request.connection(),
+                            request.model(),
+                            "fixture-body".getBytes(StandardCharsets.UTF_8))))
+        .hasMessage("Model action authorization is unavailable.");
   }
 
   private ExecutionClaimStore.Token tryIssue(
