@@ -24,6 +24,8 @@ class ExecutionBudgetStore {
   private record ModelUsage(
       UUID connection, String requestSha256, long inputTokens, long outputTokens) {}
 
+  private record Delivery(UUID connection, boolean handedOff) {}
+
   private record Reservation(UUID attempt, long fence, long reserved, String status, Long actual) {}
 
   private final JdbcTemplate jdbc;
@@ -146,6 +148,19 @@ where current_bucket.id=? and (r.admitted_at>? or r.status in ('HELD','UNKNOWN')
     claims.lockRun(organization, run, false);
     var reservation = requireReservation(run, action);
     if ("SETTLED".equals(reservation.status())) throw unavailable();
+    var delivery = findDelivery(run, action);
+    if (delivery != null) {
+      if (!delivery.handedOff()) throw unavailable();
+      jdbc.update(
+          """
+          update execution_model_authorizations
+          set delivery_unknown_at=coalesce(delivery_unknown_at,?)
+          where run_id=? and action_id=?
+          """,
+          claims.now(),
+          run,
+          action);
+    }
     jdbc.update(
         "update execution_budget_reservations set status='UNKNOWN' where run_id=? and action_id=?",
         run,
@@ -173,16 +188,8 @@ where current_bucket.id=? and (r.admitted_at>? or r.status in ('HELD','UNKNOWN')
     }
     claims.lockRun(organization, run, false);
     var reservation = requireReservation(run, action);
-    var authorizedConnections =
-        jdbc.queryForList(
-            "select connection_id from execution_model_authorizations where run_id=? and"
-                + " action_id=?",
-            UUID.class,
-            run,
-            action);
-    if (!authorizedConnections.isEmpty() && !connection.equals(authorizedConnections.getFirst())) {
-      throw unavailable();
-    }
+    var delivery = findDelivery(run, action);
+    if (delivery != null && !connection.equals(delivery.connection())) throw unavailable();
     var usage =
         new ModelUsage(connection, hashRequestId(providerRequestId), inputTokens, outputTokens);
     if ("SETTLED".equals(reservation.status())) {
@@ -201,6 +208,8 @@ where current_bucket.id=? and (r.admitted_at>? or r.status in ('HELD','UNKNOWN')
       throw unavailable();
     }
 
+    if (delivery != null && !delivery.handedOff()) throw unavailable();
+
     // The database rejects a foreign connection or reuse of the same provider receipt.
     jdbc.update(
         """
@@ -217,6 +226,7 @@ where current_bucket.id=? and (r.admitted_at>? or r.status in ('HELD','UNKNOWN')
         usage.inputTokens(),
         usage.outputTokens(),
         claims.now());
+    if (delivery != null) recordResolution(run, action, "VERIFIED_USAGE");
     settle(organization, run, action, reservation, actual);
   }
 
@@ -240,7 +250,38 @@ where current_bucket.id=? and (r.admitted_at>? or r.status in ('HELD','UNKNOWN')
       if (reservation.actual() == actual) return;
       throw unavailable();
     }
+    var delivery = findDelivery(run, action);
+    if (delivery != null) {
+      if (actual != 0) throw unavailable();
+      recordResolution(run, action, delivery.handedOff() ? "VERIFIED_NO_CHARGE" : "NOT_HANDED_OFF");
+    }
     settle(organization, run, action, reservation, actual);
+  }
+
+  private Delivery findDelivery(UUID run, UUID action) {
+    var rows =
+        jdbc.query(
+            """
+            select connection_id,handed_off_at from execution_model_authorizations
+            where run_id=? and action_id=?
+            """,
+            (rs, row) -> new Delivery(rs.getObject(1, UUID.class), rs.getObject(2) != null),
+            run,
+            action);
+    return rows.isEmpty() ? null : rows.getFirst();
+  }
+
+  private void recordResolution(UUID run, UUID action, String resolution) {
+    if (jdbc.update(
+            """
+            update execution_model_authorizations set delivery_resolution=?,reconciled_at=?
+            where run_id=? and action_id=? and delivery_resolution is null
+            """,
+            resolution,
+            claims.now(),
+            run,
+            action)
+        != 1) throw unavailable();
   }
 
   private void settle(

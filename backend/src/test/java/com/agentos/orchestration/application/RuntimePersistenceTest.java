@@ -459,6 +459,16 @@ values (?,?,'OPENAI','OPENAI_API_KEY','Fixture','ENABLED',1,1,current_timestamp,
         .containsEntry("control_revision", 5L)
         .containsEntry("model_id", request.model())
         .containsEntry("request_sha256", request.sha256());
+    assertThatThrownBy(
+            () -> tx.executeWithoutResult(status -> budget.markUnknown(org, token.run(), action)))
+        .hasMessage("Execution budget is unavailable.");
+    assertThatThrownBy(
+            () ->
+                tx.executeWithoutResult(
+                    status ->
+                        budget.settleModelUsage(
+                            org, token.run(), action, connection, "req_early", 1, 1, 5)))
+        .hasMessage("Execution budget is unavailable.");
     verifyHandoff(jdbc, tx, authorizations, token, request, grants);
     assertThat(tx.<Boolean>execute(status -> budget.reserve(token, action, 40))).isFalse();
     assertThatThrownBy(() -> tx.execute(status -> budget.reserve(token, action, 39)))
@@ -476,6 +486,22 @@ values (?,?,'OPENAI','OPENAI_API_KEY','Fixture','ENABLED',1,1,current_timestamp,
     assertThatThrownBy(() -> tx.execute(status -> budget.reserve(token, rejected, 1)))
         .hasMessage("Execution capacity is unavailable.");
     tx.executeWithoutResult(status -> budget.markUnknown(org, token.run(), action));
+    var firstUncertainObservation =
+        jdbc.queryForObject(
+            "select delivery_unknown_at from execution_model_authorizations", OffsetDateTime.class);
+    assertThat(firstUncertainObservation).isNotNull();
+    tx.executeWithoutResult(status -> budget.markUnknown(org, token.run(), action));
+    assertThat(
+            jdbc.queryForObject(
+                "select delivery_unknown_at from execution_model_authorizations",
+                OffsetDateTime.class))
+        .isEqualTo(firstUncertainObservation);
+    assertThatThrownBy(
+            () ->
+                tx.executeWithoutResult(
+                    status -> budget.settleVerified(org, token.run(), action, 55)))
+        .hasMessage("Execution budget is unavailable.");
+
     assertThatThrownBy(() -> tx.execute(status -> budget.reserve(token, rejected, 1)))
         .hasMessage("Execution capacity is unavailable.");
     assertThat(
@@ -511,6 +537,14 @@ values (?,?,'OPENAI','OPENAI_API_KEY','Fixture','ENABLED',1,1,current_timestamp,
                         budget.settleModelUsage(
                             org, token.run(), action, connection, requestId, 18, 6, 55)))
         .isInstanceOf(IllegalStateException.class);
+    assertThat(
+            jdbc.queryForObject(
+                "select delivery_resolution from execution_model_authorizations", String.class))
+        .isEqualTo("VERIFIED_USAGE");
+    assertThat(
+            jdbc.queryForObject(
+                "select reconciled_at from execution_model_authorizations", OffsetDateTime.class))
+        .isAfterOrEqualTo(firstUncertainObservation);
     assertThat(jdbc.queryForMap("select input_tokens,output_tokens from execution_model_usage"))
         .containsEntry("input_tokens", 17L)
         .containsEntry("output_tokens", 6L);
@@ -590,6 +624,35 @@ values (?,?,'OPENAI','OPENAI_API_KEY','Fixture','ENABLED',1,1,current_timestamp,
         "update execution_budget_reservations set admitted_at=? where action_id=?",
         OffsetDateTime.now().minusMinutes(2),
         rejected);
+    for (boolean handedOff : new boolean[] {false, true}) {
+      UUID noCharge = UUID.randomUUID();
+      var zeroRequest =
+          new ExecutionModelAuthorizationStore.Request(
+              noCharge, connection, request.model(), request.sha256(), 1);
+      tx.executeWithoutResult(status -> authorizations.authorize(token, zeroRequest));
+      if (handedOff) {
+        tx.executeWithoutResult(
+            status ->
+                authorizations.handoff(
+                    token,
+                    noCharge,
+                    connection,
+                    request.model(),
+                    "fixture-body".getBytes(StandardCharsets.UTF_8)));
+      }
+      tx.executeWithoutResult(status -> budget.settleVerified(org, token.run(), noCharge, 0));
+      assertThat(
+              jdbc.queryForObject(
+                  "select delivery_resolution from execution_model_authorizations where"
+                      + " action_id=?",
+                  String.class,
+                  noCharge))
+          .isEqualTo(handedOff ? "VERIFIED_NO_CHARGE" : "NOT_HANDED_OFF");
+      jdbc.update(
+          "update execution_budget_reservations set admitted_at=? where action_id=?",
+          OffsetDateTime.now().minusMinutes(2),
+          noCharge);
+    }
     var pending = UUID.randomUUID();
     assertThat(tx.<Boolean>execute(status -> budget.reserve(token, pending, 1))).isTrue();
     return pending;

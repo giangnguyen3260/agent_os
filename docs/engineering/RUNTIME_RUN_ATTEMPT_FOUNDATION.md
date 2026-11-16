@@ -51,3 +51,9 @@ There is no runtime dispatch queue in this slice. A future dispatch queue must j
 V043 records a one-time handoff for an authorized model action. The internal store hashes the exact request bytes, rechecks the current claim, Mission revision, model grant, connection credential revision and held reservation, and returns a read-only copy of the verified body. A rolled-back handoff is available to retry. The store rejects a repeat handoff or an authorization issued at a different Mission control revision.
 
 The transport must use the handoff only after its transaction commits. A committed marker shows that a request was handed off for sending. A control change committed afterward can still race with an already-handed-off send. Provider delivery and uncertain outcomes require reconciliation. This change introduces no HTTP transport or runtime worker entry point.
+
+## Model delivery reconciliation
+
+V044 records the first uncertain delivery observation and the eventual accounting disposition. For an authorized model action, uncertain delivery requires a committed handoff and preserves the budget hold. Verified model usage requires the same connection and a handoff, and commits the receipt and disposition with the charge. A trusted cost-only settlement of an authorized model action requires verified zero cost and distinguishes actions that were never handed off from handed-off actions verified to carry no charge. This accounting disposition alone does not prove an Attempt succeeded or that all other effects are resolved.
+
+Historical settlements remain replayable, and reservations outside the model authorization ledger retain their existing behavior. There is no automatic resend or network-based reconciliation in this change.
