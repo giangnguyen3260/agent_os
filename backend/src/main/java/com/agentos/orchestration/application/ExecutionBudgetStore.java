@@ -173,6 +173,16 @@ where current_bucket.id=? and (r.admitted_at>? or r.status in ('HELD','UNKNOWN')
     }
     claims.lockRun(organization, run, false);
     var reservation = requireReservation(run, action);
+    var authorizedConnections =
+        jdbc.queryForList(
+            "select connection_id from execution_model_authorizations where run_id=? and"
+                + " action_id=?",
+            UUID.class,
+            run,
+            action);
+    if (!authorizedConnections.isEmpty() && !connection.equals(authorizedConnections.getFirst())) {
+      throw unavailable();
+    }
     var usage =
         new ModelUsage(connection, hashRequestId(providerRequestId), inputTokens, outputTokens);
     if ("SETTLED".equals(reservation.status())) {
