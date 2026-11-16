@@ -122,7 +122,7 @@ class ExecutionClaimStore {
     return claim;
   }
 
-  private void lockRun(UUID organization, UUID run, boolean requireRunning) {
+  void lockRun(UUID organization, UUID run, boolean requireRunning) {
     var organizations =
         jdbc.queryForList(
             "select id from organizations where id=? for update", UUID.class, organization);
@@ -170,7 +170,7 @@ class ExecutionClaimStore {
     return claims.isEmpty() ? null : claims.getFirst();
   }
 
-  private OffsetDateTime now() {
+  OffsetDateTime now() {
     return jdbc.queryForObject(wallClockQuery, OffsetDateTime.class);
   }
 

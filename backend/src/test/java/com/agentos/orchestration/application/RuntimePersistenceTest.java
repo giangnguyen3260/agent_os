@@ -95,7 +95,10 @@ values (?,?,?,'Agent','Reviewer','MID','DRAFT','OBSERVE',current_timestamp,curre
           "accepted_mission_plan_dependencies",
           "execution_runs",
           "execution_attempts",
-          "execution_claims"
+          "execution_claims",
+          "execution_budget_buckets",
+          "execution_budget_reservations",
+          "execution_budget_reservation_buckets"
         }) {
       assertThat(jdbc.queryForObject("select count(*) from " + table, Integer.class)).isZero();
     }
@@ -156,10 +159,12 @@ values (?,?,?,?,?,?,'CREATED')
                 String.class,
                 run))
         .containsExactly("FAILED", "RUNNING");
-    verifyClaims(jdbc, org, run, second);
+    verifyClaims(jdbc, org, team, agent, mission, run, second);
   }
 
-  private void verifyClaims(JdbcTemplate jdbc, UUID org, UUID run, UUID attempt) throws Exception {
+  private void verifyClaims(
+      JdbcTemplate jdbc, UUID org, UUID team, UUID agent, UUID mission, UUID run, UUID attempt)
+      throws Exception {
     jdbc.update("update execution_runs set status='RUNNING' where id=?", run);
     var tx = new TransactionTemplate(new DataSourceTransactionManager(jdbc.getDataSource()));
     var store = new ExecutionClaimStore(jdbc);
@@ -234,8 +239,74 @@ values (?,?,?,?,?,?,'CREATED')
     assertThatThrownBy(() -> tx.executeWithoutResult(status -> store.invalidate(token)))
         .isInstanceOf(IllegalStateException.class);
     tx.executeWithoutResult(status -> store.requireCurrent(next));
+    verifyBudget(jdbc, tx, store, next, team, agent, mission);
     jdbc.update("update execution_runs set status='CANCELLING' where id=?", run);
     assertThatThrownBy(() -> tx.executeWithoutResult(status -> store.requireCurrent(next)))
+        .isInstanceOf(IllegalStateException.class);
+  }
+
+  private void verifyBudget(
+      JdbcTemplate jdbc,
+      TransactionTemplate tx,
+      ExecutionClaimStore claims,
+      ExecutionClaimStore.Token token,
+      UUID team,
+      UUID agent,
+      UUID mission) {
+    var budget = new ExecutionBudgetStore(jdbc, claims);
+    var action = UUID.randomUUID();
+    var rejected = UUID.randomUUID();
+    assertThatThrownBy(() -> tx.execute(status -> budget.reserve(token, action, 40)))
+        .isInstanceOf(IllegalStateException.class);
+    var open = OffsetDateTime.now().minusHours(1);
+    var close = open.plusHours(2);
+    String insertBucket =
+        """
+        insert into execution_budget_buckets
+          (id,organization_id,scope,subject_id,opens_at,closes_at,limit_microusd)
+        values (?,?,?,?,?,?,?)
+        """;
+    UUID org = token.organization();
+    jdbc.update(insertBucket, UUID.randomUUID(), org, "ORGANIZATION", org, open, close, 100);
+    jdbc.update(insertBucket, UUID.randomUUID(), org, "TEAM", team, open, close, 100);
+    jdbc.update(insertBucket, UUID.randomUUID(), org, "AGENT", agent, open, close, 100);
+    jdbc.update(insertBucket, UUID.randomUUID(), org, "MISSION", mission, open, close, 50);
+    assertThat(tx.<Boolean>execute(status -> budget.reserve(token, action, 40))).isTrue();
+    assertThat(tx.<Boolean>execute(status -> budget.reserve(token, action, 40))).isFalse();
+    assertThatThrownBy(() -> tx.execute(status -> budget.reserve(token, action, 39)))
+        .isInstanceOf(IllegalStateException.class);
+    assertThatThrownBy(() -> tx.execute(status -> budget.reserve(token, rejected, 11)))
+        .isInstanceOf(IllegalStateException.class);
+    assertThat(
+            jdbc.queryForObject(
+                "select count(*) from execution_budget_reservations", Integer.class))
+        .isEqualTo(1);
+    assertThat(jdbc.queryForList("select held_microusd from execution_budget_buckets", Long.class))
+        .containsExactly(40L, 40L, 40L, 40L);
+
+    tx.executeWithoutResult(status -> budget.markUnknown(org, token.run(), action));
+    assertThat(
+            jdbc.queryForObject("select status from execution_budget_reservations", String.class))
+        .isEqualTo("UNKNOWN");
+    assertThat(jdbc.queryForList("select held_microusd from execution_budget_buckets", Long.class))
+        .containsExactly(40L, 40L, 40L, 40L);
+    assertThatThrownBy(
+            () ->
+                tx.executeWithoutResult(
+                    status -> budget.settleVerified(UUID.randomUUID(), token.run(), action, 55)))
+        .isInstanceOf(IllegalStateException.class);
+    tx.executeWithoutResult(status -> budget.settleVerified(org, token.run(), action, 55));
+    tx.executeWithoutResult(status -> budget.settleVerified(org, token.run(), action, 55));
+    assertThatThrownBy(
+            () ->
+                tx.executeWithoutResult(
+                    status -> budget.settleVerified(org, token.run(), action, 54)))
+        .isInstanceOf(IllegalStateException.class);
+    assertThat(jdbc.queryForList("select held_microusd from execution_budget_buckets", Long.class))
+        .containsExactly(0L, 0L, 0L, 0L);
+    assertThat(jdbc.queryForList("select spent_microusd from execution_budget_buckets", Long.class))
+        .containsExactly(55L, 55L, 55L, 55L);
+    assertThatThrownBy(() -> tx.execute(status -> budget.reserve(token, rejected, 1)))
         .isInstanceOf(IllegalStateException.class);
   }
 
