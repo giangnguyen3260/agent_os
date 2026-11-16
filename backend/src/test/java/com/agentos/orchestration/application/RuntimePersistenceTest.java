@@ -1,18 +1,25 @@
-package com.agentos.orchestration;
+package com.agentos.orchestration.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.time.OffsetDateTime;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.springframework.transaction.support.TransactionTemplate;
 
 class RuntimePersistenceTest {
   @Test
-  void migrationPreservesDraftsAndEnforcesPlanScopeAndOneUnresolvedAttempt() {
+  void migrationsPreserveDraftsAndEnforcePlanScopeAttemptUniquenessAndClaimFencing()
+      throws Exception {
     var source =
         new DriverManagerDataSource(
             "jdbc:h2:mem:"
@@ -87,7 +94,8 @@ values (?,?,?,'Agent','Reviewer','MID','DRAFT','OBSERVE',current_timestamp,curre
           "accepted_mission_plan_tasks",
           "accepted_mission_plan_dependencies",
           "execution_runs",
-          "execution_attempts"
+          "execution_attempts",
+          "execution_claims"
         }) {
       assertThat(jdbc.queryForObject("select count(*) from " + table, Integer.class)).isZero();
     }
@@ -148,5 +156,103 @@ values (?,?,?,?,?,?,'CREATED')
                 String.class,
                 run))
         .containsExactly("FAILED", "RUNNING");
+    verifyClaims(jdbc, org, run, second);
+  }
+
+  private void verifyClaims(JdbcTemplate jdbc, UUID org, UUID run, UUID attempt) throws Exception {
+    jdbc.update("update execution_runs set status='RUNNING' where id=?", run);
+    var tx = new TransactionTemplate(new DataSourceTransactionManager(jdbc.getDataSource()));
+    var store = new ExecutionClaimStore(jdbc);
+    var deadline = OffsetDateTime.now().plusMinutes(10);
+    var expiry = deadline.minusMinutes(2);
+    var firstWorker = UUID.randomUUID();
+    var secondWorker = UUID.randomUUID();
+    var start = new CountDownLatch(1);
+    ExecutionClaimStore.Token token;
+    try (var pool = Executors.newVirtualThreadPerTaskExecutor()) {
+      var first =
+          pool.submit(
+              () -> {
+                start.await();
+                return tryIssue(tx, store, org, run, attempt, firstWorker, expiry, deadline);
+              });
+      var second =
+          pool.submit(
+              () -> {
+                start.await();
+                return tryIssue(tx, store, org, run, attempt, secondWorker, expiry, deadline);
+              });
+      start.countDown();
+      var firstToken = first.get(10, TimeUnit.SECONDS);
+      var secondToken = second.get(10, TimeUnit.SECONDS);
+      assertThat(firstToken == null).isNotEqualTo(secondToken == null);
+      token = firstToken == null ? secondToken : firstToken;
+    }
+    assertThat(token.fence()).isEqualTo(1);
+    tx.executeWithoutResult(status -> store.requireCurrent(token));
+    var wrongWorker =
+        new ExecutionClaimStore.Token(org, run, attempt, UUID.randomUUID(), token.fence());
+    assertThatThrownBy(() -> tx.executeWithoutResult(status -> store.requireCurrent(wrongWorker)))
+        .isInstanceOf(IllegalStateException.class);
+    var wrongOrg =
+        new ExecutionClaimStore.Token(
+            UUID.randomUUID(), run, attempt, token.worker(), token.fence());
+    assertThatThrownBy(() -> tx.executeWithoutResult(status -> store.requireCurrent(wrongOrg)))
+        .isInstanceOf(IllegalStateException.class);
+    assertThatThrownBy(
+            () -> tx.executeWithoutResult(status -> store.renew(token, deadline.plusSeconds(1))))
+        .isInstanceOf(IllegalStateException.class);
+    tx.executeWithoutResult(status -> store.renew(token, deadline));
+
+    var past = OffsetDateTime.now().minusMinutes(1);
+    jdbc.update(
+        "update execution_claims set issued_at=?, expires_at=? where run_id=?",
+        past.minusMinutes(1),
+        past,
+        run);
+    assertThatThrownBy(() -> tx.executeWithoutResult(status -> store.requireCurrent(token)))
+        .isInstanceOf(IllegalStateException.class);
+    assertThatThrownBy(() -> tx.executeWithoutResult(status -> store.renew(token, deadline)))
+        .isInstanceOf(IllegalStateException.class);
+    assertThat(tryIssue(tx, store, org, run, attempt, token.worker(), expiry, deadline)).isNull();
+    tx.executeWithoutResult(status -> store.invalidate(token));
+    assertThat(tryIssue(tx, store, org, run, attempt, token.worker(), expiry, deadline)).isNull();
+
+    jdbc.update("update execution_attempts set status='FAILED',outcome_slot=2 where id=?", attempt);
+    var replacement = UUID.randomUUID();
+    jdbc.update(
+        """
+        insert into execution_attempts (id,run_id,attempt_number,status,outcome_slot)
+        values (?,?,3,'RUNNING',0)
+        """,
+        replacement,
+        run);
+    var next =
+        tx.execute(
+            status -> store.issueFresh(org, run, replacement, token.worker(), expiry, deadline));
+    assertThat(next.fence()).isEqualTo(2);
+    assertThatThrownBy(() -> tx.executeWithoutResult(status -> store.invalidate(token)))
+        .isInstanceOf(IllegalStateException.class);
+    tx.executeWithoutResult(status -> store.requireCurrent(next));
+    jdbc.update("update execution_runs set status='CANCELLING' where id=?", run);
+    assertThatThrownBy(() -> tx.executeWithoutResult(status -> store.requireCurrent(next)))
+        .isInstanceOf(IllegalStateException.class);
+  }
+
+  private ExecutionClaimStore.Token tryIssue(
+      TransactionTemplate tx,
+      ExecutionClaimStore store,
+      UUID org,
+      UUID run,
+      UUID attempt,
+      UUID worker,
+      OffsetDateTime expiry,
+      OffsetDateTime deadline) {
+    try {
+      return tx.execute(status -> store.issueFresh(org, run, attempt, worker, expiry, deadline));
+    } catch (IllegalStateException denial) {
+      assertThat(denial).hasMessage("Execution claim is unavailable.");
+      return null;
+    }
   }
 }
