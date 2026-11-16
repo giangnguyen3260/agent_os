@@ -1,5 +1,6 @@
 package com.agentos.orchestration.application;
 
+import java.time.OffsetDateTime;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
@@ -10,7 +11,10 @@ import org.springframework.transaction.annotation.Transactional;
 @Component
 @Transactional(propagation = Propagation.MANDATORY)
 class ExecutionBudgetStore {
-  private record Bucket(UUID id, String scope) {}
+  private record Bucket(
+      UUID id, String scope, int maxConcurrent, int maxAdmissions, int windowSeconds) {}
+
+  private record Usage(long concurrent, long recent) {}
 
   private record Reservation(UUID attempt, long fence, long reserved, String status, Long actual) {}
 
@@ -38,12 +42,14 @@ class ExecutionBudgetStore {
     var buckets =
         jdbc.query(
             """
-            select b.id, b.scope
+            select b.id, b.scope, l.max_concurrent, l.max_admissions, l.window_seconds
             from execution_budget_buckets b
             join execution_runs r on b.organization_id=r.organization_id
             join accepted_mission_plan_tasks p on p.organization_id=r.organization_id
               and p.team_id=r.team_id and p.mission_id=r.mission_id
               and p.plan_revision=r.plan_revision and p.task_id=r.task_id
+            left join execution_capacity_limits l on l.organization_id=b.organization_id
+              and l.scope=b.scope and l.subject_id=b.subject_id
             where r.id=? and b.opens_at<=? and b.closes_at>?
               and b.subject_id=case b.scope
                 when 'ORGANIZATION' then r.organization_id
@@ -52,24 +58,33 @@ class ExecutionBudgetStore {
                 when 'MISSION' then r.mission_id end
             order by b.id
             """,
-            (rs, i) -> new Bucket(rs.getObject(1, UUID.class), rs.getString(2)),
+            (rs, i) ->
+                new Bucket(
+                    rs.getObject(1, UUID.class),
+                    rs.getString(2),
+                    rs.getInt(3),
+                    rs.getInt(4),
+                    rs.getInt(5)),
             token.run(),
             at,
             at);
     if (buckets.size() != 4 || buckets.stream().map(Bucket::scope).distinct().count() != 4)
       throw unavailable();
 
+    for (var bucket : buckets) requireCapacity(bucket, at);
+
     jdbc.update(
         """
         insert into execution_budget_reservations
-          (run_id,action_id,attempt_id,fence,reserved_microusd,status)
-        values (?,?,?,?,?,'HELD')
+          (run_id,action_id,attempt_id,fence,reserved_microusd,status,admitted_at)
+        values (?,?,?,?,?,'HELD',?)
         """,
         token.run(),
         action,
         token.attempt(),
         token.fence(),
-        amount);
+        amount,
+        at);
     for (var bucket : buckets) {
       if (jdbc.update(
               """
@@ -88,6 +103,35 @@ class ExecutionBudgetStore {
           bucket.id());
     }
     return true;
+  }
+
+  private void requireCapacity(Bucket bucket, OffsetDateTime at) {
+    if (bucket.windowSeconds() == 0) throw capacityUnavailable();
+    var cutoff = at.minusSeconds(bucket.windowSeconds());
+    // Count reservations across budget windows for this scope while holding the organization lock.
+    var usage =
+        jdbc.queryForObject(
+            """
+select count(case when r.status in ('HELD','UNKNOWN') then 1 end),
+       count(case when r.admitted_at>? then 1 end)
+from execution_budget_buckets current_bucket
+join execution_budget_buckets history on history.organization_id=current_bucket.organization_id
+  and history.scope=current_bucket.scope and history.subject_id=current_bucket.subject_id
+join execution_budget_reservation_buckets link on link.bucket_id=history.id
+join execution_budget_reservations r on r.run_id=link.run_id and r.action_id=link.action_id
+where current_bucket.id=? and (r.admitted_at>? or r.status in ('HELD','UNKNOWN'))
+""",
+            (rs, i) -> new Usage(rs.getLong(1), rs.getLong(2)),
+            cutoff,
+            bucket.id(),
+            cutoff);
+    if (usage.concurrent() >= bucket.maxConcurrent() || usage.recent() >= bucket.maxAdmissions()) {
+      throw capacityUnavailable();
+    }
+  }
+
+  private static IllegalStateException capacityUnavailable() {
+    return new IllegalStateException("Execution capacity is unavailable.");
   }
 
   void markUnknown(UUID organization, UUID run, UUID action) {
