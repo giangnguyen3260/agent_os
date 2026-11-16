@@ -45,3 +45,9 @@ A cancellation request atomically moves unfinished Runs to CANCELLING, fences or
 Cancellation acknowledgment runs under the organization and Mission locks. It requires the exact cancel-request revision, terminal Attempts, no unexpired and uninvalidated claim, and settled reservations across all Runs in the Mission. The acknowledgment atomically cancels the remaining admitted Tasks and Runs, clears pending Task fields, and sets the Mission status to CANCELLED. It preserves completed work, unadmitted Tasks, and Attempt outcomes. Mission status records completion of the durable cancel request. The revision advances once, and a stale or repeated direct store call fails.
 
 There is no runtime dispatch queue in this slice. A future dispatch queue must join this acknowledgment transaction so queued work cannot survive cancellation.
+
+## Model request handoff
+
+V043 records a one-time handoff for an authorized model action. The internal store hashes the exact request bytes, rechecks the current claim, Mission revision, model grant, connection credential revision and held reservation, and returns a read-only copy of the verified body. A rolled-back handoff is available to retry. The store rejects a repeat handoff or an authorization issued at a different Mission control revision.
+
+The transport must use the handoff only after its transaction commits. A committed marker shows that a request was handed off for sending. A control change committed afterward can still race with an already-handed-off send. Provider delivery and uncertain outcomes require reconciliation. This change introduces no HTTP transport or runtime worker entry point.
