@@ -240,6 +240,14 @@ values (?,?,?,?,?,?,'CREATED')
         .isInstanceOf(IllegalStateException.class);
     tx.executeWithoutResult(status -> store.renew(token, deadline));
 
+    var budgets = new ExecutionBudgetStore(jdbc, store);
+    var expiryStore = new ExecutionLeaseExpiryStore(jdbc, store, budgets);
+    assertThat(tx.<Boolean>execute(status -> expiryStore.expire(org, run, token.fence())))
+        .isFalse();
+    jdbc.update(
+        "update tasks set status='RUNNING' where id=(select task_id from execution_runs where"
+            + " id=?)",
+        run);
     var past = OffsetDateTime.now().minusMinutes(1);
     jdbc.update(
         "update execution_claims set issued_at=?, expires_at=? where run_id=?",
@@ -251,10 +259,28 @@ values (?,?,?,?,?,?,'CREATED')
     assertThatThrownBy(() -> tx.executeWithoutResult(status -> store.renew(token, deadline)))
         .isInstanceOf(IllegalStateException.class);
     assertThat(tryIssue(tx, store, org, run, attempt, token.worker(), expiry, deadline)).isNull();
-    tx.executeWithoutResult(status -> store.invalidate(token));
+    assertThat(tx.<Boolean>execute(status -> expiryStore.expire(org, run, token.fence()))).isTrue();
+    assertThat(tx.<Boolean>execute(status -> expiryStore.expire(org, run, token.fence())))
+        .isFalse();
+    assertThat(
+            jdbc.queryForObject(
+                "select status from execution_attempts where id=?", String.class, attempt))
+        .isEqualTo("FAILED");
+    assertThat(
+            jdbc.queryForObject(
+                "select pending_reason from tasks where id=(select task_id from execution_runs"
+                    + " where id=?)",
+                String.class,
+                run))
+        .isEqualTo("LEASE_EXPIRED");
     assertThat(tryIssue(tx, store, org, run, attempt, token.worker(), expiry, deadline)).isNull();
 
-    jdbc.update("update execution_attempts set status='FAILED',outcome_slot=2 where id=?", attempt);
+    // Simulate explicit retry and a new attempt admission.
+    jdbc.update("update execution_runs set status='RUNNING' where id=?", run);
+    jdbc.update(
+        "update tasks set status='RUNNING',pending_reason=null,waiting_since=null,resolver=null "
+            + "where id=(select task_id from execution_runs where id=?)",
+        run);
     var replacement = UUID.randomUUID();
     jdbc.update(
         """
@@ -297,15 +323,41 @@ values (?,?,?,?,?,?,'CREATED')
 
     assertThatThrownBy(() -> tx.execute(status -> controls.acknowledgeCancellation(scope, 6)))
         .hasMessage("Mission execution control is unavailable.");
+    assertThat(tx.<Boolean>execute(status -> expiryStore.expire(org, run, token.fence())))
+        .isFalse();
+    jdbc.update(
+        "update execution_claims set issued_at=?,expires_at=? where run_id=? and fence=?",
+        past.minusMinutes(1),
+        past,
+        run,
+        next.fence());
+    assertThat(tx.<Boolean>execute(status -> expiryStore.expire(org, run, next.fence()))).isTrue();
+    assertThat(
+            jdbc.queryForObject(
+                "select status from execution_attempts where id=?", String.class, next.attempt()))
+        .isEqualTo("UNKNOWN");
+    assertThat(
+            jdbc.queryForObject("select status from execution_runs where id=?", String.class, run))
+        .isEqualTo("CANCELLING");
+    assertThat(
+            jdbc.queryForObject(
+                "select status from tasks where id=(select task_id from execution_runs where id=?)",
+                String.class,
+                run))
+        .isEqualTo("RUNNING");
+    assertThat(
+            jdbc.queryForObject(
+                "select status from execution_budget_reservations where run_id=? and action_id=?",
+                String.class,
+                run,
+                pending))
+        .isEqualTo("UNKNOWN");
+    assertThatThrownBy(() -> tx.execute(status -> controls.acknowledgeCancellation(scope, 6)))
+        .hasMessage("Mission execution control is unavailable.");
     // Simulate trusted reconciliation of the Attempt, retaining the resulting outcome.
     jdbc.update(
         "update execution_attempts set status='SUCCEEDED',outcome_slot=3 where id=?",
         next.attempt());
-    assertThatThrownBy(() -> tx.execute(status -> controls.acknowledgeCancellation(scope, 6)))
-        .hasMessage("Mission execution control is unavailable.");
-    tx.executeWithoutResult(status -> store.invalidate(next));
-    var budgets = new ExecutionBudgetStore(jdbc, store);
-    tx.executeWithoutResult(status -> budgets.markUnknown(org, run, pending));
     assertThatThrownBy(() -> tx.execute(status -> controls.acknowledgeCancellation(scope, 6)))
         .hasMessage("Mission execution control is unavailable.");
     tx.executeWithoutResult(status -> budgets.settleVerified(org, run, pending, 0));
