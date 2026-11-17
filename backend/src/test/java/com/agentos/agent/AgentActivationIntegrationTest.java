@@ -6,6 +6,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -63,7 +64,12 @@ class AgentActivationIntegrationTest {
   void reviewApiRequiresAdminCsrfAndExactVersionAndReplaysTheDecision() throws Exception {
     UUID mission = UUID.randomUUID(), task = UUID.randomUUID(), run = UUID.randomUUID();
     UUID attempt = UUID.randomUUID();
-    String output = "a".repeat(64);
+    String content = "<script>untrusted</script>\nKết quả đã xác minh";
+    String output =
+        java.util.HexFormat.of()
+            .formatHex(
+                java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(content.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
     jdbc.update(
         """
 insert into missions (id,organization_id,team_id,title,goal,status,priority,created_at,updated_at)
@@ -146,6 +152,7 @@ values (?,?,?,?,?,1,'IN_REVIEW',2)
         attempt);
 
     String path = "/api/v1/organizations/" + org + "/execution-runs/" + run + "/review";
+    String outputPath = path + "/output?attemptId=" + attempt + "&expectedRevision=2";
     var body =
         json.createObjectNode()
             .put("attemptId", attempt.toString())
@@ -164,6 +171,25 @@ values (?,?,?,?,?,1,'IN_REVIEW',2)
         .andExpect(jsonPath("$.data.revision").value(2))
         .andExpect(jsonPath("$.data.outputSha256").value(output))
         .andExpect(jsonPath("$.data.reworkAvailable").value(false));
+    mvc.perform(get(outputPath).with(auth())).andExpect(status().isNotFound());
+    jdbc.update(
+        """
+        insert into execution_verified_output_content
+          (run_id,attempt_id,output_sha256,content,stored_at) values (?,?,?,?,current_timestamp)
+        """,
+        run,
+        attempt,
+        output,
+        content);
+    mvc.perform(get(outputPath).with(auth()))
+        .andExpect(status().isOk())
+        .andExpect(header().string("Cache-Control", "no-store"))
+        .andExpect(jsonPath("$.data.content").value(content));
+    mvc.perform(get(outputPath.replace("expectedRevision=2", "expectedRevision=1")).with(auth()))
+        .andExpect(status().isConflict());
+    jdbc.update("update organization_memberships set role='MEMBER' where account_id=?", human.id());
+    mvc.perform(get(outputPath).with(auth())).andExpect(status().isForbidden());
+    jdbc.update("update organization_memberships set role='ADMIN' where account_id=?", human.id());
     mvc.perform(
             post(path + "/decision")
                 .with(auth())
@@ -195,6 +221,7 @@ values (?,?,?,?,?,1,'IN_REVIEW',2)
           .andExpect(status().isNoContent());
     }
     mvc.perform(get(path).with(auth())).andExpect(status().isNotFound());
+    mvc.perform(get(outputPath).with(auth())).andExpect(status().isNotFound());
     assertThat(
             jdbc.queryForObject("select status from execution_runs where id=?", String.class, run))
         .isEqualTo("COMPLETED");

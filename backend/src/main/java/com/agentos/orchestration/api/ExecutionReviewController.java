@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -41,6 +42,20 @@ public class ExecutionReviewController {
       @PathVariable UUID runId,
       @AuthenticationPrincipal HumanIdentity reviewer) {
     return ApiResponse.ok(reviews.current(organizationId, runId, reviewer));
+  }
+
+  @GetMapping("/output")
+  public ResponseEntity<ApiResponse<ExecutionReviewService.Output>> output(
+      @PathVariable UUID organizationId,
+      @PathVariable UUID runId,
+      @AuthenticationPrincipal HumanIdentity reviewer,
+      @RequestParam UUID attemptId,
+      @RequestParam long expectedRevision) {
+    return ResponseEntity.ok()
+        .header("Cache-Control", "no-store")
+        .body(
+            ApiResponse.ok(
+                reviews.output(organizationId, runId, reviewer, attemptId, expectedRevision)));
   }
 
   @PostMapping("/decision")

@@ -12,6 +12,8 @@ public class ExecutionReviewService {
   public record Review(
       UUID attemptId, long revision, String outputSha256, boolean reworkAvailable) {}
 
+  public record Output(UUID attemptId, long revision, String outputSha256, String content) {}
+
   public static class Conflict extends IllegalStateException {
     public Conflict() {
       super("Execution output review decision is unavailable.");
@@ -19,9 +21,12 @@ public class ExecutionReviewService {
   }
 
   private final ExecutionReviewDecisionStore decisions;
+  private final ExecutionOutputContentStore outputs;
 
-  ExecutionReviewService(ExecutionReviewDecisionStore decisions) {
+  ExecutionReviewService(
+      ExecutionReviewDecisionStore decisions, ExecutionOutputContentStore outputs) {
     this.decisions = decisions;
+    this.outputs = outputs;
   }
 
   @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
@@ -31,6 +36,18 @@ public class ExecutionReviewService {
     if (target == null) throw new EntityNotFoundException("Execution review not found");
     return new Review(
         target.attempt(), target.revision(), target.outputSha256(), target.reworkAvailable());
+  }
+
+  @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+  public Output output(
+      UUID organization, UUID run, HumanIdentity reviewer, UUID attempt, long revision) {
+    var review = current(organization, run, reviewer);
+    if (!review.attemptId().equals(attempt) || review.revision() != revision) throw new Conflict();
+    return new Output(
+        review.attemptId(),
+        review.revision(),
+        review.outputSha256(),
+        outputs.read(run, attempt, review.outputSha256()));
   }
 
   @Transactional
