@@ -1,6 +1,7 @@
 package com.agentos.orchestration.application;
 
 import com.agentos.auth.HumanIdentity;
+import jakarta.persistence.EntityNotFoundException;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.access.AccessDeniedException;
@@ -22,7 +23,13 @@ class ExecutionReviewDecisionStore {
 
   private record Receipt(UUID reviewer, Request request) {}
 
-  private record Target(UUID task, UUID mission) {}
+  record Target(
+      UUID task,
+      UUID mission,
+      UUID attempt,
+      long revision,
+      String outputSha256,
+      boolean reworkAvailable) {}
 
   private final JdbcTemplate jdbc;
   private final ExecutionClaimStore claims;
@@ -33,7 +40,15 @@ class ExecutionReviewDecisionStore {
   }
 
   void decide(UUID organization, HumanIdentity reviewer, UUID run, Request request) {
-    requireAdmin(organization, reviewer);
+    requireAdmin(organization, reviewer, true);
+    if (jdbc.queryForList(
+            "select id from execution_runs where organization_id=? and id=?",
+            UUID.class,
+            organization,
+            run)
+        .isEmpty()) {
+      throw new EntityNotFoundException("Execution review not found");
+    }
     request = canonical(request);
     claims.lockRun(organization, run, false);
     var receipts =
@@ -60,7 +75,14 @@ where d.run_id=? and d.attempt_id=?
       throw unavailable();
     }
 
-    var target = requireTarget(organization, run, request);
+    var target = current(organization, run);
+    if (target == null
+        || !target.attempt().equals(request.attempt())
+        || target.revision() != request.revision()
+        || !target.outputSha256().equals(request.outputSha256())
+        || (request.decision() == Decision.REWORK && !target.reworkAvailable())) {
+      throw unavailable();
+    }
     var at = claims.now();
     boolean rework = request.decision() == Decision.REWORK;
     if (jdbc.update(
@@ -105,49 +127,56 @@ values (?,?,?,?,'HUMAN',?,?,?,?)
         at);
   }
 
-  private Target requireTarget(UUID organization, UUID run, Request request) {
+  Target current(UUID organization, UUID run) {
     var targets =
         jdbc.query(
             """
-select r.task_id,r.mission_id from execution_runs r
+select r.task_id,r.mission_id,s.attempt_id,r.revision,e.output_sha256,
+  coalesce(r.max_reworks > (select count(*) from execution_review_decisions d
+    where d.run_id=r.id and d.decision='REWORK'),false)
+from execution_runs r
 join execution_reconciled_review_submissions s on s.run_id=r.id
 join execution_attempt_reconciliations e on e.run_id=s.run_id and e.attempt_id=s.attempt_id
 join mission_execution_controls c on c.organization_id=r.organization_id
   and c.team_id=r.team_id and c.mission_id=r.mission_id
 join missions m on m.organization_id=r.organization_id and m.team_id=r.team_id and m.id=r.mission_id
-where r.organization_id=? and r.id=? and r.status='IN_REVIEW' and r.revision=?
-  and s.source_run_revision=r.revision-1 and s.attempt_id=? and e.output_sha256=?
+join tasks t on t.organization_id=r.organization_id and t.team_id=r.team_id
+  and t.mission_id=r.mission_id and t.id=r.task_id
+where r.organization_id=? and r.id=? and r.status='IN_REVIEW' and t.status='IN_REVIEW'
+  and s.source_run_revision=r.revision-1 and e.output_sha256 is not null
   and m.status in ('RUNNING','WAITING_APPROVAL')
   and c.state in ('OPEN','PAUSE_REQUESTED')
-  and (?='ACCEPT' or r.max_reworks > (select count(*) from execution_review_decisions d
-    where d.run_id=r.id and d.decision='REWORK'))
 """,
-            (rs, row) -> new Target(rs.getObject(1, UUID.class), rs.getObject(2, UUID.class)),
+            (rs, row) ->
+                new Target(
+                    rs.getObject(1, UUID.class),
+                    rs.getObject(2, UUID.class),
+                    rs.getObject(3, UUID.class),
+                    rs.getLong(4),
+                    rs.getString(5),
+                    rs.getBoolean(6)),
             organization,
-            run,
-            request.revision(),
-            request.attempt(),
-            request.outputSha256(),
-            request.decision().name());
-    if (targets.isEmpty()) throw unavailable();
-    return targets.getFirst();
+            run);
+    return targets.isEmpty() ? null : targets.getFirst();
   }
 
-  private void requireAdmin(UUID organization, HumanIdentity reviewer) {
+  void requireAdmin(UUID organization, HumanIdentity reviewer, boolean lock) {
+    String locking = lock ? " for update" : "";
     if (reviewer == null
         || jdbc.queryForList(
-                "select id from organizations where id=? for update", UUID.class, organization)
+                "select id from organizations where id=?" + locking, UUID.class, organization)
             .isEmpty()
         || jdbc.queryForList(
                 "select id from human_accounts where id=? and enabled=true and credential_version=?"
-                    + " for update",
+                    + locking,
                 UUID.class,
                 reviewer.id(),
                 reviewer.credentialVersion())
             .isEmpty()
         || jdbc.queryForList(
                 "select role from organization_memberships where organization_id=? and account_id=?"
-                    + " and role='ADMIN' for update",
+                    + " and role='ADMIN'"
+                    + locking,
                 String.class,
                 organization,
                 reviewer.id())
@@ -164,17 +193,18 @@ where r.organization_id=? and r.id=? and r.status='IN_REVIEW' and r.revision=?
         || request.decision() == null
         || request.outputSha256() == null
         || !request.outputSha256().matches("[0-9a-f]{64}")) {
-      throw unavailable();
+      throw new IllegalArgumentException("Invalid review decision");
     }
     String reason = request.reason() == null ? null : request.reason().strip();
     if (request.decision() == Decision.ACCEPT
         ? reason != null
-        : reason == null || reason.isEmpty() || reason.length() > 1000) throw unavailable();
+        : reason == null || reason.isEmpty() || reason.length() > 1000)
+      throw new IllegalArgumentException("Invalid review decision reason");
     return new Request(
         request.attempt(), request.revision(), request.outputSha256(), request.decision(), reason);
   }
 
-  private static IllegalStateException unavailable() {
-    return new IllegalStateException("Execution output review decision is unavailable.");
+  private static ExecutionReviewService.Conflict unavailable() {
+    return new ExecutionReviewService.Conflict();
   }
 }
