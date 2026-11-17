@@ -6,6 +6,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.agentos.agent.application.AgentModelGrantService;
+import com.agentos.auth.HumanIdentity;
 import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
 import java.util.UUID;
@@ -18,6 +19,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.support.TransactionTemplate;
 
 class RuntimePersistenceTest {
@@ -486,8 +488,89 @@ values (?,?,?,?,?,?,'CREATED')
                       "select count(*) from execution_reconciled_review_submissions",
                       Integer.class))
               .isEqualTo(1);
+          verifyReviewDecisions(jdbc, claims, status, org, run, attempt, revision + 1, output);
           status.setRollbackOnly();
         });
+  }
+
+  private void verifyReviewDecisions(
+      JdbcTemplate jdbc,
+      ExecutionClaimStore claims,
+      TransactionStatus status,
+      UUID org,
+      UUID run,
+      UUID attempt,
+      long revision,
+      String output) {
+    var decisions = new ExecutionReviewDecisionStore(jdbc, claims);
+    UUID account = jdbc.queryForObject("select id from human_accounts", UUID.class);
+    var reviewer = new HumanIdentity(account, "admin@example.test", "Admin");
+    var accept =
+        new ExecutionReviewDecisionStore.Request(
+            attempt, revision, output, ExecutionReviewDecisionStore.Decision.ACCEPT, null);
+    var rework =
+        new ExecutionReviewDecisionStore.Request(
+            attempt,
+            revision,
+            output,
+            ExecutionReviewDecisionStore.Decision.REWORK,
+            " Add verification ");
+    jdbc.update(
+        "insert into organization_memberships (account_id,organization_id,role) values"
+            + " (?,?,'MEMBER')",
+        account,
+        org);
+    assertThatThrownBy(() -> decisions.decide(org, reviewer, run, accept))
+        .hasMessage("Request denied");
+    jdbc.update(
+        "update organization_memberships set role='ADMIN' where account_id=? and organization_id=?",
+        account,
+        org);
+    assertThatThrownBy(
+            () ->
+                decisions.decide(
+                    org,
+                    new HumanIdentity(account, reviewer.email(), reviewer.displayName(), 999),
+                    run,
+                    accept))
+        .hasMessage("Request denied");
+    assertThatThrownBy(() -> decisions.decide(org, reviewer, run, rework))
+        .hasMessage("Execution output review decision is unavailable.");
+
+    Object savepoint = status.createSavepoint();
+    jdbc.update("update execution_runs set max_reworks=1 where id=?", run);
+    decisions.decide(org, reviewer, run, rework);
+    decisions.decide(org, reviewer, run, rework);
+    assertThat(jdbc.queryForMap("select status,revision from execution_runs where id=?", run))
+        .containsEntry("status", "CREATED")
+        .containsEntry("revision", revision + 1);
+    assertThat(jdbc.queryForObject("select reason from execution_review_decisions", String.class))
+        .isEqualTo("Add verification");
+    assertThat(
+            jdbc.queryForObject(
+                "select status from tasks where id=(select task_id from execution_runs where id=?)",
+                String.class,
+                run))
+        .isEqualTo("READY");
+    status.rollbackToSavepoint(savepoint);
+    status.releaseSavepoint(savepoint);
+
+    decisions.decide(org, reviewer, run, accept);
+    decisions.decide(org, reviewer, run, accept);
+    assertThatThrownBy(() -> decisions.decide(org, reviewer, run, rework))
+        .hasMessage("Execution output review decision is unavailable.");
+    assertThat(
+            jdbc.queryForObject("select status from execution_runs where id=?", String.class, run))
+        .isEqualTo("COMPLETED");
+    assertThat(
+            jdbc.queryForObject(
+                "select status from execution_attempts where id=?", String.class, attempt))
+        .isEqualTo("SUCCEEDED");
+    assertThat(
+            jdbc.queryForObject(
+                "select count(*) from audit_events where event_type='EXECUTION_OUTPUT_ACCEPTED'",
+                Integer.class))
+        .isEqualTo(1);
   }
 
   private UUID verifyBudget(

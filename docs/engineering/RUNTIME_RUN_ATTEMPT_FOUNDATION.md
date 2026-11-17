@@ -81,3 +81,9 @@ The Run, Task and Mission stay at their current lifecycle states. Submission for
 V047 lets trusted reconciliation bind a successful Attempt to the digest of its verified output. Historical or cost-only reconciliation receipts without an output digest remain valid. An authorized caller can submit the latest reconciled successful Attempt when its exact output digest and Run revision match. The transaction requires a blocked Run and a Task blocked by an unknown outcome, no live claim or unsettled reservation, and a Mission without a cancellation request. Pausing new execution does not prohibit review of an existing output.
 
 The submission advances the Run and Task to IN_REVIEW and preserves an idempotent receipt. It records output identity only. Artifact storage and retrieval, reviewer decisions, and public commands remain separate.
+
+## Review decisions
+
+V048 records one human ADMIN decision for the exact review submission. The command rechecks the account credential and organization role before receipt replay. It binds the decision to the reviewed output digest and Run revision. Acceptance completes the Run and Task. Rework requires a reason and an explicitly configured remaining per-Run limit. It returns the Task to READY and the Run to CREATED while retaining the successful Attempt for history. A new claim and Attempt still require admission. A null rework limit keeps rework unavailable.
+
+The decision and audit event commit with the Task and Run transitions. Public endpoints, reviewer UI, dispatch, and recomputation of the aggregate Mission status remain separate.
