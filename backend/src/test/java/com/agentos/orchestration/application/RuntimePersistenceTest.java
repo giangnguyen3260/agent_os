@@ -366,13 +366,36 @@ values (?,?,?,?,?,?,'CREATED')
         .isEqualTo("UNKNOWN");
     assertThatThrownBy(() -> tx.execute(status -> controls.acknowledgeCancellation(scope, 6)))
         .hasMessage("Mission execution control is unavailable.");
-    // Simulate trusted reconciliation of the Attempt, retaining the resulting outcome.
-    jdbc.update(
-        "update execution_attempts set status='SUCCEEDED',outcome_slot=3 where id=?",
-        next.attempt());
-    assertThatThrownBy(() -> tx.execute(status -> controls.acknowledgeCancellation(scope, 6)))
-        .hasMessage("Mission execution control is unavailable.");
+    var reconciliations = new ExecutionAttemptReconciliationStore(jdbc, store);
+    var outcome = ExecutionAttemptReconciliationStore.Outcome.SUCCEEDED;
+    String evidence = "b".repeat(64);
+    assertThatThrownBy(
+            () ->
+                tx.executeWithoutResult(
+                    status ->
+                        reconciliations.recordVerified(
+                            org, run, next.attempt(), outcome, evidence)))
+        .hasMessage("Execution Attempt reconciliation is unavailable.");
     tx.executeWithoutResult(status -> budgets.settleVerified(org, run, pending, 0));
+    assertThatThrownBy(
+            () ->
+                tx.executeWithoutResult(
+                    status ->
+                        reconciliations.recordVerified(
+                            UUID.randomUUID(), run, next.attempt(), outcome, evidence)))
+        .isInstanceOf(IllegalStateException.class);
+    tx.executeWithoutResult(
+        status -> reconciliations.recordVerified(org, run, next.attempt(), outcome, evidence));
+    assertThatThrownBy(
+            () ->
+                tx.executeWithoutResult(
+                    status ->
+                        reconciliations.recordVerified(
+                            org, run, next.attempt(), outcome, "c".repeat(64))))
+        .hasMessage("Execution Attempt reconciliation is unavailable.");
+    assertThat(
+            jdbc.queryForObject("select status from execution_runs where id=?", String.class, run))
+        .isEqualTo("CANCELLING");
 
     jdbc.update(
         """
@@ -396,6 +419,12 @@ values (?,?,?,?,?,?,'CREATED')
             jdbc.queryForObject(
                 "select status from execution_attempts where id=?", String.class, next.attempt()))
         .isEqualTo("SUCCEEDED");
+    tx.executeWithoutResult(
+        status -> reconciliations.recordVerified(org, run, next.attempt(), outcome, evidence));
+    assertThat(
+            jdbc.queryForObject(
+                "select count(*) from execution_attempt_reconciliations", Integer.class))
+        .isEqualTo(1);
     assertThatThrownBy(() -> tx.execute(status -> controls.acknowledgeCancellation(scope, 6)))
         .hasMessage("Mission execution control is unavailable.");
   }

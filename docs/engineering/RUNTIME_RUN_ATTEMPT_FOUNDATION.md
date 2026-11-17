@@ -69,3 +69,9 @@ Expiry blocks an active Task and Run and retains the original Attempt outcome fo
 The backend scans for the latest expired claims every five seconds by default. It processes up to 16 candidates per scan, with one transaction per claim. A rotating cursor lets later claims progress when an earlier claim consistently fails. Each expiry transaction rechecks the fence and the database clock, so multiple backend instances and concurrent renewal remain safe. Scan progress is local to the process and can restart from the oldest candidate after a restart. V045 adds the scan index.
 
 Set `agentos.execution.lease-expiry.enabled=false` to disable the scanner or change the interval with `agentos.execution.lease-expiry.delay-ms`. The scheduler processes lease transitions only. Provider dispatch and retries remain separate.
+
+## Verified Attempt reconciliation
+
+V046 records one verified outcome and evidence digest per Attempt. A trusted caller verifies the evidence before recording it. The transaction requires an UNKNOWN Attempt on a BLOCKED Run, or an UNKNOWN or CANCELLING Attempt on a CANCELLING Run. An unexpired, uninvalidated claim or unsettled reservation for the Attempt blocks the transition. Recording an outcome closes the Attempt in its numbered terminal slot. The exact receipt is replayable, while conflicting evidence or a different outcome is rejected.
+
+The Run, Task and Mission stay at their current lifecycle states. Submission for review, retry and cancellation acknowledgement remain distinct operations. The store persists the digest only and introduces no external evidence verification or public endpoint.
