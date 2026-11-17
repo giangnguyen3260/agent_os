@@ -452,7 +452,8 @@ values (?,?,?,?,?,?,'CREATED')
               """,
               attempt,
               run);
-          String output = "f".repeat(64);
+          String textOutput = "verified output";
+          String output = "eecf56ab92af6fc765c7564f294a6f24b1cd2b4852b0c42d636d77d1501fb664";
           long revision =
               jdbc.queryForObject(
                   "select revision from execution_runs where id=?", Long.class, run);
@@ -471,6 +472,18 @@ values (?,?,?,?,?,?,'CREATED')
           assertThatThrownBy(() -> review.submitReconciled(org, run, attempt, revision + 1, output))
               .hasMessage("Reconciled output review is unavailable.");
 
+          var outputs = new ExecutionOutputContentStore(jdbc, claims);
+          assertThatThrownBy(() -> outputs.recordVerified(org, run, attempt, "different output"))
+              .isInstanceOf(IllegalStateException.class);
+          assertThatThrownBy(() -> outputs.recordVerified(org, run, attempt, "x".repeat(262145)))
+              .isInstanceOf(IllegalStateException.class);
+          outputs.recordVerified(org, run, attempt, textOutput);
+          outputs.recordVerified(org, run, attempt, textOutput);
+          assertThat(outputs.read(run, attempt, output)).isEqualTo(textOutput);
+          assertThat(
+                  jdbc.queryForObject(
+                      "select count(*) from execution_verified_output_content", Integer.class))
+              .isEqualTo(1);
           review.submitReconciled(org, run, attempt, revision, output);
           review.submitReconciled(org, run, attempt, revision, output);
           assertThat(jdbc.queryForMap("select status,revision from execution_runs where id=?", run))

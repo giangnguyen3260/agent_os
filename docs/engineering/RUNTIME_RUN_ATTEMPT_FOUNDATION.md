@@ -91,3 +91,9 @@ The decision and audit event commit with the Task and Run transitions. Public en
 ## Output review API
 
 Current workspace ADMINs can GET `/api/v1/organizations/{organizationId}/execution-runs/{runId}/review` for the pending Attempt ID, Run revision, verified output digest, and rework availability. When no current review exists, the endpoint returns 404. POST to the same path plus `/decision` with `attemptId`, `expectedRevision`, `outputSha256`, `decision` (ACCEPT or REWORK), and an optional `reason` required for rework. An exact repeat by the original authorized reviewer returns 204, the same as the initial decision. Conflicts return 409. Mutations require the existing CSRF token. The API exposes output identity, while content retrieval and reviewer UI remain separate.
+
+## Verified text output
+
+V049 stores verified text for a reconciled successful Attempt. The internal writer checks the exact UTF-8 SHA-256 digest against reconciliation evidence and permits at most 256 KiB of valid UTF-8 text. Matching writes replay. Raw content stays outside audit and Trace metadata.
+
+ADMIN can GET the current review's `/output?attemptId=...&expectedRevision=...` endpoint. It returns JSON text with a no-store response header and rechecks current authority, review identity, revision and content integrity. Missing historical content returns 404. A stale review returns 409. This slice chooses bounded text as the first output format. Artifact files and reviewer UI remain separate.
