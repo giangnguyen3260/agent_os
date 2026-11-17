@@ -75,3 +75,9 @@ Set `agentos.execution.lease-expiry.enabled=false` to disable the scanner or cha
 V046 records one verified outcome and evidence digest per Attempt. A trusted caller verifies the evidence before recording it. The transaction requires an UNKNOWN Attempt on a BLOCKED Run, or an UNKNOWN or CANCELLING Attempt on a CANCELLING Run. An unexpired, uninvalidated claim or unsettled reservation for the Attempt blocks the transition. Recording an outcome closes the Attempt in its numbered terminal slot. The exact receipt is replayable, while conflicting evidence or a different outcome is rejected.
 
 The Run, Task and Mission stay at their current lifecycle states. Submission for review, retry and cancellation acknowledgement remain distinct operations. The store persists the digest only and introduces no external evidence verification or public endpoint.
+
+## Review submission after reconciliation
+
+V047 lets trusted reconciliation bind a successful Attempt to the digest of its verified output. Historical or cost-only reconciliation receipts without an output digest remain valid. An authorized caller can submit the latest reconciled successful Attempt when its exact output digest and Run revision match. The transaction requires a blocked Run and a Task blocked by an unknown outcome, no live claim or unsettled reservation, and a Mission without a cancellation request. Pausing new execution does not prohibit review of an existing output.
+
+The submission advances the Run and Task to IN_REVIEW and preserves an idempotent receipt. It records output identity only. Artifact storage and retrieval, reviewer decisions, and public commands remain separate.
