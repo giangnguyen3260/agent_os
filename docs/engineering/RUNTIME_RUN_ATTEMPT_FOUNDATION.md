@@ -57,3 +57,9 @@ The transport must use the handoff only after its transaction commits. A committ
 V044 records the first uncertain delivery observation and the eventual accounting disposition. For an authorized model action, uncertain delivery requires a committed handoff and preserves the budget hold. Verified model usage requires the same connection and a handoff, and commits the receipt and disposition with the charge. A trusted cost-only settlement of an authorized model action requires verified zero cost and distinguishes actions that were never handed off from handed-off actions verified to carry no charge. This accounting disposition alone does not prove an Attempt succeeded or that all other effects are resolved.
 
 Historical settlements remain replayable, and reservations outside the model authorization ledger retain their existing behavior. There is no automatic resend or network-based reconciliation in this change.
+
+## Lease expiry
+
+The internal expiry transaction matches the latest fence and reads the database clock after locking. A stale, renewed or already-invalidated claim is a no-op. A proven unhanded model action releases its hold at zero cost. A possibly sent action with unsettled accounting is marked unknown and retains its hold. A running Attempt with a possible remote effect requires reconciliation even if accounting has already settled. A recorded safe wait with no unresolved accounting remains WAITING.
+
+Expiry blocks an active Task and Run and retains the original Attempt outcome for reconciliation. If cancellation already owns the Run, expiry leaves it CANCELLING and preserves the Task projection. The transaction adds no scheduler, automatic retry, or provider call.

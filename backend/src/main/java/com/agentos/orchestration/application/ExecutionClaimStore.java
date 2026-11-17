@@ -112,6 +112,17 @@ class ExecutionClaimStore {
     }
   }
 
+  Token invalidateExpired(UUID organization, UUID run, long expectedFence) {
+    lockRun(organization, run, false);
+    var claim = latest(organization, run);
+    if (claim == null
+        || claim.token().fence() != expectedFence
+        || claim.invalidated()
+        || claim.expiresAt().isAfter(now())) return null;
+    invalidate(claim.token());
+    return claim.token();
+  }
+
   private Claim requireCurrentLease(Token token) {
     lockRun(token.organization(), token.run(), true);
     requireRunningAttempt(token.run(), token.attempt());
