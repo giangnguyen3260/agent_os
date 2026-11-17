@@ -16,7 +16,7 @@ class ExecutionAttemptReconciliationStore {
     CANCELLED
   }
 
-  private record Receipt(String outcome, String evidenceSha256) {}
+  private record Receipt(String outcome, String evidenceSha256, String outputSha256) {}
 
   private final JdbcTemplate jdbc;
   private final ExecutionClaimStore claims;
@@ -29,19 +29,32 @@ class ExecutionAttemptReconciliationStore {
   // The caller must verify the outcome and evidence before recording a disposition.
   void recordVerified(
       UUID organization, UUID run, UUID attempt, Outcome outcome, String evidenceSha256) {
+    recordVerified(organization, run, attempt, outcome, evidenceSha256, null);
+  }
+
+  void recordVerified(
+      UUID organization,
+      UUID run,
+      UUID attempt,
+      Outcome outcome,
+      String evidenceSha256,
+      String outputSha256) {
     if (attempt == null
         || outcome == null
         || evidenceSha256 == null
-        || !evidenceSha256.matches("[0-9a-f]{64}")) throw unavailable();
+        || !evidenceSha256.matches("[0-9a-f]{64}")
+        || (outputSha256 != null
+            && (outcome != Outcome.SUCCEEDED || !outputSha256.matches("[0-9a-f]{64}"))))
+      throw unavailable();
     claims.lockRun(organization, run, false);
-    var receipt = new Receipt(outcome.name(), evidenceSha256);
+    var receipt = new Receipt(outcome.name(), evidenceSha256, outputSha256);
     var existing =
         jdbc.query(
             """
-            select outcome,evidence_sha256 from execution_attempt_reconciliations
+            select outcome,evidence_sha256,output_sha256 from execution_attempt_reconciliations
             where run_id=? and attempt_id=?
             """,
-            (rs, row) -> new Receipt(rs.getString(1), rs.getString(2)),
+            (rs, row) -> new Receipt(rs.getString(1), rs.getString(2), rs.getString(3)),
             run,
             attempt);
     if (!existing.isEmpty()) {
@@ -72,13 +85,14 @@ class ExecutionAttemptReconciliationStore {
     jdbc.update(
         """
         insert into execution_attempt_reconciliations
-          (run_id,attempt_id,outcome,evidence_sha256,reconciled_at)
-        values (?,?,?,?,?)
+          (run_id,attempt_id,outcome,evidence_sha256,output_sha256,reconciled_at)
+        values (?,?,?,?,?,?)
         """,
         run,
         attempt,
         receipt.outcome(),
         receipt.evidenceSha256(),
+        receipt.outputSha256(),
         at);
   }
 

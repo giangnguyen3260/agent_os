@@ -287,6 +287,8 @@ values (?,?,?,?,?,?,'CREATED')
         .isEqualTo("LEASE_EXPIRED");
     assertThat(tryIssue(tx, store, org, run, attempt, token.worker(), expiry, deadline)).isNull();
 
+    verifyReconciledReview(jdbc, tx, store, org, run);
+
     // Simulate explicit retry and a new attempt admission.
     jdbc.update("update execution_runs set status='RUNNING' where id=?", run);
     jdbc.update(
@@ -427,6 +429,65 @@ values (?,?,?,?,?,?,'CREATED')
         .isEqualTo(1);
     assertThatThrownBy(() -> tx.execute(status -> controls.acknowledgeCancellation(scope, 6)))
         .hasMessage("Mission execution control is unavailable.");
+  }
+
+  private void verifyReconciledReview(
+      JdbcTemplate jdbc, TransactionTemplate tx, ExecutionClaimStore claims, UUID org, UUID run) {
+    var review = new ExecutionRunReviewStore(jdbc, claims);
+    var reconcile = new ExecutionAttemptReconciliationStore(jdbc, claims);
+    // Exercise the late-success branch independently of the cancellation scenario.
+    tx.executeWithoutResult(
+        status -> {
+          jdbc.update(
+              "update tasks set pending_reason='OUTCOME_UNKNOWN' where id="
+                  + "(select task_id from execution_runs where id=?)",
+              run);
+          UUID attempt = UUID.randomUUID();
+          jdbc.update(
+              """
+              insert into execution_attempts (id,run_id,attempt_number,status,outcome_slot)
+              values (?,?,3,'UNKNOWN',0)
+              """,
+              attempt,
+              run);
+          String output = "f".repeat(64);
+          long revision =
+              jdbc.queryForObject(
+                  "select revision from execution_runs where id=?", Long.class, run);
+          assertThatThrownBy(() -> review.submitReconciled(org, run, attempt, revision, output))
+              .hasMessage("Reconciled output review is unavailable.");
+          reconcile.recordVerified(
+              org,
+              run,
+              attempt,
+              ExecutionAttemptReconciliationStore.Outcome.SUCCEEDED,
+              "a".repeat(64),
+              output);
+          assertThatThrownBy(
+                  () -> review.submitReconciled(org, run, attempt, revision, "e".repeat(64)))
+              .hasMessage("Reconciled output review is unavailable.");
+          assertThatThrownBy(() -> review.submitReconciled(org, run, attempt, revision + 1, output))
+              .hasMessage("Reconciled output review is unavailable.");
+
+          review.submitReconciled(org, run, attempt, revision, output);
+          review.submitReconciled(org, run, attempt, revision, output);
+          assertThat(jdbc.queryForMap("select status,revision from execution_runs where id=?", run))
+              .containsEntry("status", "IN_REVIEW")
+              .containsEntry("revision", revision + 1);
+          assertThat(
+                  jdbc.queryForMap(
+                      "select status,pending_reason from tasks where id=(select task_id from"
+                          + " execution_runs where id=?)",
+                      run))
+              .containsEntry("status", "IN_REVIEW")
+              .containsEntry("pending_reason", null);
+          assertThat(
+                  jdbc.queryForObject(
+                      "select count(*) from execution_reconciled_review_submissions",
+                      Integer.class))
+              .isEqualTo(1);
+          status.setRollbackOnly();
+        });
   }
 
   private UUID verifyBudget(
