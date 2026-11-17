@@ -63,3 +63,9 @@ Historical settlements remain replayable, and reservations outside the model aut
 The internal expiry transaction matches the latest fence and reads the database clock after locking. A stale, renewed or already-invalidated claim is a no-op. A proven unhanded model action releases its hold at zero cost. A possibly sent action with unsettled accounting is marked unknown and retains its hold. A running Attempt with a possible remote effect requires reconciliation even if accounting has already settled. A recorded safe wait with no unresolved accounting remains WAITING.
 
 Expiry blocks an active Task and Run and retains the original Attempt outcome for reconciliation. If cancellation already owns the Run, expiry leaves it CANCELLING and preserves the Task projection. The transaction adds no scheduler, automatic retry, or provider call.
+
+## Scheduled lease expiry
+
+The backend scans for the latest expired claims every five seconds by default. It processes up to 16 candidates per scan, with one transaction per claim. A rotating cursor lets later claims progress when an earlier claim consistently fails. Each expiry transaction rechecks the fence and the database clock, so multiple backend instances and concurrent renewal remain safe. Scan progress is local to the process and can restart from the oldest candidate after a restart. V045 adds the scan index.
+
+Set `agentos.execution.lease-expiry.enabled=false` to disable the scanner or change the interval with `agentos.execution.lease-expiry.delay-ms`. The scheduler processes lease transitions only. Provider dispatch and retries remain separate.

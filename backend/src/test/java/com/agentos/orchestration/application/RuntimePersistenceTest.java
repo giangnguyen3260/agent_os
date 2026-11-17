@@ -242,12 +242,12 @@ values (?,?,?,?,?,?,'CREATED')
 
     var budgets = new ExecutionBudgetStore(jdbc, store);
     var expiryStore = new ExecutionLeaseExpiryStore(jdbc, store, budgets);
+    var expiryScheduler =
+        new ExecutionLeaseExpiryScheduler(
+            jdbc, expiryStore, new DataSourceTransactionManager(jdbc.getDataSource()));
+    expiryScheduler.sweep();
     assertThat(tx.<Boolean>execute(status -> expiryStore.expire(org, run, token.fence())))
         .isFalse();
-    jdbc.update(
-        "update tasks set status='RUNNING' where id=(select task_id from execution_runs where"
-            + " id=?)",
-        run);
     var past = OffsetDateTime.now().minusMinutes(1);
     jdbc.update(
         "update execution_claims set issued_at=?, expires_at=? where run_id=?",
@@ -259,7 +259,19 @@ values (?,?,?,?,?,?,'CREATED')
     assertThatThrownBy(() -> tx.executeWithoutResult(status -> store.renew(token, deadline)))
         .isInstanceOf(IllegalStateException.class);
     assertThat(tryIssue(tx, store, org, run, attempt, token.worker(), expiry, deadline)).isNull();
-    assertThat(tx.<Boolean>execute(status -> expiryStore.expire(org, run, token.fence()))).isTrue();
+    // Inconsistent projections make expiry roll back and leave the claim eligible for another scan.
+    expiryScheduler.sweep();
+    assertThat(
+            jdbc.queryForObject(
+                "select count(*) from execution_claims where run_id=? and invalidated_at is null",
+                Integer.class,
+                run))
+        .isEqualTo(1);
+    jdbc.update(
+        "update tasks set status='RUNNING' where id=(select task_id from execution_runs where"
+            + " id=?)",
+        run);
+    expiryScheduler.sweep();
     assertThat(tx.<Boolean>execute(status -> expiryStore.expire(org, run, token.fence())))
         .isFalse();
     assertThat(
@@ -331,7 +343,7 @@ values (?,?,?,?,?,?,'CREATED')
         past,
         run,
         next.fence());
-    assertThat(tx.<Boolean>execute(status -> expiryStore.expire(org, run, next.fence()))).isTrue();
+    expiryScheduler.sweep();
     assertThat(
             jdbc.queryForObject(
                 "select status from execution_attempts where id=?", String.class, next.attempt()))
