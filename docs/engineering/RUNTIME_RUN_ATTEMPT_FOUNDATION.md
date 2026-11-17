@@ -87,3 +87,7 @@ The submission advances the Run and Task to IN_REVIEW and preserves an idempoten
 V048 records one human ADMIN decision for the exact review submission. The command rechecks the account credential and organization role before receipt replay. It binds the decision to the reviewed output digest and Run revision. Acceptance completes the Run and Task. Rework requires a reason and an explicitly configured remaining per-Run limit. It returns the Task to READY and the Run to CREATED while retaining the successful Attempt for history. A new claim and Attempt still require admission. A null rework limit keeps rework unavailable.
 
 The decision and audit event commit with the Task and Run transitions. Public endpoints, reviewer UI, dispatch, and recomputation of the aggregate Mission status remain separate.
+
+## Output review API
+
+Current workspace ADMINs can GET `/api/v1/organizations/{organizationId}/execution-runs/{runId}/review` for the pending Attempt ID, Run revision, verified output digest, and rework availability. When no current review exists, the endpoint returns 404. POST to the same path plus `/decision` with `attemptId`, `expectedRevision`, `outputSha256`, `decision` (ACCEPT or REWORK), and an optional `reason` required for rework. An exact repeat by the original authorized reviewer returns 204, the same as the initial decision. Conflicts return 409. Mutations require the existing CSRF token. The API exposes output identity, while content retrieval and reviewer UI remain separate.

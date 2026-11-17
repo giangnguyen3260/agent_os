@@ -59,6 +59,153 @@ class AgentActivationIntegrationTest {
   UUID team;
   HumanIdentity human;
 
+  @Test
+  void reviewApiRequiresAdminCsrfAndExactVersionAndReplaysTheDecision() throws Exception {
+    UUID mission = UUID.randomUUID(), task = UUID.randomUUID(), run = UUID.randomUUID();
+    UUID attempt = UUID.randomUUID();
+    String output = "a".repeat(64);
+    jdbc.update(
+        """
+insert into missions (id,organization_id,team_id,title,goal,status,priority,created_at,updated_at)
+values (?,?,?,'Review','Goal','RUNNING','NORMAL',current_timestamp,current_timestamp)
+""",
+        mission,
+        org,
+        team);
+    jdbc.update(
+        """
+        insert into tasks (id,organization_id,team_id,mission_id,title,status)
+        values (?,?,?,?,'Review task','IN_REVIEW')
+        """,
+        task,
+        org,
+        team,
+        mission);
+    jdbc.update(
+        """
+insert into accepted_mission_plans (organization_id,team_id,mission_id,plan_revision,accepted_by)
+values (?,?,?,1,?)
+""",
+        org,
+        team,
+        mission,
+        human.id());
+    jdbc.update(
+        """
+        insert into accepted_mission_plan_tasks
+          (organization_id,team_id,mission_id,plan_revision,task_id,owner_agent_id,
+           task_edit_revision,task_owner_revision,dependency_revision)
+        values (?,?,?,1,?,?,0,0,0)
+        """,
+        org,
+        team,
+        mission,
+        task,
+        agent);
+    jdbc.update(
+        """
+        insert into mission_execution_controls (organization_id,team_id,mission_id,state,revision)
+        values (?,?,?,'OPEN',1)
+        """,
+        org,
+        team,
+        mission);
+    jdbc.update(
+        """
+insert into execution_runs (id,organization_id,team_id,mission_id,task_id,plan_revision,status,revision)
+values (?,?,?,?,?,1,'IN_REVIEW',2)
+""",
+        run,
+        org,
+        team,
+        mission,
+        task);
+    jdbc.update(
+        """
+        insert into execution_attempts (id,run_id,attempt_number,status,outcome_slot)
+        values (?,?,1,'SUCCEEDED',1)
+        """,
+        attempt,
+        run);
+    jdbc.update(
+        """
+        insert into execution_attempt_reconciliations
+          (run_id,attempt_id,outcome,evidence_sha256,output_sha256,reconciled_at)
+        values (?,?,'SUCCEEDED',?,?,current_timestamp)
+        """,
+        run,
+        attempt,
+        "b".repeat(64),
+        output);
+    jdbc.update(
+        """
+        insert into execution_reconciled_review_submissions
+          (run_id,attempt_id,source_run_revision,submitted_at) values (?,?,1,current_timestamp)
+        """,
+        run,
+        attempt);
+
+    String path = "/api/v1/organizations/" + org + "/execution-runs/" + run + "/review";
+    var body =
+        json.createObjectNode()
+            .put("attemptId", attempt.toString())
+            .put("expectedRevision", 2)
+            .put("outputSha256", output)
+            .put("decision", "ACCEPT");
+    mvc.perform(get(path)).andExpect(status().isUnauthorized());
+    jdbc.update("update organization_memberships set role='MEMBER' where account_id=?", human.id());
+    mvc.perform(get(path).with(auth())).andExpect(status().isForbidden());
+    jdbc.update("update organization_memberships set role='ADMIN' where account_id=?", human.id());
+    mvc.perform(get(path.replace(run.toString(), UUID.randomUUID().toString())).with(auth()))
+        .andExpect(status().isNotFound());
+    mvc.perform(get(path).with(auth()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.attemptId").value(attempt.toString()))
+        .andExpect(jsonPath("$.data.revision").value(2))
+        .andExpect(jsonPath("$.data.outputSha256").value(output))
+        .andExpect(jsonPath("$.data.reworkAvailable").value(false));
+    mvc.perform(
+            post(path + "/decision")
+                .with(auth())
+                .contentType("application/json")
+                .content(body.toString()))
+        .andExpect(status().isForbidden());
+    mvc.perform(
+            post(path + "/decision")
+                .with(auth())
+                .with(csrf())
+                .contentType("application/json")
+                .content(body.deepCopy().put("expectedRevision", "2").toString()))
+        .andExpect(status().isBadRequest());
+    mvc.perform(
+            post(path + "/decision")
+                .with(auth())
+                .with(csrf())
+                .contentType("application/json")
+                .content(body.deepCopy().put("expectedRevision", 1).toString()))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.error.code").value("EXECUTION_REVIEW_CONFLICT"));
+    for (int n = 0; n < 2; n++) {
+      mvc.perform(
+              post(path + "/decision")
+                  .with(auth())
+                  .with(csrf())
+                  .contentType("application/json")
+                  .content(body.toString()))
+          .andExpect(status().isNoContent());
+    }
+    mvc.perform(get(path).with(auth())).andExpect(status().isNotFound());
+    assertThat(
+            jdbc.queryForObject("select status from execution_runs where id=?", String.class, run))
+        .isEqualTo("COMPLETED");
+    assertThat(
+            jdbc.queryForObject(
+                "select count(*) from execution_review_decisions where run_id=?",
+                Integer.class,
+                run))
+        .isEqualTo(1);
+  }
+
   @BeforeEach
   void setup() {
     org = UUID.randomUUID();
