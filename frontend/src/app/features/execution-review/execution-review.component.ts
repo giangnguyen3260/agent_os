@@ -43,7 +43,7 @@ export class ExecutionReviewComponent {
   private generation = 0;
   private account = this.auth.user()?.id;
   workspace = '';
-  private run = '';
+  run = '';
   readonly review = signal<Review | null>(null);
   readonly content = signal<string | null>(null);
   readonly busy = signal(false);

@@ -17,6 +17,25 @@ public class TaskExecutionReviewController {
     this.reviews = reviews;
   }
 
+  @GetMapping("/api/v1/organizations/{organizationId}/execution-runs/{runId}")
+  public ApiResponse<ExecutionReviewService.RunDetail> run(
+      @PathVariable UUID organizationId,
+      @PathVariable UUID runId,
+      @AuthenticationPrincipal HumanIdentity reviewer) {
+    return ApiResponse.ok(reviews.run(organizationId, runId, reviewer));
+  }
+
+  @GetMapping(
+      "/api/v1/organizations/{organizationId}/teams/{teamId}/missions/{missionId}/tasks/{taskId}/execution-run")
+  public ApiResponse<ExecutionReviewService.RunDetail> taskRun(
+      @PathVariable UUID organizationId,
+      @PathVariable UUID teamId,
+      @PathVariable UUID missionId,
+      @PathVariable UUID taskId,
+      @AuthenticationPrincipal HumanIdentity reviewer) {
+    return ApiResponse.ok(reviews.taskRun(organizationId, teamId, missionId, taskId, reviewer));
+  }
+
   @GetMapping(
       "/api/v1/organizations/{organizationId}/teams/{teamId}/missions/{missionId}/tasks/{taskId}/execution-review")
   public ApiResponse<ExecutionReviewService.TaskReview> get(

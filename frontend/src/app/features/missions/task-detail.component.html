@@ -268,12 +268,28 @@
       <section class="panel" aria-labelledby="task-runs">
         <h2 id="task-runs">Runs &amp; output history</h2>
         <p>
-          Run history, attempts, input/output versions and artifacts are
-          unavailable.
+          Open the recorded run and recent attempts. Artifact downloads and
+          retry controls remain unavailable.
         </p>
         <div class="actions">
-          <button class="button secondary" disabled>View run</button
-          ><button class="button secondary" disabled>Retry task</button>
+          @if (context()?.role === 'ADMIN') {
+            <a
+              class="button secondary"
+              [routerLink]="[
+                '/workspace',
+                id,
+                'teams',
+                teamId,
+                'missions',
+                missionId,
+                'tasks',
+                taskId,
+                'run',
+              ]"
+              >View run</a
+            >
+          }
+          <button class="button secondary" disabled>Retry task</button>
         </div>
       </section>
       @if (activity(); as result) {

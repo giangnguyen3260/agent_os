@@ -1,5 +1,8 @@
 <main>
   <a [routerLink]="['/workspace', workspace]">Về workspace</a>
+  <a [routerLink]="['/workspace', workspace, 'execution-runs', run]"
+    >Về lần chạy / kiểm tra trạng thái</a
+  >
   <header>
     <h1>Duyệt kết quả thực thi</h1>
     <button type="button" (click)="load()" [disabled]="busy()">Tải lại</button>

@@ -309,3 +309,67 @@ test('rechecks authority before sending a decision', async ({page}) => {
   await expect(page.getByLabel('Nội dung kết quả')).toHaveCount(0);
   expect(writes).toEqual([]);
 });
+
+for (const decision of ['ACCEPT', 'REWORK']) {
+  test(`complete Task to Run to ${decision} and verify resulting state`, async ({
+    page,
+  }) => {
+    await mockTask(page);
+    let status = 'IN_REVIEW';
+    const runData = () => ({
+      id: run,
+      teamId: team,
+      missionId: mission,
+      taskId: task,
+      status,
+      revision: status === 'IN_REVIEW' ? '2' : '3',
+      waitReason: null,
+      attempts: [{id: attempt, number: 1, status: 'SUCCEEDED'}],
+    });
+    await page.route('**' + taskApi + '/execution-run', route =>
+      route.fulfill({json: {data: runData()}}),
+    );
+    await page.route(
+      '**/api/v1/organizations/' + org + '/execution-runs/' + run,
+      route => route.fulfill({json: {data: runData()}}),
+    );
+    await page.route('**/review/decision', route => {
+      const body = route.request().postDataJSON();
+      expect(body).toMatchObject({
+        attemptId: attempt,
+        expectedRevision: 2,
+        outputSha256: review.outputSha256,
+        decision,
+      });
+      status = decision === 'ACCEPT' ? 'COMPLETED' : 'CREATED';
+      return route.fulfill({status: 204});
+    });
+    await page.goto(taskPath);
+    await page.getByRole('link', {name: 'View run', exact: true}).click();
+    await expect(
+      page.getByRole('heading', {name: 'Chi tiết lần chạy'}),
+    ).toBeVisible();
+    await expect(page.getByRole('main')).toContainText('IN_REVIEW');
+    await reviewLink(page).click();
+    await expect(page.getByLabel('Nội dung kết quả')).toHaveText(content);
+    if (decision === 'REWORK')
+      await page.getByLabel('Lý do yêu cầu làm lại').fill('Bổ sung bằng chứng');
+    await page
+      .getByRole('button', {
+        name: decision === 'ACCEPT' ? 'Duyệt kết quả' : 'Yêu cầu làm lại',
+        exact: true,
+      })
+      .click();
+    await page.getByRole('button', {name: 'Xác nhận', exact: true}).click();
+    await expect(page.getByRole('status')).toContainText(
+      decision === 'ACCEPT' ? 'Đã duyệt' : 'Đã yêu cầu',
+    );
+    await page
+      .getByRole('link', {name: 'Về lần chạy / kiểm tra trạng thái'})
+      .click();
+    await expect(page.getByRole('main')).toContainText(status);
+    await expect(reviewLink(page)).toHaveCount(0);
+    await page.getByRole('link', {name: 'Về Task', exact: true}).click();
+    await expect(page).toHaveURL(taskPath);
+  });
+}
