@@ -3,6 +3,7 @@ package com.agentos.orchestration.application;
 import com.agentos.auth.HumanIdentity;
 import jakarta.persistence.EntityNotFoundException;
 import java.util.UUID;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,13 +21,40 @@ public class ExecutionReviewService {
     }
   }
 
+  private final JdbcTemplate jdbc;
   private final ExecutionReviewDecisionStore decisions;
   private final ExecutionOutputContentStore outputs;
 
   ExecutionReviewService(
-      ExecutionReviewDecisionStore decisions, ExecutionOutputContentStore outputs) {
+      JdbcTemplate jdbc,
+      ExecutionReviewDecisionStore decisions,
+      ExecutionOutputContentStore outputs) {
+    this.jdbc = jdbc;
     this.decisions = decisions;
     this.outputs = outputs;
+  }
+
+  public record TaskReview(UUID runId) {}
+
+  @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+  public TaskReview forTask(
+      UUID organization, UUID team, UUID mission, UUID task, HumanIdentity reviewer) {
+    decisions.requireAdmin(organization, reviewer, false);
+    var runs =
+        jdbc.queryForList(
+            """
+            select r.id from execution_runs r
+            where r.organization_id=? and r.team_id=? and r.mission_id=? and r.task_id=?
+            """,
+            UUID.class,
+            organization,
+            team,
+            mission,
+            task);
+    if (runs.isEmpty() || decisions.current(organization, runs.getFirst()) == null) {
+      throw new EntityNotFoundException("Execution review not found");
+    }
+    return new TaskReview(runs.getFirst());
   }
 
   @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)

@@ -11,7 +11,8 @@ import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {FormsModule} from '@angular/forms';
 import {ActivatedRoute, RouterLink} from '@angular/router';
 import {firstValueFrom, timeout} from 'rxjs';
-import {AuthService} from '../../core/auth/auth.service';
+import {AuthFailure, AuthService} from '../../core/auth/auth.service';
+import {uuid} from '../teams/team.service';
 
 interface Review {
   attemptId: string;
@@ -103,6 +104,11 @@ export class ExecutionReviewComponent {
     if (!this.busy()) void this.load();
   }
 
+  @HostListener('document:visibilitychange')
+  visible(): void {
+    if (document.visibilityState === 'visible') this.focus();
+  }
+
   async load(): Promise<void> {
     if (this.busy()) return;
     const generation = this.clear();
@@ -110,19 +116,21 @@ export class ExecutionReviewComponent {
     this.busy.set(true);
     const base = this.base();
     try {
+      if (!uuid(this.workspace) || !uuid(this.run)) throw new Error('invalid');
       const workspace = await this.auth.getWorkspace(this.workspace);
       if (!this.current(generation, account)) return;
-      if (workspace.role !== 'ADMIN') throw new Error('denied');
+      if (workspace?.id !== this.workspace || workspace.role !== 'ADMIN')
+        throw new HttpErrorResponse({status: 403});
       const {data} = await firstValueFrom(
         this.http.get<Envelope<Review>>(base).pipe(timeout(15000)),
       );
       if (!this.current(generation, account)) return;
       if (
         !data ||
-        typeof data.attemptId !== 'string' ||
-        !/^[0-9a-f-]{36}$/.test(data.attemptId) ||
+        !uuid(data.attemptId) ||
         !Number.isSafeInteger(data.revision) ||
         data.revision <= 0 ||
+        typeof data.outputSha256 !== 'string' ||
         !/^[0-9a-f]{64}$/.test(data.outputSha256) ||
         typeof data.reworkAvailable !== 'boolean'
       )
@@ -183,6 +191,10 @@ export class ExecutionReviewComponent {
     };
     this.busy.set(true);
     try {
+      const workspace = await this.auth.getWorkspace(this.workspace);
+      if (!this.current(generation, account)) return;
+      if (workspace?.id !== this.workspace || workspace.role !== 'ADMIN')
+        throw new HttpErrorResponse({status: 403});
       const csrf = await firstValueFrom(
         this.http
           .get<
@@ -217,7 +229,12 @@ export class ExecutionReviewComponent {
   }
 
   private failure(error: unknown): void {
-    const status = error instanceof HttpErrorResponse ? error.status : 0;
+    const status =
+      error instanceof HttpErrorResponse
+        ? error.status
+        : error instanceof AuthFailure && error.kind === 'unauthorized'
+          ? 403
+          : 0;
     this.message.set(
       status === 403 || status === 401
         ? 'Bạn cần quyền ADMIN hiện hành để xem và duyệt kết quả.'
