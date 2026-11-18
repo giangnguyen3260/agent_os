@@ -212,7 +212,9 @@ for (const denied of ['MEMBER', 'foreign workspace']) {
         requests.push(request.url());
     });
     await page.goto(path);
-    await expect(page.getByRole('status')).toContainText('Hãy tải lại');
+    await expect(page.getByRole('status')).toContainText(
+      'quyền ADMIN hiện hành',
+    );
     await expect(page.getByLabel('Nội dung kết quả')).toHaveCount(0);
     expect(requests).toEqual([]);
   });
@@ -283,10 +285,27 @@ test('focus reload discards the prepared decision before checking current access
     route.fulfill({json: {data: {id: org, name: 'Fixture', role: 'MEMBER'}}}),
   );
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-  await expect(page.getByRole('status')).toContainText('Hãy tải lại');
+  await expect(page.getByRole('status')).toContainText('quyền ADMIN hiện hành');
   await expect(page.getByLabel('Nội dung kết quả')).toHaveCount(0);
   await expect(
     page.getByRole('button', {name: 'Xác nhận', exact: true}),
   ).toHaveCount(0);
   expect(decisions).toEqual([]);
+});
+
+test('rechecks authority before sending a decision', async ({page}) => {
+  await page.goto(path);
+  await expect(page.getByLabel('Nội dung kết quả')).toHaveText(content);
+  await page.getByRole('button', {name: 'Duyệt kết quả', exact: true}).click();
+  await page.route('**/auth/workspaces/' + org, route =>
+    route.fulfill({json: {data: {id: org, name: 'Fixture', role: 'MEMBER'}}}),
+  );
+  const writes = [];
+  page.on('request', request => {
+    if (request.method() === 'POST') writes.push(request.url());
+  });
+  await page.getByRole('button', {name: 'Xác nhận', exact: true}).click();
+  await expect(page.getByRole('status')).toContainText('quyền ADMIN hiện hành');
+  await expect(page.getByLabel('Nội dung kết quả')).toHaveCount(0);
+  expect(writes).toEqual([]);
 });
