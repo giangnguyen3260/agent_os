@@ -10,7 +10,7 @@ import {
 } from '@angular/core';
 import {takeUntilDestroyed} from '@angular/core/rxjs-interop';
 import {ActivatedRoute, Router, RouterLink} from '@angular/router';
-import {combineLatest, Subscription} from 'rxjs';
+import {combineLatest, Subscription, timeout} from 'rxjs';
 import {
   AuthFailure,
   AuthService,
@@ -176,15 +176,18 @@ export class TaskDetailComponent {
                       this.taskId +
                       '/execution-review';
                     this.requests.add(
-                      this.http.get<{data: {runId: string}}>(path).subscribe({
-                        next: result => {
-                          if (active() && uuid(result?.data?.runId))
-                            this.reviewRun.set(result.data.runId);
-                        },
-                        error: () => {
-                          if (active()) this.reviewRun.set(null);
-                        },
-                      }),
+                      this.http
+                        .get<{data: {runId: string}}>(path)
+                        .pipe(timeout(30000))
+                        .subscribe({
+                          next: result => {
+                            if (active() && uuid(result?.data?.runId))
+                              this.reviewRun.set(result.data.runId);
+                          },
+                          error: () => {
+                            if (active()) this.reviewRun.set(null);
+                          },
+                        }),
                     );
                   }
                   this.requests.add(

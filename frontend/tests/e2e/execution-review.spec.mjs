@@ -189,3 +189,104 @@ for (const unavailable of ['missing', 'malformed']) {
     await expect(reviewLink(page)).toHaveCount(0);
   });
 }
+
+for (const denied of ['MEMBER', 'foreign workspace']) {
+  test(`does not fetch review metadata for ${denied}`, async ({page}) => {
+    await page.route('**/auth/workspaces/' + org, route =>
+      route.fulfill({
+        json: {
+          data: {
+            id: denied === 'foreign workspace' ? team : org,
+            name: 'Fixture',
+            role: denied === 'MEMBER' ? 'MEMBER' : 'ADMIN',
+          },
+        },
+      }),
+    );
+    const requests = [];
+    page.on('request', request => {
+      if (
+        new URL(request.url()).pathname.startsWith('/api/v1/organizations/') &&
+        new URL(request.url()).pathname.includes('/execution-runs/')
+      )
+        requests.push(request.url());
+    });
+    await page.goto(path);
+    await expect(page.getByRole('status')).toContainText('Hãy tải lại');
+    await expect(page.getByLabel('Nội dung kết quả')).toHaveCount(0);
+    expect(requests).toEqual([]);
+  });
+}
+
+test('rejects malformed attempt IDs before fetching output', async ({page}) => {
+  await page.route(
+    '**/api/v1/organizations/' + org + '/execution-runs/' + run + '/review',
+    route =>
+      route.fulfill({json: {data: {...review, attemptId: '-'.repeat(36)}}}),
+  );
+  const outputs = [];
+  page.on('request', request => {
+    if (new URL(request.url()).pathname.endsWith('/review/output'))
+      outputs.push(request.url());
+  });
+  await page.goto(path);
+  await expect(page.getByRole('status')).toContainText('Hãy tải lại');
+  await expect(page.getByLabel('Nội dung kết quả')).toHaveCount(0);
+  expect(outputs).toEqual([]);
+});
+
+for (const field of ['attemptId', 'revision', 'outputSha256']) {
+  test(`rejects output with mismatched ${field}`, async ({page}) => {
+    const changed = {
+      attemptId: task,
+      revision: 3,
+      outputSha256: 'b'.repeat(64),
+    };
+    await page.route('**/review/output?*', route =>
+      route.fulfill({
+        json: {data: {...review, content, [field]: changed[field]}},
+      }),
+    );
+    await page.goto(path);
+    await expect(page.getByRole('status')).toContainText('Hãy tải lại');
+    await expect(page.getByLabel('Nội dung kết quả')).toHaveCount(0);
+    await expect(
+      page.getByRole('button', {name: 'Duyệt kết quả', exact: true}),
+    ).toHaveCount(0);
+  });
+}
+
+test('clears output and confirmation when current permission is revoked', async ({
+  page,
+}) => {
+  await page.goto(path);
+  await expect(page.getByLabel('Nội dung kết quả')).toHaveText(content);
+  await page.getByRole('button', {name: 'Duyệt kết quả', exact: true}).click();
+  await page.route('**/review/decision', route => route.fulfill({status: 403}));
+  await page.getByRole('button', {name: 'Xác nhận', exact: true}).click();
+  await expect(page.getByRole('status')).toContainText(
+    'Bạn cần quyền ADMIN hiện hành',
+  );
+  await expect(page.getByLabel('Nội dung kết quả')).toHaveCount(0);
+  await expect(
+    page.getByRole('button', {name: 'Xác nhận', exact: true}),
+  ).toHaveCount(0);
+});
+
+test('focus reload discards the prepared decision before checking current access', async ({
+  page,
+}) => {
+  await page.goto(path);
+  await expect(page.getByLabel('Nội dung kết quả')).toHaveText(content);
+  await page.getByRole('button', {name: 'Duyệt kết quả', exact: true}).click();
+  await page.route('**/auth/workspaces/' + org, route =>
+    route.fulfill({json: {data: {id: org, name: 'Fixture', role: 'MEMBER'}}}),
+  );
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(page.getByRole('status')).toContainText('Hãy tải lại');
+  await expect(page.getByLabel('Nội dung kết quả')).toHaveCount(0);
+  await expect(
+    page.getByRole('button', {name: 'Xác nhận', exact: true}),
+  ).toHaveCount(0);
+  expect(decisions).toEqual([]);
+});
