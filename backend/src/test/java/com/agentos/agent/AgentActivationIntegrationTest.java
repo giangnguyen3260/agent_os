@@ -60,8 +60,10 @@ class AgentActivationIntegrationTest {
   UUID team;
   HumanIdentity human;
 
-  @Test
-  void reviewApiRequiresAdminCsrfAndExactVersionAndReplaysTheDecision() throws Exception {
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.ValueSource(strings = {"ACCEPT", "REWORK"})
+  void reviewApiRequiresAdminCsrfAndExactVersionAndReplaysTheDecision(String decision)
+      throws Exception {
     UUID mission = UUID.randomUUID(), task = UUID.randomUUID(), run = UUID.randomUUID();
     UUID attempt = UUID.randomUUID();
     String content = "<script>untrusted</script>\nKết quả đã xác minh";
@@ -153,6 +155,13 @@ values (?,?,?,?,?,1,'IN_REVIEW',2)
 
     String path = "/api/v1/organizations/" + org + "/execution-runs/" + run + "/review";
     String outputPath = path + "/output?attemptId=" + attempt + "&expectedRevision=2";
+    String runPath = path.substring(0, path.length() - "/review".length());
+    mvc.perform(get(runPath).with(auth()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.status").value("IN_REVIEW"))
+        .andExpect(jsonPath("$.data.attempts[0].id").value(attempt.toString()));
+    mvc.perform(get(runPath)).andExpect(status().isUnauthorized());
+
     String discovery =
         "/api/v1/organizations/"
             + org
@@ -163,6 +172,15 @@ values (?,?,?,?,?,1,'IN_REVIEW',2)
             + "/tasks/"
             + task
             + "/execution-review";
+    mvc.perform(get(discovery.replace("execution-review", "execution-run")).with(auth()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.id").value(run.toString()));
+    mvc.perform(
+            get(discovery
+                    .replace("execution-review", "execution-run")
+                    .replace(team.toString(), UUID.randomUUID().toString()))
+                .with(auth()))
+        .andExpect(status().isNotFound());
     mvc.perform(get(discovery).with(auth()))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.runId").value(run.toString()));
@@ -175,10 +193,13 @@ values (?,?,?,?,?,1,'IN_REVIEW',2)
             .put("attemptId", attempt.toString())
             .put("expectedRevision", 2)
             .put("outputSha256", output)
-            .put("decision", "ACCEPT");
+            .put("decision", decision)
+            .put("reason", decision.equals("REWORK") ? "More evidence" : null);
     mvc.perform(get(path)).andExpect(status().isUnauthorized());
     jdbc.update("update organization_memberships set role='MEMBER' where account_id=?", human.id());
     mvc.perform(get(path).with(auth())).andExpect(status().isForbidden());
+    mvc.perform(get(runPath).with(auth())).andExpect(status().isForbidden());
+
     mvc.perform(get(discovery).with(auth())).andExpect(status().isForbidden());
     jdbc.update("update organization_memberships set role='ADMIN' where account_id=?", human.id());
     mvc.perform(get(path.replace(run.toString(), UUID.randomUUID().toString())).with(auth()))
@@ -229,6 +250,7 @@ values (?,?,?,?,?,1,'IN_REVIEW',2)
                 .content(body.deepCopy().put("expectedRevision", 1).toString()))
         .andExpect(status().isConflict())
         .andExpect(jsonPath("$.error.code").value("EXECUTION_REVIEW_CONFLICT"));
+    jdbc.update("update execution_runs set max_reworks=1 where id=?", run);
     for (int n = 0; n < 2; n++) {
       mvc.perform(
               post(path + "/decision")
@@ -238,12 +260,16 @@ values (?,?,?,?,?,1,'IN_REVIEW',2)
                   .content(body.toString()))
           .andExpect(status().isNoContent());
     }
+    mvc.perform(get(runPath).with(auth()))
+        .andExpect(status().isOk())
+        .andExpect(
+            jsonPath("$.data.status").value(decision.equals("ACCEPT") ? "COMPLETED" : "CREATED"));
     mvc.perform(get(path).with(auth())).andExpect(status().isNotFound());
     mvc.perform(get(outputPath).with(auth())).andExpect(status().isNotFound());
     mvc.perform(get(discovery).with(auth())).andExpect(status().isNotFound());
     assertThat(
             jdbc.queryForObject("select status from execution_runs where id=?", String.class, run))
-        .isEqualTo("COMPLETED");
+        .isEqualTo(decision.equals("ACCEPT") ? "COMPLETED" : "CREATED");
     assertThat(
             jdbc.queryForObject(
                 "select count(*) from execution_review_decisions where run_id=?",

@@ -30,6 +30,23 @@ import {approvalDetailNavigationGuard} from './features/approvals/approval-navig
 
 export const routes: Routes = [
   {
+    path: 'workspace/:id/execution-runs/:runId',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/execution-run/execution-run.component').then(
+        m => m.ExecutionRunComponent,
+      ),
+  },
+  {
+    path: 'workspace/:id/teams/:teamId/missions/:missionId/tasks/:taskId/run',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/execution-run/execution-run.component').then(
+        m => m.ExecutionRunComponent,
+      ),
+  },
+
+  {
     path: 'workspace/:id/execution-runs/:runId/review',
     canActivate: [authGuard],
     runGuardsAndResolvers: 'always',

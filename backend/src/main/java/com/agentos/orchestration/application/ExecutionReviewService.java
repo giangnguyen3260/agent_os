@@ -34,6 +34,78 @@ public class ExecutionReviewService {
     this.outputs = outputs;
   }
 
+  public record Attempt(UUID id, int number, String status) {}
+
+  public record RunDetail(
+      UUID id,
+      UUID teamId,
+      UUID missionId,
+      UUID taskId,
+      String status,
+      String revision,
+      String waitReason,
+      java.util.List<Attempt> attempts) {}
+
+  @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+  public RunDetail run(UUID organization, UUID run, HumanIdentity reviewer) {
+    decisions.requireAdmin(organization, reviewer, false);
+    var rows =
+        jdbc.query(
+            """
+            select id,team_id,mission_id,task_id,status,revision,wait_reason
+            from execution_runs where organization_id=? and id=?
+            """,
+            (rs, n) ->
+                new RunDetail(
+                    rs.getObject(1, UUID.class),
+                    rs.getObject(2, UUID.class),
+                    rs.getObject(3, UUID.class),
+                    rs.getObject(4, UUID.class),
+                    rs.getString(5),
+                    rs.getString(6),
+                    rs.getString(7),
+                    java.util.List.of()),
+            organization,
+            run);
+    if (rows.isEmpty()) throw new EntityNotFoundException("Execution run not found");
+    var r = rows.getFirst();
+    var attempts =
+        jdbc.query(
+            """
+            select id,attempt_number,status from execution_attempts
+            where run_id=? order by attempt_number desc limit 100
+            """,
+            (rs, n) -> new Attempt(rs.getObject(1, UUID.class), rs.getInt(2), rs.getString(3)),
+            run);
+    return new RunDetail(
+        r.id(),
+        r.teamId(),
+        r.missionId(),
+        r.taskId(),
+        r.status(),
+        r.revision(),
+        r.waitReason(),
+        attempts);
+  }
+
+  @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+  public RunDetail taskRun(
+      UUID organization, UUID team, UUID mission, UUID task, HumanIdentity reviewer) {
+    decisions.requireAdmin(organization, reviewer, false);
+    var ids =
+        jdbc.queryForList(
+            """
+select id from execution_runs where organization_id=? and team_id=? and mission_id=? and task_id=?
+""",
+            UUID.class,
+            organization,
+            team,
+            mission,
+            task);
+    if (ids.isEmpty()) throw new EntityNotFoundException("Execution run not found");
+    return run(organization, ids.getFirst(), reviewer);
+  }
+
   public record TaskReview(UUID runId) {}
 
   @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
