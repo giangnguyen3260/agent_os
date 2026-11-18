@@ -97,3 +97,7 @@ Current workspace ADMINs can GET `/api/v1/organizations/{organizationId}/executi
 V049 stores verified text for a reconciled successful Attempt. The internal writer checks the exact UTF-8 SHA-256 digest against reconciliation evidence and permits at most 256 KiB of valid UTF-8 text. Matching writes replay. Raw content stays outside audit and Trace metadata.
 
 ADMIN can GET the current review's `/output?attemptId=...&expectedRevision=...` endpoint. It returns JSON text with a no-store response header and rechecks current authority, review identity, revision and content integrity. Missing historical content returns 404. A stale review returns 409. This slice chooses bounded text as the first output format. Artifact files and reviewer UI remain separate.
+
+## Execution review page
+
+The frontend route `/workspace/{organizationId}/execution-runs/{runId}/review` loads current review metadata and its exact output version. It displays output as escaped text and offers a separate confirmation for acceptance or a reasoned rework request when available. The page clears private output on identity or route changes and revalidates on focus. Conflicts and ambiguous mutation outcomes require a refresh before another decision. Browser acceptance uses intercepted fixture responses for this page. Task and Mission navigation still need Run discovery to link into the route.
