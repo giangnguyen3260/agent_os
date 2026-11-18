@@ -1,4 +1,4 @@
-import {HttpErrorResponse} from '@angular/common/http';
+import {HttpClient, HttpErrorResponse} from '@angular/common/http';
 import {DatePipe} from '@angular/common';
 import {
   Component,
@@ -43,6 +43,8 @@ import {
 })
 export class TaskDetailComponent {
   readonly auth = inject(AuthService);
+  private readonly http = inject(HttpClient);
+  readonly reviewRun = signal<string | null>(null);
   private readonly api = inject(TaskDetailService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
@@ -94,6 +96,7 @@ export class TaskDetailComponent {
     this.requests.unsubscribe();
     this.requests = new Subscription();
     this.snapshot.set(null);
+    this.reviewRun.set(null);
     this.activity.set(null);
     this.context.set(null);
     this.loading.set(false);
@@ -158,6 +161,32 @@ export class TaskDetailComponent {
                   }
                   this.context.set(context);
                   this.snapshot.set(response.data);
+                  if (
+                    context.role === 'ADMIN' &&
+                    response.data.task.status === 'IN_REVIEW'
+                  ) {
+                    const path =
+                      '/api/v1/organizations/' +
+                      this.id +
+                      '/teams/' +
+                      this.teamId +
+                      '/missions/' +
+                      this.missionId +
+                      '/tasks/' +
+                      this.taskId +
+                      '/execution-review';
+                    this.requests.add(
+                      this.http.get<{data: {runId: string}}>(path).subscribe({
+                        next: result => {
+                          if (active() && uuid(result?.data?.runId))
+                            this.reviewRun.set(result.data.runId);
+                        },
+                        error: () => {
+                          if (active()) this.reviewRun.set(null);
+                        },
+                      }),
+                    );
+                  }
                   this.requests.add(
                     this.api
                       .activity(

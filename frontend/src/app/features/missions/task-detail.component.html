@@ -52,6 +52,13 @@
     </nav>
   </dialog>
   <main data-testid="task-detail" [attr.aria-busy]="loading()">
+    @if (reviewRun(); as run) {
+      <a
+        class="button"
+        [routerLink]="['/workspace', id, 'execution-runs', run, 'review']"
+        >Duyệt kết quả thực thi</a
+      >
+    }
     @if (loading()) {
       <p role="status">Loading task details…</p>
     }

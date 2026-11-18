@@ -153,6 +153,23 @@ values (?,?,?,?,?,1,'IN_REVIEW',2)
 
     String path = "/api/v1/organizations/" + org + "/execution-runs/" + run + "/review";
     String outputPath = path + "/output?attemptId=" + attempt + "&expectedRevision=2";
+    String discovery =
+        "/api/v1/organizations/"
+            + org
+            + "/teams/"
+            + team
+            + "/missions/"
+            + mission
+            + "/tasks/"
+            + task
+            + "/execution-review";
+    mvc.perform(get(discovery).with(auth()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.runId").value(run.toString()));
+    mvc.perform(get(discovery.replace(task.toString(), UUID.randomUUID().toString())).with(auth()))
+        .andExpect(status().isNotFound());
+    mvc.perform(get(discovery.replace(team.toString(), UUID.randomUUID().toString())).with(auth()))
+        .andExpect(status().isNotFound());
     var body =
         json.createObjectNode()
             .put("attemptId", attempt.toString())
@@ -162,6 +179,7 @@ values (?,?,?,?,?,1,'IN_REVIEW',2)
     mvc.perform(get(path)).andExpect(status().isUnauthorized());
     jdbc.update("update organization_memberships set role='MEMBER' where account_id=?", human.id());
     mvc.perform(get(path).with(auth())).andExpect(status().isForbidden());
+    mvc.perform(get(discovery).with(auth())).andExpect(status().isForbidden());
     jdbc.update("update organization_memberships set role='ADMIN' where account_id=?", human.id());
     mvc.perform(get(path.replace(run.toString(), UUID.randomUUID().toString())).with(auth()))
         .andExpect(status().isNotFound());
@@ -222,6 +240,7 @@ values (?,?,?,?,?,1,'IN_REVIEW',2)
     }
     mvc.perform(get(path).with(auth())).andExpect(status().isNotFound());
     mvc.perform(get(outputPath).with(auth())).andExpect(status().isNotFound());
+    mvc.perform(get(discovery).with(auth())).andExpect(status().isNotFound());
     assertThat(
             jdbc.queryForObject("select status from execution_runs where id=?", String.class, run))
         .isEqualTo("COMPLETED");

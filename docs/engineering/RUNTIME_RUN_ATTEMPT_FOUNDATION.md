@@ -101,3 +101,7 @@ ADMIN can GET the current review's `/output?attemptId=...&expectedRevision=...` 
 ## Execution review page
 
 The frontend route `/workspace/{organizationId}/execution-runs/{runId}/review` loads current review metadata and its exact output version. It displays output as escaped text and offers a separate confirmation for acceptance or a reasoned rework request when available. The page clears private output on identity or route changes and revalidates on focus. Conflicts and ambiguous mutation outcomes require a refresh before another decision. Browser acceptance uses intercepted fixture responses for this page. Task and Mission navigation still need Run discovery to link into the route.
+
+## Task review navigation
+
+Task detail checks the scoped `/execution-review` endpoint when a current ADMIN opens an IN_REVIEW Task. A matching pending review exposes its Run ID and enables the review link. Missing or foreign Task, Team, Mission or Run scope returns 404. Member reads are denied. Review decisions continue to recheck current authority and revision at mutation time.
