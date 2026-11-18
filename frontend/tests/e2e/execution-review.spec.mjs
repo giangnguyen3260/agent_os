@@ -12,6 +12,52 @@ const review = {
 const content =
   '<script>window.privateOutputExecuted=true</script>\nKết quả cần kiểm tra';
 const path = '/workspace/' + org + '/execution-runs/' + run + '/review';
+const team = '73000000-0000-4000-8000-000000000003';
+const mission = '73000000-0000-4000-8000-000000000004';
+const task = '73000000-0000-4000-8000-000000000005';
+const taskPath = `/workspace/${org}/teams/${team}/missions/${mission}/tasks/${task}`;
+const taskApi = `/api/v1/organizations/${org}/teams/${team}/missions/${mission}/tasks/${task}`;
+const reviewLink = page =>
+  page.getByRole('link', {name: 'Duyệt kết quả thực thi', exact: true});
+async function mockTask(page, {role = 'ADMIN', status = 'IN_REVIEW'} = {}) {
+  const timestamp = '2026-11-18T00:00:00Z';
+  await page.route('**/auth/workspaces/' + org, route =>
+    route.fulfill({json: {data: {id: org, name: 'Fixture', role}}}),
+  );
+  await page.route('**' + taskApi, route =>
+    route.fulfill({
+      json: {
+        data: {
+          generatedAt: timestamp,
+          task: {
+            id: task,
+            organizationId: org,
+            teamId: team,
+            missionId: mission,
+            title: 'Review fixture task',
+            status,
+            pendingReason: null,
+            waitingSince: null,
+            resolver: null,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+            description: null,
+            acceptanceCriteria: null,
+            priority: null,
+            ownerAgentId: null,
+            ownerName: null,
+            dependencyIds: [],
+          },
+          mission: {id: mission, title: 'Fixture mission'},
+          team: {id: team, name: 'Fixture team'},
+        },
+      },
+    }),
+  );
+  await page.route('**' + taskApi + '/activity?*', route =>
+    route.fulfill({json: {data: {items: [], total: 0, page: 0, size: 20}}}),
+  );
+}
 let decisions;
 test.beforeEach(async ({page}) => {
   decisions = [];
@@ -83,3 +129,63 @@ test('clears output on conflict and requires a reload', async ({page}) => {
   );
   await expect(page.getByLabel('Nội dung kết quả')).toHaveCount(0);
 });
+
+test('opens the scoped current execution review from an admin task', async ({
+  page,
+}) => {
+  await mockTask(page);
+  await page.route('**' + taskApi + '/execution-review', route =>
+    route.fulfill({json: {data: {runId: run}}}),
+  );
+  await page.goto(taskPath);
+  await expect(reviewLink(page)).toHaveAttribute('href', path);
+  await reviewLink(page).click();
+  await expect(page).toHaveURL(path);
+  await expect(page.getByLabel('Nội dung kết quả')).toHaveText(content);
+});
+for (const options of [{role: 'MEMBER'}, {status: 'COMPLETED'}]) {
+  test(`does not discover a review for ${options.role || options.status}`, async ({
+    page,
+  }) => {
+    await mockTask(page, options);
+    const discoveries = [];
+    page.on('request', request => {
+      if (new URL(request.url()).pathname.endsWith('/execution-review'))
+        discoveries.push(request.url());
+    });
+    await page.goto(taskPath);
+    await expect(page.getByTestId('task-detail')).toHaveAttribute(
+      'aria-busy',
+      'false',
+    );
+    await expect(
+      page.getByRole('heading', {name: 'Review fixture task', exact: true}),
+    ).toBeVisible();
+    await expect(reviewLink(page)).toHaveCount(0);
+    expect(discoveries).toEqual([]);
+  });
+}
+for (const unavailable of ['missing', 'malformed']) {
+  test(`keeps the task readable when its review is ${unavailable}`, async ({
+    page,
+  }) => {
+    await mockTask(page);
+    let requested = false;
+    await page.route('**' + taskApi + '/execution-review', route => {
+      requested = true;
+      return unavailable === 'missing'
+        ? route.fulfill({status: 404})
+        : route.fulfill({json: {data: {runId: '../other-workspace'}}});
+    });
+    await page.goto(taskPath);
+    await expect(page.getByTestId('task-detail')).toHaveAttribute(
+      'aria-busy',
+      'false',
+    );
+    await expect(
+      page.getByRole('heading', {name: 'Review fixture task', exact: true}),
+    ).toBeVisible();
+    await expect.poll(() => requested).toBe(true);
+    await expect(reviewLink(page)).toHaveCount(0);
+  });
+}
