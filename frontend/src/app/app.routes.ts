@@ -30,6 +30,15 @@ import {approvalDetailNavigationGuard} from './features/approvals/approval-navig
 
 export const routes: Routes = [
   {
+    path: 'workspace/:id/execution-runs/:runId/review',
+    canActivate: [authGuard],
+    runGuardsAndResolvers: 'always',
+    loadComponent: () =>
+      import('./features/execution-review/execution-review.component').then(
+        m => m.ExecutionReviewComponent,
+      ),
+  },
+  {
     path: 'workspace/:id/provider-connections',
     canActivate: [authGuard],
     runGuardsAndResolvers: 'always',

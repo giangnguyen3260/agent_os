@@ -1,0 +1,63 @@
+<main>
+  <a [routerLink]="['/workspace', workspace]">Về workspace</a>
+  <header>
+    <h1>Duyệt kết quả thực thi</h1>
+    <button type="button" (click)="load()" [disabled]="busy()">Tải lại</button>
+  </header>
+  <p role="status" aria-live="polite">
+    {{ busy() ? 'Đang xử lý…' : message() }}
+  </p>
+  @if (review(); as current) {
+    <section aria-labelledby="output-title">
+      <h2 id="output-title">Kết quả chờ duyệt</h2>
+      <p>Phiên bản {{ current.revision }}</p>
+      <pre tabindex="0" aria-label="Nội dung kết quả">{{ content() }}</pre>
+    </section>
+    @if (confirmation(); as decision) {
+      <section aria-labelledby="confirm-title">
+        <h2 id="confirm-title">
+          {{
+            decision === 'ACCEPT'
+              ? 'Xác nhận duyệt kết quả?'
+              : 'Xác nhận yêu cầu làm lại?'
+          }}
+        </h2>
+        @if (decision === 'REWORK') {
+          <p>{{ reason }}</p>
+        }
+        <button type="button" (click)="submit()" [disabled]="busy()">
+          Xác nhận
+        </button>
+        <button
+          type="button"
+          (click)="confirmation.set(null)"
+          [disabled]="busy()"
+        >
+          Quay lại
+        </button>
+      </section>
+    } @else {
+      <section aria-label="Quyết định review">
+        <button type="button" (click)="prepare('ACCEPT')" [disabled]="busy()">
+          Duyệt kết quả
+        </button>
+        @if (current.reworkAvailable) {
+          <label for="reason">Lý do yêu cầu làm lại</label>
+          <textarea
+            id="reason"
+            [(ngModel)]="reason"
+            maxlength="1000"
+            [disabled]="busy()"
+          ></textarea>
+          <button
+            type="button"
+            (click)="prepare('REWORK')"
+            [disabled]="busy() || !reason.trim()"
+          >
+            Yêu cầu làm lại
+          </button>
+        }
+      </section>
+    }
+  }
+</main>
