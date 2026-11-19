@@ -1,9 +1,9 @@
 import {test, expect} from '@playwright/test';
-const org = '81818181-8181-4181-8181-818181818181';
-const team = '81000000-0000-4000-8000-000000000001';
-const mission = '81000000-0000-4000-8000-000000000003';
+const org = '95170000-0000-4000-8000-000000000001';
+const team = '91170000-0000-4000-8000-000000000001';
+const mission = '91170000-0000-4000-8000-000000000003';
 const id = (prefix, n) =>
-  `${prefix}000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+  `${prefix}170000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const content =
   '<script>window.privateOutputExecuted=true</script>\nRecorded review evidence';
 for (const decision of ['ACCEPT', 'REWORK']) {
@@ -11,8 +11,8 @@ for (const decision of ['ACCEPT', 'REWORK']) {
     const surface = ['desktop', 'tablet', 'mobile'].indexOf(info.project.name);
     expect(surface).toBeGreaterThanOrEqual(0);
     const n = surface * 2 + (decision === 'ACCEPT' ? 1 : 2);
-    const task = id('82', n),
-      run = id('83', n);
+    const task = id('92', n),
+      run = id('93', n);
     const taskPath = `/workspace/${org}/teams/${team}/missions/${mission}/tasks/${task}`;
     const api = `/api/v1/organizations/${org}/execution-runs/${run}`;
     expect(process.env.E2E_PASSWORD).toBeTruthy();
