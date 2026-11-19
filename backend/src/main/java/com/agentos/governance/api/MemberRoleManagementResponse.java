@@ -1,5 +1,6 @@
 package com.agentos.governance.api;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import java.time.Instant;
 import java.util.List;
@@ -31,7 +32,11 @@ public final class MemberRoleManagementResponse {
       UUID idempotencyKey,
       UUID eventId,
       int revision,
-      Instant recordedAt,
+      @JsonFormat(
+              shape = JsonFormat.Shape.STRING,
+              pattern = "uuuu-MM-dd'T'HH:mm:ss.SSSSSS'Z'",
+              timezone = "UTC")
+          Instant recordedAt,
       String beforeRole,
       String afterRole) {}
 
@@ -42,7 +47,11 @@ public final class MemberRoleManagementResponse {
       String beforeRole,
       String afterRole,
       String reason,
-      Instant recordedAt,
+      @JsonFormat(
+              shape = JsonFormat.Shape.STRING,
+              pattern = "uuuu-MM-dd'T'HH:mm:ss.SSSSSS'Z'",
+              timezone = "UTC")
+          Instant recordedAt,
       int revision) {}
 
   public record History(
