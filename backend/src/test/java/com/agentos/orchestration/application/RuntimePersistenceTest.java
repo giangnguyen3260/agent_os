@@ -851,6 +851,61 @@ values(?,?,?,?,0,1,1,1,?,?,?,?,?,?,?,?,'ACCESSIBLE','MODEL_DISCOVERY')
       assertThat(
               jdbc.queryForObject("select status from tasks where id=?", String.class, firstTask))
           .isEqualTo("COMPLETED");
+      UUID driftTask = UUID.randomUUID();
+      jdbc.update(
+          "insert into tasks(id,organization_id,team_id,mission_id,title,status,owner_agent_id)"
+              + " values(?,?,?,?,'Configuration drift','READY',?)",
+          driftTask,
+          org,
+          team,
+          mission,
+          agent);
+      var driftPreflight = flow.taskPreflight(org, team, mission, driftTask, actor);
+      var driftStart =
+          flow.startTask(
+              org,
+              team,
+              mission,
+              driftTask,
+              UUID.randomUUID(),
+              driftPreflight.fingerprint(),
+              actor);
+      var changedSettings =
+          new OpenAiExecutionFlow(
+              jdbc,
+              tx.getTransactionManager(),
+              starts,
+              dispatch,
+              claims,
+              budgets,
+              model,
+              new ExecutionAttemptReconciliationStore(jdbc, claims),
+              outputs,
+              new ExecutionRunReviewStore(jdbc, claims),
+              decisions,
+              connections,
+              credentials,
+              transport,
+              new OpenAiExecutionFlow.Settings("fixture-model", 100, 2000000, 2000000, 40000),
+              java.time.Clock.systemUTC());
+      changedSettings.poll();
+      assertThat(calls.get()).isEqualTo(1);
+      assertThat(
+              jdbc.queryForObject(
+                  "select state from execution_start_dispatch where id=?",
+                  String.class,
+                  driftStart.dispatchId()))
+          .isEqualTo("FINISHED");
+      assertThat(
+              jdbc.queryForObject(
+                  "select revision from execution_runs where id=?", Long.class, driftStart.runId()))
+          .isEqualTo(1);
+      assertThat(
+              jdbc.queryForObject(
+                  "select count(*) from execution_budget_reservations where action_id=?",
+                  Integer.class,
+                  driftStart.dispatchId()))
+          .isZero();
       for (var decision :
           java.util.List.of(
               ExecutionReviewDecisionStore.Decision.REWORK,

@@ -577,6 +577,14 @@ where d.state='QUEUED' order by d.created_at,d.id limit 1
                     rs.getLong(14)));
     if (jobs.isEmpty()) return;
     Job job = jobs.getFirst();
+    if (!settings.model().equals(job.model())
+        || job.inputRate() != settings.inputRate()
+        || job.outputRate() != settings.outputRate()
+        || job.maxOutput() > settings.outputTokens()
+        || job.maximum() > settings.maximumMicrousd()) {
+      rejectQueued(job);
+      return;
+    }
     ExecutionClaimStore.Token token;
     try {
       var now = OffsetDateTime.now(clock);
