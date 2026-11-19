@@ -750,6 +750,11 @@ values(?,?,?,?,0,1,1,1,?,?,?,?,?,?,?,?,'ACCESSIBLE','MODEL_DISCOVERY')
           mission,
           agent);
       var firstPreflight = flow.taskPreflight(org, team, mission, firstTask, actor);
+      assertThat(firstPreflight.ownerAgentId()).isEqualTo(agent);
+      assertThat(firstPreflight.requestPreview())
+          .contains("First Task")
+          .doesNotContain("disposable-fixture-key");
+      assertThat(firstPreflight.toString()).doesNotContain("First Task");
       UUID firstKey = UUID.randomUUID();
       when(grants.hasCurrentGrant(org, agent, connection, "fixture-model")).thenReturn(false);
       assertThatThrownBy(

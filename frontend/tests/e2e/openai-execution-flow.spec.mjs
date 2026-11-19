@@ -32,6 +32,9 @@ async function fixture(page, {ambiguous = false, role = 'ADMIN'} = {}) {
           ...(state === 'READY' ? {taskId: task} : {runId: run}),
           revision: String(revision),
           connectionId: team,
+          ownerAgentId: task,
+          requestPreview:
+            '{\"messages\":[{\"role\":\"user\",\"content\":\"Input\"}]}',
           model: 'fixture-model',
           maxOutputTokens: 100,
           maximumMicrousd: '17508',
@@ -141,6 +144,10 @@ test('UI Start, review, rework, new Start and acceptance form a complete loop', 
     .click();
   await expect(page.getByRole('main')).toContainText('fixture-model');
   for (const decision of ['REWORK', 'ACCEPT']) {
+    await expect(page.getByLabel('Request đề xuất')).toContainText('Input');
+    expect(
+      await page.evaluate(() => window.privateRequestExecuted),
+    ).toBeUndefined();
     await page
       .getByRole('button', {name: 'Xác nhận Start Task', exact: true})
       .click();

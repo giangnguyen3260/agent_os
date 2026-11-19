@@ -2,7 +2,7 @@
 
 ## Delivered behavior
 
-Current ADMIN opens a READY text Task with no dependencies in an ACTIVE Team and RUNNING Mission, reviews the current model/connection, token ceiling and reserved budget, then confirms Start. The POST explicitly accepts a single-task plan snapshot and commits the Run, scoped Start receipt, immutable prepared body and dispatch together. GET preflight never creates a plan or Run. A Task must have an ACTIVE owner, structured current model binding/grant and usable OpenAI connection. General AI planning, dependency-graph acceptance and Mission completion remain separate features.
+Current ADMIN opens a READY text Task with no dependencies in an ACTIVE Team and RUNNING Mission, reviews the current owner/model/connection, exact prepared text request, token ceiling and reserved budget, then confirms Start. The POST explicitly accepts a single-task plan snapshot and commits the Run, scoped Start receipt, immutable prepared body and dispatch together. GET preflight never creates a plan or Run. A Task must have an ACTIVE owner, structured current model binding/grant and usable OpenAI connection. General AI planning, dependency-graph acceptance and Mission completion remain separate features.
 
 The internal worker revalidates issuer/account credential version, accepted Task/owner/dependency revisions, prerequisites, lifecycle, current model grant and credential revision. It issues one fenced Attempt, reserves four scoped budget/capacity buckets, authorizes the body digest and commits exact-body handoff before transport. A replayed Start returns the receipt after fresh authority checks; a competing key cannot enqueue the same Run revision. A new Start after REWORK creates another Attempt under the retained Run. Pending commands are retired without a provider call when installer model/rates change or token/cost limits are tightened; Run revision advances so a fresh proposal and key are required.
 
@@ -37,7 +37,7 @@ Start endpoints:
 - GET/POST `/api/v1/organizations/{org}/execution-runs/{run}/start`: subsequent Start of an accepted CREATED Run.
 - POST body `{expectedRevision: decimal-string, idempotencyKey: UUID, fingerprint: SHA-256}`; first Task Start requires revision `"0"`. Fingerprints bind the reviewed body, scope, configuration and rate/reservation settings. Server revalidates rather than trusting the fingerprint as authority. POST requires the existing session CSRF token.
 
-The UI preserves an exact Start key/body after an ambiguous response. Explicit retry can only resend that command. It clears private proposal/pending state on actor or route changes and rechecks authority before POST. The Run link is always the place to verify current execution state.
+The ADMIN-only proposal displays the escaped prepared request without inserting connection credentials; its DTO string representation is redacted. The UI preserves an exact Start key/body after an ambiguous response. Explicit retry can only resend that command. It clears private proposal/pending state on actor or route changes and rechecks authority before POST. The Run link is always the place to verify current execution state.
 
 ## Verification and remaining release gates
 

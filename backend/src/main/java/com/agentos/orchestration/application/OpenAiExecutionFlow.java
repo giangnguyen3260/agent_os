@@ -42,15 +42,27 @@ public final class OpenAiExecutionFlow {
       UUID runId,
       String revision,
       UUID connectionId,
+      UUID ownerAgentId,
+      String requestPreview,
       String model,
       int maxOutputTokens,
       String maximumMicrousd,
-      String fingerprint) {}
+      String fingerprint) {
+    @Override
+    public String toString() {
+      return "ExecutionPreflight[redacted]";
+    }
+  }
 
   public record Started(UUID dispatchId, UUID runId, String sourceRevision) {}
 
   private record Prepared(
-      UUID connection, long credentialRevision, String model, byte[] body, String sha) {}
+      UUID owner,
+      UUID connection,
+      long credentialRevision,
+      String model,
+      byte[] body,
+      String sha) {}
 
   private record Job(
       UUID org,
@@ -145,6 +157,8 @@ public final class OpenAiExecutionFlow {
               run,
               Long.toString(rev),
               p.connection(),
+              p.owner(),
+              new String(p.body(), StandardCharsets.UTF_8),
               p.model(),
               settings.outputTokens(),
               Long.toString(reservation()),
@@ -216,10 +230,17 @@ from execution_runs where organization_id=? and id=?
       UUID taskId,
       String revision,
       UUID connectionId,
+      UUID ownerAgentId,
+      String requestPreview,
       String model,
       int maxOutputTokens,
       String maximumMicrousd,
-      String fingerprint) {}
+      String fingerprint) {
+    @Override
+    public String toString() {
+      return "ExecutionPreflight[redacted]";
+    }
+  }
 
   private record TaskPrepared(
       UUID owner, int edit, int ownership, int dependency, Prepared model, String fingerprint) {}
@@ -234,6 +255,8 @@ from execution_runs where organization_id=? and id=?
               task,
               "0",
               p.model().connection(),
+              p.owner(),
+              new String(p.model().body(), StandardCharsets.UTF_8),
               p.model().model(),
               settings.outputTokens(),
               Long.toString(reservation()),
@@ -394,7 +417,7 @@ where exists(select 1 from organizations o where o.id=t.organization_id and o.st
                                       + "\nAcceptance criteria: "
                                       + java.util.Objects.toString(rs.getString(10), ""))),
                           settings.outputTokens()));
-              var p = new Prepared(connection, rs.getLong(6), model, body, sha(body));
+              var p = new Prepared(owner, connection, rs.getLong(6), model, body, sha(body));
               String hash =
                   sha(
                       (org
@@ -472,7 +495,12 @@ where r.organization_id=? and r.id=?
                   request.agentId());
               byte[] body = OpenAiTextTransport.prepare(request);
               return new Prepared(
-                  request.providerId(), rs.getLong(2), request.model(), body, sha(body));
+                  request.agentId(),
+                  request.providerId(),
+                  rs.getLong(2),
+                  request.model(),
+                  body,
+                  sha(body));
             },
             org,
             run);

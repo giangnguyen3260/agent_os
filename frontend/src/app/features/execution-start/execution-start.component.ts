@@ -17,6 +17,8 @@ interface Preflight {
   taskId?: string;
   revision: string;
   connectionId: string;
+  ownerAgentId: string;
+  requestPreview: string;
   model: string;
   maxOutputTokens: number;
   maximumMicrousd: string;
@@ -79,11 +81,17 @@ interface Pending {
           <dd>{{ p.model }}</dd>
           <dt>Connection</dt>
           <dd>{{ p.connectionId }}</dd>
+          <dt>Agent thực thi</dt>
+          <dd>{{ p.ownerAgentId }}</dd>
           <dt>Giới hạn output token</dt>
           <dd>{{ p.maxOutputTokens }}</dd>
           <dt>Ngân sách giữ tối đa (micro-USD)</dt>
           <dd>{{ p.maximumMicrousd }}</dd>
         </dl>
+        <h2>Request sẽ gửi tới model</h2>
+        <pre tabindex="0" aria-label="Request đề xuất">{{
+          p.requestPreview
+        }}</pre>
         <p>
           Chạy một Task văn bản, không gọi công cụ. Chi phí được hạch toán theo
           biểu giá do quản trị hệ thống cấu hình. Kết quả sẽ chờ người duyệt.
@@ -189,6 +197,10 @@ export class ExecutionStartComponent {
         !data ||
         (this.task ? data.taskId !== this.task : data.runId !== this.run) ||
         !uuid(data.connectionId) ||
+        !uuid(data.ownerAgentId) ||
+        typeof data.requestPreview !== 'string' ||
+        new TextEncoder().encode(data.requestPreview).length > 32768 ||
+        !data.requestPreview.trim() ||
         typeof data.revision !== 'string' ||
         !/^(0|[1-9]\d{0,18})$/.test(data.revision) ||
         typeof data.fingerprint !== 'string' ||
