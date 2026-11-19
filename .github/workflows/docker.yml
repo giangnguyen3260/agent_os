@@ -405,6 +405,9 @@ jobs:
             frontend/qa-visuals/workspace-navigation-*.png
             frontend/qa-visuals/workspace-navigation-manifest.jsonl
           if-no-files-found: ignore
+      - name: Provision recorded Run review browser fixtures
+        run: |
+          docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < scripts/execution-review-ci-fixture.sql
       - name: Retained real backend browser regression
         working-directory: frontend
         env:
