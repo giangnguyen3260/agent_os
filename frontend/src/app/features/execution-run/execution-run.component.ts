@@ -55,6 +55,18 @@ interface Run {
           <dt>Lý do chờ</dt>
           <dd>{{ run.waitReason ?? 'Không có' }}</dd>
         </dl>
+        @if (run.status === 'CREATED') {
+          <a
+            [routerLink]="[
+              '/workspace',
+              org,
+              'execution-runs',
+              run.id,
+              'start',
+            ]"
+            >Khởi chạy Task</a
+          >
+        }
         @if (run.status === 'IN_REVIEW') {
           <a
             [routerLink]="[

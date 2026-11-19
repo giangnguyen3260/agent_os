@@ -124,6 +124,10 @@ where a.organization_id=? and a.run_id=? and a.action_id=? and a.attempt_id=? an
         ByteBuffer.wrap(exactBody).asReadOnlyBuffer());
   }
 
+  boolean configurationGranted(UUID organization, UUID agent, UUID connection, String model) {
+    return discoveryEnabled && grants.hasCurrentGrant(organization, agent, connection, model);
+  }
+
   private Target requireTarget(ExecutionClaimStore.Token token, UUID connection, String model) {
     claims.requireCurrent(token);
     long controlRevision = controls.requireOpen(token.organization(), token.run());
@@ -140,7 +144,7 @@ join missions m on m.organization_id=r.organization_id and m.team_id=r.team_id a
 join tasks t on t.organization_id=r.organization_id and t.team_id=r.team_id
   and t.mission_id=r.mission_id and t.id=r.task_id
 join agents a on a.organization_id=r.organization_id and a.team_id=r.team_id and a.id=p.owner_agent_id
-where r.organization_id=? and r.id=? and g.status='ACTIVE' and a.status='ACTIVE'
+where exists(select 1 from organizations o where o.id=r.organization_id and o.status='ACTIVE') and r.organization_id=? and r.id=? and g.status='ACTIVE' and a.status='ACTIVE'
   and m.status='RUNNING' and t.status='RUNNING' and t.owner_agent_id=p.owner_agent_id
   and t.task_edit_revision=p.task_edit_revision and t.task_owner_revision=p.task_owner_revision
   and t.dependency_revision=p.dependency_revision
