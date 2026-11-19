@@ -431,6 +431,89 @@ values (?,?,?,?,?,?,'CREATED')
         .isEqualTo(1);
     assertThatThrownBy(() -> tx.execute(status -> controls.acknowledgeCancellation(scope, 6)))
         .hasMessage("Mission execution control is unavailable.");
+    verifyAtomicPublication(jdbc, tx, store, org, run);
+  }
+
+  private void verifyAtomicPublication(
+      JdbcTemplate jdbc, TransactionTemplate tx, ExecutionClaimStore claims, UUID org, UUID run) {
+    UUID attempt = UUID.randomUUID();
+    jdbc.update(
+        "update missions set status='RUNNING' where id=(select mission_id from execution_runs where"
+            + " id=?)",
+        run);
+    jdbc.update("update execution_runs set status='BLOCKED' where id=?", run);
+    jdbc.update(
+        "update tasks set"
+            + " status='BLOCKED',pending_reason='OUTCOME_UNKNOWN',waiting_since=current_timestamp,resolver='Reconciler'"
+            + " where id=(select task_id from execution_runs where id=?)",
+        run);
+    jdbc.update(
+        "update mission_execution_controls set state='OPEN' where mission_id=(select mission_id"
+            + " from execution_runs where id=?)",
+        run);
+    jdbc.update(
+        "insert into execution_attempts(id,run_id,attempt_number,status,outcome_slot)"
+            + " values(?,?,4,'UNKNOWN',0)",
+        attempt,
+        run);
+    long revision =
+        jdbc.queryForObject("select revision from execution_runs where id=?", Long.class, run);
+    String text = "verified output";
+    String digest = "eecf56ab92af6fc765c7564f294a6f24b1cd2b4852b0c42d636d77d1501fb664";
+    var publisher =
+        new ExecutionResultPublicationService(
+            tx.getTransactionManager(),
+            new ExecutionAttemptReconciliationStore(jdbc, claims),
+            new ExecutionOutputContentStore(jdbc, claims),
+            new ExecutionRunReviewStore(jdbc, claims));
+    assertThatThrownBy(
+            () ->
+                publisher.publishVerified(
+                    org, run, attempt, revision, "a".repeat(64), digest, "wrong content"))
+        .isInstanceOf(IllegalStateException.class);
+    assertThatThrownBy(
+            () ->
+                publisher.publishVerified(
+                    org, run, attempt, revision + 1, "a".repeat(64), digest, text))
+        .isInstanceOf(IllegalStateException.class);
+    assertThat(
+            jdbc.queryForObject(
+                "select status from execution_attempts where id=?", String.class, attempt))
+        .isEqualTo("UNKNOWN");
+    assertThat(
+            jdbc.queryForObject(
+                "select count(*) from execution_attempt_reconciliations where attempt_id=?",
+                Integer.class,
+                attempt))
+        .isZero();
+    assertThat(
+            jdbc.queryForObject(
+                "select count(*) from execution_verified_output_content where attempt_id=?",
+                Integer.class,
+                attempt))
+        .isZero();
+    tx.executeWithoutResult(
+        status -> {
+          assertThatThrownBy(
+                  () ->
+                      publisher.publishVerified(
+                          org, run, attempt, revision, "a".repeat(64), digest, text))
+              .hasMessage("Result publication requires an independent worker transaction.");
+        });
+    publisher.publishVerified(org, run, attempt, revision, "a".repeat(64), digest, text);
+    publisher.publishVerified(org, run, attempt, revision, "a".repeat(64), digest, text);
+    assertThat(
+            jdbc.queryForObject("select status from execution_runs where id=?", String.class, run))
+        .isEqualTo("IN_REVIEW");
+    assertThat(
+            jdbc.queryForObject("select revision from execution_runs where id=?", Long.class, run))
+        .isEqualTo(revision + 1);
+    assertThat(
+            jdbc.queryForObject(
+                "select content from execution_verified_output_content where attempt_id=?",
+                String.class,
+                attempt))
+        .isEqualTo(text);
   }
 
   private void verifyReconciledReview(

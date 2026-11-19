@@ -105,3 +105,11 @@ The frontend route `/workspace/{organizationId}/execution-runs/{runId}/review` l
 ## Task review navigation
 
 Task detail checks the scoped `/execution-review` endpoint when a current ADMIN opens an IN_REVIEW Task. A matching pending review exposes its Run ID and enables the review link. Missing or foreign Task, Team, Mission or Run scope returns 404. Member reads are denied. Review decisions continue to recheck current authority and revision at mutation time.
+
+## Atomic verified result publication
+
+`ExecutionResultPublicationService` is an internal trusted-reconciliation boundary. After evidence verification and usage settlement, a worker outside an existing transaction may publish the exact successful evidence digest, output digest and bounded text against an expected Run revision. One independent transaction records reconciliation, verifies/stores text and submits the Run/Task to review. Existing claim, unresolved budget, lifecycle and scope gates remain enforced by the stores. A mismatch in any stage rolls back earlier writes. Exact replay does not advance the Run revision twice.
+
+Calls under an ambient transaction are rejected before writes, avoiding a suspended transaction holding business locks while the publication waits for its own Run lock. No HTTP ingress, worker scheduler or provider transport is enabled. Caller trust, provider evidence verification, usage settlement and live model dispatch remain separate prerequisites; this service must not accept arbitrary client claims of success.
+
+The H2 persistence integration exercises invalid content and stale revision rollback, unchanged UNKNOWN attempt and missing partial output/evidence, ambient transaction rejection, successful publication and exact replay. Native PostgreSQL concurrency acceptance for this new composite boundary remains open.
