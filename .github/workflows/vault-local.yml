@@ -2,6 +2,9 @@ name: Local Vault integration
 on:
   pull_request:
     paths:
+      - backend/src/main/java/com/agentos/orchestration/**
+      - backend/src/test/java/com/agentos/orchestration/**
+      - backend/src/main/java/com/agentos/model/**
       - backend/src/main/java/com/agentos/providervault/**
       - backend/src/test/java/com/agentos/providervault/**
       - backend/src/main/java/com/agentos/providercredentials/**
@@ -29,6 +32,10 @@ on:
       - frontend/tests/e2e/provider-rotate-live.spec.mjs
       - frontend/tests/e2e/provider-access-check-live.spec.mjs
       - frontend/tests/e2e/provider-model-discovery-live.spec.mjs
+      - frontend/tests/e2e/provider-openai-execution-live.spec.mjs
+      - frontend/src/app/features/execution-start/**
+      - frontend/src/app/features/execution-review/**
+      - frontend/src/app/features/execution-run/**
       - frontend/scripts/provider-vault-server.mjs
 permissions:
   contents: read
