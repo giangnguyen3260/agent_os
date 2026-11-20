@@ -79,7 +79,14 @@ import org.springframework.test.context.DynamicPropertySource;
       "agentos.provider-rotate.enabled=true",
       "agentos.provider-rotate.http-enabled=true",
       "agentos.provider-access-check.http-enabled=true",
-      "agentos.provider-model-discovery.http-enabled=true"
+      "agentos.provider-model-discovery.http-enabled=true",
+      "agentos.execution.openai.enabled=true",
+      "agentos.execution.openai.poll-enabled=false",
+      "agentos.execution.openai.model=fixture-model-01",
+      "agentos.execution.openai.max-output-tokens=100",
+      "agentos.execution.openai.input-rate-microusd-per-million=1000000",
+      "agentos.execution.openai.output-rate-microusd-per-million=1000000",
+      "agentos.execution.openai.maximum-microusd=20000"
     })
 @ActiveProfiles("test")
 @Import(ProviderCreateVaultHttpIT.UploadReadContinue.class)
@@ -108,6 +115,7 @@ class ProviderCreateVaultHttpIT {
   @Autowired ObjectMapper json;
   @Autowired ProviderCreateCoordinator creates;
   @Autowired Environment environment;
+  @Autowired com.agentos.orchestration.application.OpenAiExecutionFlow openAiExecution;
 
   @DynamicPropertySource
   static void configuration(DynamicPropertyRegistry properties) {
@@ -783,6 +791,275 @@ class ProviderCreateVaultHttpIT {
     }
   }
 
+  @Test
+  void browserExecutesReworksAndAcceptsTaskUsingManagedVaultCredential() throws Exception {
+    UUID org = UUID.randomUUID(),
+        actor = UUID.randomUUID(),
+        team = UUID.randomUUID(),
+        mission = UUID.randomUUID(),
+        task = UUID.randomUUID(),
+        agent = UUID.randomUUID();
+    var human = seedCheckBrowserAdmin(org, actor, "OpenAI execution");
+    UUID connection;
+    try (var body = checkCreateBody(null, Provider.OPENAI, "Execution fixture")) {
+      var created = creates.create(human, org, UUID.randomUUID(), body);
+      assertThat(created.state()).isEqualTo(WriteState.COMMITTED);
+      connection = created.result().receipt().connectionId();
+    }
+    publishCheckEvidence(org, connection, Provider.OPENAI);
+    assertThat(
+            jdbc.queryForObject(
+                "select"
+                    + " has_table_privilege('vault_browser_web','public.provider_credential_versions','SELECT')",
+                Boolean.class))
+        .isFalse();
+    assertThat(
+            jdbc.queryForObject(
+                "select"
+                    + " has_table_privilege('vault_browser_writer','public.provider_credential_versions','SELECT')",
+                Boolean.class))
+        .isTrue();
+    jdbc.update(
+        "insert into teams(id,organization_id,name,status,created_at,updated_at)"
+            + " values(?,?,'Execution team','ACTIVE',current_timestamp,current_timestamp)",
+        team,
+        org);
+    jdbc.update(
+        "insert into"
+            + " agents(id,organization_id,team_id,name,role,level,status,autonomy_level,created_at,updated_at)"
+            + " values(?,?,?,'Execution"
+            + " Agent','Reviewer','MID','ACTIVE','SUGGEST',current_timestamp,current_timestamp)",
+        agent,
+        org,
+        team);
+    jdbc.update(
+        "insert into"
+            + " agent_draft_config(agent_id,responsibilities,expected_input,output_format,acceptance_criteria)"
+            + " values(?,'Review','Input','Text','Evidence')",
+        agent);
+    jdbc.update(
+        "insert into"
+            + " missions(id,organization_id,team_id,title,goal,status,priority,created_at,updated_at)"
+            + " values(?,?,?,'Execution"
+            + " Mission','Goal','RUNNING','NORMAL',current_timestamp,current_timestamp)",
+        mission,
+        org,
+        team);
+    jdbc.update(
+        "insert into tasks(id,organization_id,team_id,mission_id,title,status,owner_agent_id)"
+            + " values(?,?,?,?,'Vault execution Task','READY',?)",
+        task,
+        org,
+        team,
+        mission,
+        agent);
+    UUID check = UUID.randomUUID();
+    var at = java.time.OffsetDateTime.now().minusSeconds(2);
+    var until = at.plusMinutes(5);
+    long policy =
+        jdbc.queryForObject(
+            "select revision from provider_deployment_policy where id=1", Long.class);
+    jdbc.update(
+        """
+insert into provider_access_checks(id,organization_id,connection_id,actor_id,actor_credential_version,connection_revision,credential_revision,policy_revision,accepted_at,queue_expires_at,worker_owner_id,dispatch_token,started_at,dispatch_deadline,authorized_at,completed_at,outcome,check_kind)
+values(?,?,?,?,0,1,1,?,?,?,?,?,?,?,?,?,'ACCESSIBLE','MODEL_DISCOVERY')
+""",
+        check,
+        org,
+        connection,
+        actor,
+        policy,
+        at,
+        until,
+        UUID.randomUUID(),
+        UUID.randomUUID(),
+        at,
+        until,
+        at,
+        at.plusSeconds(1));
+    jdbc.update(
+        "insert into"
+            + " provider_model_discovery_snapshots(organization_id,connection_id,check_id,catalogue_state)"
+            + " values(?,?,?,'COMPLETE')",
+        org,
+        connection,
+        check);
+    jdbc.update(
+        "insert into"
+            + " provider_model_discovery_entries(organization_id,connection_id,check_id,model_ordinal,model_id)"
+            + " values(?,?,?,1,'fixture-model-01')",
+        org,
+        connection,
+        check);
+    jdbc.update(
+        "insert into"
+            + " agent_model_bindings(organization_id,agent_id,revision,connection_id,check_id,model_id)"
+            + " values(?,?,1,?,?,'fixture-model-01')",
+        org,
+        agent,
+        connection,
+        check);
+    jdbc.update(
+        "insert into agent_model_grants(organization_id,agent_id,revision,binding_revision,enabled)"
+            + " values(?,?,1,1,true)",
+        org,
+        agent);
+    for (var scope :
+        java.util.Map.of("ORGANIZATION", org, "TEAM", team, "AGENT", agent, "MISSION", mission)
+            .entrySet()) {
+      jdbc.update(
+          "insert into"
+              + " execution_budget_buckets(id,organization_id,scope,subject_id,opens_at,closes_at,limit_microusd)"
+              + " values(?,?,?,?,?,?,1000000)",
+          UUID.randomUUID(),
+          org,
+          scope.getKey(),
+          scope.getValue(),
+          at.minusHours(1),
+          at.plusHours(1));
+      jdbc.update(
+          "insert into"
+              + " execution_capacity_limits(organization_id,scope,subject_id,max_concurrent,max_admissions,window_seconds)"
+              + " values(?,?,?,5,100,60)",
+          org,
+          scope.getKey(),
+          scope.getValue());
+    }
+    var sent = new AtomicInteger();
+    var authorized = new java.util.concurrent.atomic.AtomicBoolean(true);
+    var committed = new java.util.concurrent.atomic.AtomicBoolean(true);
+    var provider =
+        com.sun.net.httpserver.HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+    provider.createContext(
+        "/completion",
+        exchange -> {
+          int ordinal = sent.incrementAndGet();
+          byte[] request = exchange.getRequestBody().readAllBytes();
+          authorized.compareAndSet(
+              true,
+              ("Bearer " + SECRET).equals(exchange.getRequestHeaders().getFirst("Authorization")));
+          String sha;
+          try {
+            sha =
+                java.util.HexFormat.of()
+                    .formatHex(MessageDigest.getInstance("SHA-256").digest(request));
+          } catch (java.security.NoSuchAlgorithmException failure) {
+            throw new IllegalStateException(failure);
+          }
+          committed.compareAndSet(
+              true,
+              jdbc.queryForObject(
+                      "select count(*) from execution_model_authorizations a join"
+                          + " execution_budget_reservations b on b.run_id=a.run_id and"
+                          + " b.action_id=a.action_id where a.organization_id=? and"
+                          + " a.request_sha256=? and a.handed_off_at is not null and"
+                          + " b.status='HELD'",
+                      Integer.class,
+                      org,
+                      sha)
+                  == 1);
+          byte[] response =
+              ("{\"id\":\"vault-completion-"
+                      + ordinal
+                      + "\",\"object\":\"chat.completion\",\"choices\":[{\"finish_reason\":\"stop\",\"message\":{\"role\":\"assistant\",\"content\":\"Vault"
+                      + " verified task"
+                      + " output\"}}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":3,\"total_tokens\":13}}")
+                  .getBytes(StandardCharsets.UTF_8);
+          exchange.getResponseHeaders().set("Content-Type", "application/json");
+          exchange.sendResponseHeaders(200, response.length);
+          exchange.getResponseBody().write(response);
+          exchange.close();
+        });
+    provider.start();
+    var timer = Executors.newSingleThreadScheduledExecutor();
+    var workers = Executors.newSingleThreadScheduledExecutor();
+    var failures = new java.util.concurrent.atomic.AtomicReference<RuntimeException>();
+    var transportField =
+        com.agentos.orchestration.application.OpenAiExecutionFlow.class.getDeclaredField(
+            "transport");
+    transportField.setAccessible(true);
+    var original = transportField.get(openAiExecution);
+    try {
+      // Only this test replaces the fixed production route; no runtime endpoint property exists.
+      var ctor =
+          com.agentos.model.infrastructure.OpenAiTextTransport.class.getDeclaredConstructor(
+              URI.class,
+              Clock.class,
+              java.util.concurrent.ScheduledExecutorService.class,
+              boolean.class);
+      ctor.setAccessible(true);
+      transportField.set(
+          openAiExecution,
+          ctor.newInstance(
+              URI.create("http://127.0.0.1:" + provider.getAddress().getPort() + "/completion"),
+              Clock.systemUTC(),
+              timer,
+              true));
+      workers.scheduleWithFixedDelay(
+          () -> {
+            try {
+              openAiExecution.poll();
+            } catch (RuntimeException failure) {
+              failures.compareAndSet(null, failure);
+            }
+          },
+          0,
+          50,
+          TimeUnit.MILLISECONDS);
+      try {
+        runConnectionBrowser("openai_execution", org, actor, connection, task);
+      } catch (Exception | AssertionError failure) {
+        if (failures.get() != null) failure.addSuppressed(failures.get());
+        throw failure;
+      }
+      assertThat(failures.get()).isNull();
+      assertThat(sent.get()).isEqualTo(2);
+      assertThat(authorized.get())
+          .as("Both requests borrow the exact credential created in TLS Vault")
+          .isTrue();
+      assertThat(committed.get())
+          .as("Exact handoff and HELD budget are committed before each provider call")
+          .isTrue();
+      assertThat(jdbc.queryForObject("select status from tasks where id=?", String.class, task))
+          .isEqualTo("COMPLETED");
+      assertThat(
+              jdbc.queryForList(
+                  "select d.decision from execution_review_decisions d join execution_runs r on"
+                      + " r.id=d.run_id where r.task_id=? order by d.decided_at",
+                  String.class,
+                  task))
+          .containsExactly("REWORK", "ACCEPT");
+      assertThat(
+              jdbc.queryForObject(
+                  "select count(*) from execution_start_dispatch where organization_id=? and"
+                      + " state='FINISHED'",
+                  Integer.class,
+                  org))
+          .isEqualTo(2);
+      assertThat(
+              jdbc.queryForObject(
+                  "select count(*) from execution_model_usage u join execution_runs r on"
+                      + " r.id=u.run_id where r.task_id=?",
+                  Integer.class,
+                  task))
+          .isEqualTo(2);
+      assertThat(
+              jdbc.queryForObject(
+                  "select count(*) from execution_budget_reservations b join execution_runs r on"
+                      + " r.id=b.run_id where r.task_id=? and b.status='SETTLED' and"
+                      + " b.actual_microusd=13",
+                  Integer.class,
+                  task))
+          .isEqualTo(2);
+    } finally {
+      workers.shutdownNow();
+      workers.awaitTermination(10, TimeUnit.SECONDS);
+      transportField.set(openAiExecution, original);
+      timer.shutdownNow();
+      provider.stop(0);
+    }
+  }
+
   private HumanIdentity seedCheckBrowserAdmin(UUID org, UUID actor, String name) {
     String email = actor + "@example.test";
     jdbc.update(
@@ -1012,8 +1289,18 @@ class ProviderCreateVaultHttpIT {
       command.environment().put("PROVIDER_VAULT_EMAIL", actor + "@example.test");
       command.environment().put("PROVIDER_VAULT_PASSWORD", PASSWORD);
       command.environment().put(prefix + "_CONNECTION", connection.toString());
-      if (draft != null)
+      if (draft != null && operation.equals("model_discovery"))
         command.environment().put("PROVIDER_MODEL_DISCOVERY_AGENT", draft.toString());
+      if (draft != null && operation.equals("openai_execution")) {
+        command.environment().put("PROVIDER_OPENAI_EXECUTION_TASK", draft.toString());
+        var scope = jdbc.queryForMap("select team_id,mission_id from tasks where id=?", draft);
+        command
+            .environment()
+            .put("PROVIDER_OPENAI_EXECUTION_TEAM", scope.get("team_id").toString());
+        command
+            .environment()
+            .put("PROVIDER_OPENAI_EXECUTION_MISSION", scope.get("mission_id").toString());
+      }
       Path diagnostics =
           Files.createTempFile(
               "provider-" + operation + "-browser-",
@@ -1442,6 +1729,17 @@ class ProviderCreateVaultHttpIT {
       statement.execute(
           "grant select,insert,update on public.authentication_attempts,"
               + "public.provider_read_admission to vault_browser_web");
+      // Explicit runtime permissions on this disposable test login only. Provider command
+      // metadata remains inaccessible; the credential writer uses its separate login.
+      statement.execute(
+          "grant select on"
+              + " public.task_dependencies,public.accepted_mission_plan_dependencies,public.execution_capacity_limits"
+              + " to vault_browser_web");
+      statement.execute(
+          "grant select,insert,update on"
+              + " public.teams,public.missions,public.tasks,public.accepted_mission_plans,public.accepted_mission_plan_tasks,public.mission_execution_controls,public.execution_runs,public.execution_attempts,public.execution_start_dispatch,public.execution_openai_requests,public.execution_claims,public.execution_budget_buckets,public.execution_budget_reservations,public.execution_budget_reservation_buckets,public.execution_model_authorizations,public.execution_model_usage,public.execution_attempt_reconciliations,public.execution_verified_output_content,public.execution_reconciled_review_submissions,public.execution_review_decisions"
+              + " to vault_browser_web");
+      statement.execute("grant select,insert on public.audit_events to vault_browser_web");
       statement.execute("grant insert on public.authentication_audit to vault_browser_web");
       statement.execute(
           "grant select,insert,update,delete on public.spring_session,"

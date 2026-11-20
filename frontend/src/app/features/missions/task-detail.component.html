@@ -76,6 +76,24 @@
       </div>
     }
     @if (snapshot(); as data) {
+      @if (context()?.role === 'ADMIN' && data.task.status === 'READY') {
+        <a
+          class="button"
+          [routerLink]="[
+            '/workspace',
+            id,
+            'teams',
+            teamId,
+            'missions',
+            missionId,
+            'tasks',
+            taskId,
+            'start',
+          ]"
+          >Khởi chạy Task bằng OpenAI</a
+        >
+      }
+
       <div class="breadcrumb">
         <span>{{ context()?.name }} / {{ data.team.name }}</span
         ><span>{{ auth.user()?.displayName }}</span>
@@ -209,8 +227,9 @@
       </div>
       <p id="task-actions-unavailable" class="caption">
         Shows approvals across this organization; this task is not used as a
-        filter. Runtime task actions and execution are unavailable. Status is
-        saved state.
+        filter. OpenAI Start is available for eligible Tasks when configured;
+        pause, cancel and retry controls remain unavailable. Status reflects
+        saved data.
       </p>
       @if (data.task.waitingSince) {
         <section class="status-banner" aria-label="Waiting details">

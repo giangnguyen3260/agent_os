@@ -15,11 +15,14 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentMatchers;
+import org.mockito.Mockito;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.transaction.TransactionStatus;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 class RuntimePersistenceTest {
@@ -432,6 +435,890 @@ values (?,?,?,?,?,?,'CREATED')
     assertThatThrownBy(() -> tx.execute(status -> controls.acknowledgeCancellation(scope, 6)))
         .hasMessage("Mission execution control is unavailable.");
     verifyAtomicPublication(jdbc, tx, store, org, run);
+    verifyStartAdmission(jdbc, tx, store, org, run);
+  }
+
+  private void verifyStartAdmission(
+      JdbcTemplate jdbc, TransactionTemplate tx, ExecutionClaimStore claims, UUID org, UUID run) {
+    var start = new ExecutionStartService(jdbc, new ExecutionReviewDecisionStore(jdbc, claims));
+    UUID account = jdbc.queryForObject("select id from human_accounts", UUID.class);
+    jdbc.update("update human_accounts set enabled=true,credential_version=0 where id=?", account);
+    jdbc.update("update organization_memberships set role='ADMIN' where account_id=?", account);
+    jdbc.update(
+        "insert into organization_memberships(account_id,organization_id,role) select ?,?,'ADMIN'"
+            + " where not exists(select 1 from organization_memberships where account_id=? and"
+            + " organization_id=?)",
+        account,
+        org,
+        account,
+        org);
+    var actor = new HumanIdentity(account, "admin@example.test", "Admin");
+    UUID task =
+        jdbc.queryForObject("select task_id from execution_runs where id=?", UUID.class, run);
+    UUID agent =
+        jdbc.queryForObject(
+            "select owner_agent_id from accepted_mission_plan_tasks where task_id=?",
+            UUID.class,
+            task);
+    jdbc.update("update agents set status='ACTIVE' where id=?", agent);
+    jdbc.update("update execution_runs set status='CREATED' where id=?", run);
+    jdbc.update(
+        "update tasks set"
+            + " status='READY',owner_agent_id=?,pending_reason=null,waiting_since=null,resolver=null"
+            + " where id=?",
+        agent,
+        task);
+    long revision =
+        jdbc.queryForObject("select revision from execution_runs where id=?", Long.class, run);
+    UUID key = UUID.randomUUID();
+    assertThatThrownBy(() -> tx.execute(t -> start.start(org, run, revision + 1, key, actor)))
+        .isInstanceOf(IllegalStateException.class);
+    jdbc.update("update mission_execution_controls set state='PAUSE_REQUESTED'");
+    assertThatThrownBy(() -> tx.execute(t -> start.start(org, run, revision, key, actor)))
+        .isInstanceOf(IllegalStateException.class);
+    jdbc.update("update mission_execution_controls set state='OPEN'");
+    jdbc.update("update tasks set task_edit_revision=task_edit_revision+1 where id=?", task);
+    assertThatThrownBy(() -> tx.execute(t -> start.start(org, run, revision, key, actor)))
+        .isInstanceOf(IllegalStateException.class);
+    jdbc.update("update tasks set task_edit_revision=task_edit_revision-1 where id=?", task);
+    assertThat(jdbc.queryForObject("select count(*) from execution_start_dispatch", Integer.class))
+        .isZero();
+    var receipt = tx.execute(t -> start.start(org, run, revision, key, actor));
+    ExecutionStartService.Receipt replay =
+        tx.execute(t -> start.start(org, run, revision, key, actor));
+    assertThat(replay).isEqualTo(receipt);
+    assertThatThrownBy(
+            () -> tx.execute(t -> start.start(org, run, revision, UUID.randomUUID(), actor)))
+        .isInstanceOf(IllegalStateException.class);
+    jdbc.update("update organization_memberships set role='MEMBER' where account_id=?", account);
+    assertThatThrownBy(() -> tx.execute(t -> start.start(org, run, revision, key, actor)))
+        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+    assertThat(jdbc.queryForObject("select count(*) from execution_start_dispatch", Integer.class))
+        .isEqualTo(1);
+    assertThat(jdbc.queryForObject("select state from execution_start_dispatch", String.class))
+        .isEqualTo("QUEUED");
+    var worker = new ExecutionDispatchClaimService(jdbc, claims, start);
+    UUID workerId = UUID.randomUUID();
+    var expires = OffsetDateTime.now().plusSeconds(30);
+    var deadline = expires.plusSeconds(30);
+    assertThatThrownBy(
+            () ->
+                tx.execute(
+                    t -> worker.claim(org, receipt.dispatchId(), workerId, expires, deadline)))
+        .isInstanceOf(IllegalStateException.class);
+    jdbc.update("update organization_memberships set role='ADMIN' where account_id=?", account);
+    assertThatThrownBy(
+            () ->
+                tx.execute(
+                    t ->
+                        worker.claim(
+                            org, receipt.dispatchId(), workerId, expires.minusHours(1), deadline)))
+        .isInstanceOf(IllegalStateException.class);
+    assertThat(jdbc.queryForObject("select state from execution_start_dispatch", String.class))
+        .isEqualTo("QUEUED");
+    assertThat(
+            jdbc.queryForObject("select status from execution_runs where id=?", String.class, run))
+        .isEqualTo("CREATED");
+    var token =
+        tx.execute(t -> worker.claim(org, receipt.dispatchId(), workerId, expires, deadline));
+    assertThat(token.worker()).isEqualTo(workerId);
+    assertThatThrownBy(
+            () ->
+                tx.execute(
+                    t -> worker.claim(org, receipt.dispatchId(), workerId, expires, deadline)))
+        .isInstanceOf(IllegalStateException.class);
+    assertThat(jdbc.queryForObject("select state from execution_start_dispatch", String.class))
+        .isEqualTo("CLAIMED");
+    assertThat(
+            jdbc.queryForObject("select status from execution_runs where id=?", String.class, run))
+        .isEqualTo("RUNNING");
+    try {
+      verifyOpenAiFlow(jdbc, tx, claims, start, worker, token, org, run, actor, agent, task);
+    } catch (Exception failure) {
+      throw new RuntimeException(failure);
+    }
+  }
+
+  void verifyOpenAiFlow(
+      JdbcTemplate jdbc,
+      TransactionTemplate tx,
+      ExecutionClaimStore claims,
+      ExecutionStartService starts,
+      ExecutionDispatchClaimService dispatch,
+      ExecutionClaimStore.Token previous,
+      UUID org,
+      UUID run,
+      HumanIdentity actor,
+      UUID agent,
+      UUID task)
+      throws Exception {
+    tx.executeWithoutResult(s -> claims.invalidate(previous));
+    jdbc.update(
+        "update execution_attempts set status='FAILED',outcome_slot=attempt_number where id=?",
+        previous.attempt());
+    jdbc.update(
+        "update execution_runs set status='CREATED',revision=revision+1,max_reworks=1 where id=?",
+        run);
+    jdbc.update("update tasks set status='READY' where id=?", task);
+    jdbc.update("update execution_capacity_limits set max_admissions=100,max_concurrent=5");
+    jdbc.update("update execution_budget_buckets set limit_microusd=1000000");
+    UUID connection =
+        jdbc.queryForObject(
+            "select id from provider_connections where organization_id=?", UUID.class, org);
+    UUID check = UUID.randomUUID();
+    var at = OffsetDateTime.now().minusMinutes(1);
+    var until = at.plusMinutes(5);
+    jdbc.update(
+        """
+insert into provider_access_checks(id,organization_id,connection_id,actor_id,actor_credential_version,connection_revision,credential_revision,policy_revision,accepted_at,queue_expires_at,worker_owner_id,dispatch_token,started_at,dispatch_deadline,authorized_at,completed_at,outcome,check_kind)
+values(?,?,?,?,0,1,1,1,?,?,?,?,?,?,?,?,'ACCESSIBLE','MODEL_DISCOVERY')
+""",
+        check,
+        org,
+        connection,
+        actor.id(),
+        at,
+        until,
+        UUID.randomUUID(),
+        UUID.randomUUID(),
+        at,
+        until,
+        at,
+        at.plusSeconds(1));
+    jdbc.update(
+        "insert into"
+            + " provider_model_discovery_snapshots(organization_id,connection_id,check_id,catalogue_state)"
+            + " values(?,?,?,'COMPLETE')",
+        org,
+        connection,
+        check);
+    jdbc.update(
+        "insert into"
+            + " provider_model_discovery_entries(organization_id,connection_id,check_id,model_ordinal,model_id)"
+            + " values(?,?,?,1,'fixture-model')",
+        org,
+        connection,
+        check);
+    jdbc.update(
+        "insert into"
+            + " agent_model_bindings(organization_id,agent_id,revision,connection_id,check_id,model_id)"
+            + " values(?,?,1,?,?,'fixture-model')",
+        org,
+        agent,
+        connection,
+        check);
+    jdbc.update(
+        "insert into"
+            + " agent_draft_config(agent_id,responsibilities,expected_input,output_format,acceptance_criteria)"
+            + " values(?,'Review','Input','Text','Evidence')",
+        agent);
+    var grants = mock(AgentModelGrantService.class);
+    when(grants.hasCurrentGrant(org, agent, connection, "fixture-model")).thenReturn(true);
+    var controls = new MissionExecutionControlStore(jdbc);
+    var budgets = new ExecutionBudgetStore(jdbc, claims);
+    var model = new ExecutionModelAuthorizationStore(jdbc, claims, budgets, controls, grants, true);
+    var connections = mock(com.agentos.providerconnections.ProviderConnectionService.class);
+    when(connections.get(actor, org, connection))
+        .thenReturn(
+            new com.agentos.providerconnections.ProviderConnectionService.Connection(
+                org,
+                connection,
+                com.agentos.providercredentials.CredentialBoundary.Provider.OPENAI,
+                "OPENAI_API_KEY",
+                "Fixture",
+                null,
+                "ENABLED",
+                1,
+                1,
+                at,
+                at,
+                null));
+    // The flow uses only identity/version for this lookup; email/displayName are not authority.
+    Mockito.when(
+            connections.get(
+                ArgumentMatchers.any(), ArgumentMatchers.eq(org), ArgumentMatchers.eq(connection)))
+        .thenReturn(
+            new com.agentos.providerconnections.ProviderConnectionService.Connection(
+                org,
+                connection,
+                com.agentos.providercredentials.CredentialBoundary.Provider.OPENAI,
+                "OPENAI_API_KEY",
+                "Fixture",
+                null,
+                "ENABLED",
+                1,
+                1,
+                at,
+                at,
+                null));
+    var revokeBeforeSend = new java.util.concurrent.atomic.AtomicBoolean();
+    var crashBeforeHandoff = new java.util.concurrent.atomic.AtomicBoolean();
+    var crashAfterHandoff = new java.util.concurrent.atomic.AtomicBoolean();
+    var credentials = mock(com.agentos.providercredentials.CredentialBoundary.class);
+    Mockito.doAnswer(
+            invocation -> {
+              assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
+              com.agentos.providercredentials.CredentialBoundary.CredentialUse use =
+                  invocation.getArgument(2);
+              if (crashBeforeHandoff.get()) throw new SimulatedWorkerCrash();
+              if (revokeBeforeSend.get())
+                jdbc.update(
+                    "update organization_memberships set role='MEMBER' where account_id=?",
+                    actor.id());
+              use.accept("disposable-fixture-key".getBytes(StandardCharsets.US_ASCII));
+              return null;
+            })
+        .when(credentials)
+        .use(ArgumentMatchers.any(), ArgumentMatchers.isNull(), ArgumentMatchers.any());
+    var server =
+        com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress("127.0.0.1", 0), 0);
+    var calls = new java.util.concurrent.atomic.AtomicInteger();
+    var malformed = new java.util.concurrent.atomic.AtomicBoolean();
+    var blockProviderResponse = new java.util.concurrent.atomic.AtomicBoolean();
+    var requestArrived = new CountDownLatch(1);
+    var releaseResponse = new CountDownLatch(1);
+    server.createContext(
+        "/completion",
+        exchange -> {
+          int ordinal = calls.incrementAndGet();
+          byte[] sentBody = exchange.getRequestBody().readAllBytes();
+          assertThat(
+                  jdbc.queryForObject(
+                      "select count(*) from execution_model_authorizations a join"
+                          + " execution_budget_reservations b on b.run_id=a.run_id and"
+                          + " b.action_id=a.action_id where a.request_sha256=? and a.handed_off_at"
+                          + " is not null and b.status='HELD'",
+                      Integer.class,
+                      OpenAiExecutionFlow.sha(sentBody)))
+              .isEqualTo(1);
+
+          if (blockProviderResponse.get()) {
+            requestArrived.countDown();
+            try {
+              if (!releaseResponse.await(25, TimeUnit.SECONDS))
+                throw new IllegalStateException("Controlled provider release timed out");
+            } catch (InterruptedException failure) {
+              Thread.currentThread().interrupt();
+              exchange.close();
+              return;
+            }
+          }
+          byte[] response =
+              (malformed.get()
+                      ? "{}"
+                      : "{\"id\":\"chatcmpl-"
+                          + ordinal
+                          + "\",\"object\":\"chat.completion\",\"choices\":[{\"finish_reason\":\"stop\",\"message\":{\"role\":\"assistant\",\"content\":\"Verified"
+                          + " result\"}}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":3,\"total_tokens\":13}}")
+                  .getBytes(StandardCharsets.UTF_8);
+          exchange.getResponseHeaders().set("Content-Type", "application/json");
+          exchange.sendResponseHeaders(200, response.length);
+          exchange.getResponseBody().write(response);
+          exchange.close();
+        });
+    server.start();
+    var timer =
+        new java.util.concurrent.ScheduledThreadPoolExecutor(1) {
+          @Override
+          public java.util.concurrent.ScheduledFuture<?> schedule(
+              Runnable action, long delay, TimeUnit unit) {
+            if (crashAfterHandoff.get()) throw new SimulatedWorkerCrash();
+            return super.schedule(action, delay, unit);
+          }
+
+          @Override
+          public <V> java.util.concurrent.ScheduledFuture<V> schedule(
+              java.util.concurrent.Callable<V> action, long delay, TimeUnit unit) {
+            if (crashAfterHandoff.get()) throw new SimulatedWorkerCrash();
+            return super.schedule(action, delay, unit);
+          }
+        };
+    try {
+      var ctor =
+          com.agentos.model.infrastructure.OpenAiTextTransport.class.getDeclaredConstructor(
+              java.net.URI.class,
+              java.time.Clock.class,
+              java.util.concurrent.ScheduledExecutorService.class,
+              boolean.class);
+      ctor.setAccessible(true);
+      var transport =
+          ctor.newInstance(
+              java.net.URI.create(
+                  "http://127.0.0.1:" + server.getAddress().getPort() + "/completion"),
+              java.time.Clock.systemUTC(),
+              timer,
+              true);
+      var decisions = new ExecutionReviewDecisionStore(jdbc, claims);
+      var outputs = new ExecutionOutputContentStore(jdbc, claims);
+      var flow =
+          new OpenAiExecutionFlow(
+              jdbc,
+              tx.getTransactionManager(),
+              starts,
+              dispatch,
+              claims,
+              budgets,
+              model,
+              new ExecutionAttemptReconciliationStore(jdbc, claims),
+              outputs,
+              new ExecutionRunReviewStore(jdbc, claims),
+              decisions,
+              connections,
+              credentials,
+              transport,
+              new OpenAiExecutionFlow.Settings("fixture-model", 100, 1000000, 1000000, 20000),
+              java.time.Clock.systemUTC());
+      UUID firstTask = UUID.randomUUID();
+      UUID team =
+          jdbc.queryForObject("select team_id from execution_runs where id=?", UUID.class, run);
+      UUID mission =
+          jdbc.queryForObject("select mission_id from execution_runs where id=?", UUID.class, run);
+      jdbc.update(
+          "insert into tasks(id,organization_id,team_id,mission_id,title,status,owner_agent_id)"
+              + " values(?,?,?,?,'First Task','READY',?)",
+          firstTask,
+          org,
+          team,
+          mission,
+          agent);
+      var firstPreflight = flow.taskPreflight(org, team, mission, firstTask, actor);
+      assertThat(firstPreflight.ownerAgentId()).isEqualTo(agent);
+      assertThat(firstPreflight.requestPreview())
+          .contains("First Task")
+          .doesNotContain("disposable-fixture-key");
+      assertThat(firstPreflight.toString()).doesNotContain("First Task");
+      UUID firstKey = UUID.randomUUID();
+      when(grants.hasCurrentGrant(org, agent, connection, "fixture-model")).thenReturn(false);
+      assertThatThrownBy(
+              () ->
+                  flow.startTask(
+                      org, team, mission, firstTask, firstKey, firstPreflight.fingerprint(), actor))
+          .isInstanceOf(IllegalStateException.class);
+      when(grants.hasCurrentGrant(org, agent, connection, "fixture-model")).thenReturn(true);
+      jdbc.update("update tasks set title='Changed since review' where id=?", firstTask);
+      assertThatThrownBy(
+              () ->
+                  flow.startTask(
+                      org, team, mission, firstTask, firstKey, firstPreflight.fingerprint(), actor))
+          .isInstanceOf(IllegalStateException.class);
+      jdbc.update("update tasks set title='First Task' where id=?", firstTask);
+
+      boolean nativePostgres =
+          jdbc.execute(
+              (org.springframework.jdbc.core.ConnectionCallback<Boolean>)
+                  c -> "PostgreSQL".equals(c.getMetaData().getDatabaseProductName()));
+      OpenAiExecutionFlow.Started firstStart;
+      if (nativePostgres) {
+        var startRace =
+            raceOpenAi(
+                () ->
+                    flow.startTask(
+                        org,
+                        team,
+                        mission,
+                        firstTask,
+                        firstKey,
+                        firstPreflight.fingerprint(),
+                        actor),
+                () ->
+                    flow.startTask(
+                        org,
+                        team,
+                        mission,
+                        firstTask,
+                        firstKey,
+                        firstPreflight.fingerprint(),
+                        actor));
+        assertThat(startRace.get(0)).isEqualTo(startRace.get(1));
+        firstStart = startRace.get(0);
+      } else {
+        firstStart =
+            flow.startTask(
+                org, team, mission, firstTask, firstKey, firstPreflight.fingerprint(), actor);
+      }
+      assertThat(
+              flow.startTask(
+                  org, team, mission, firstTask, firstKey, firstPreflight.fingerprint(), actor))
+          .isEqualTo(firstStart);
+      if (nativePostgres) {
+        var replica =
+            new OpenAiExecutionFlow(
+                jdbc,
+                tx.getTransactionManager(),
+                starts,
+                dispatch,
+                claims,
+                budgets,
+                model,
+                new ExecutionAttemptReconciliationStore(jdbc, claims),
+                outputs,
+                new ExecutionRunReviewStore(jdbc, claims),
+                decisions,
+                connections,
+                credentials,
+                transport,
+                new OpenAiExecutionFlow.Settings("fixture-model", 100, 1000000, 1000000, 20000),
+                java.time.Clock.systemUTC());
+        raceOpenAi(
+            () -> {
+              flow.poll();
+              return true;
+            },
+            () -> {
+              replica.poll();
+              return true;
+            });
+      } else {
+        flow.poll();
+      }
+      var firstReview = decisions.current(org, firstStart.runId());
+      assertThat(firstReview).isNotNull();
+      tx.executeWithoutResult(
+          t ->
+              decisions.decide(
+                  org,
+                  actor,
+                  firstStart.runId(),
+                  new ExecutionReviewDecisionStore.Request(
+                      firstReview.attempt(),
+                      firstReview.revision(),
+                      firstReview.outputSha256(),
+                      ExecutionReviewDecisionStore.Decision.ACCEPT,
+                      null)));
+      assertThat(
+              jdbc.queryForObject("select status from tasks where id=?", String.class, firstTask))
+          .isEqualTo("COMPLETED");
+      UUID driftTask = UUID.randomUUID();
+      jdbc.update(
+          "insert into tasks(id,organization_id,team_id,mission_id,title,status,owner_agent_id)"
+              + " values(?,?,?,?,'Configuration drift','READY',?)",
+          driftTask,
+          org,
+          team,
+          mission,
+          agent);
+      var driftPreflight = flow.taskPreflight(org, team, mission, driftTask, actor);
+      var driftStart =
+          flow.startTask(
+              org,
+              team,
+              mission,
+              driftTask,
+              UUID.randomUUID(),
+              driftPreflight.fingerprint(),
+              actor);
+      var changedSettings =
+          new OpenAiExecutionFlow(
+              jdbc,
+              tx.getTransactionManager(),
+              starts,
+              dispatch,
+              claims,
+              budgets,
+              model,
+              new ExecutionAttemptReconciliationStore(jdbc, claims),
+              outputs,
+              new ExecutionRunReviewStore(jdbc, claims),
+              decisions,
+              connections,
+              credentials,
+              transport,
+              new OpenAiExecutionFlow.Settings("fixture-model", 100, 2000000, 2000000, 40000),
+              java.time.Clock.systemUTC());
+      changedSettings.poll();
+      assertThat(calls.get()).isEqualTo(1);
+      assertThat(
+              jdbc.queryForObject(
+                  "select state from execution_start_dispatch where id=?",
+                  String.class,
+                  driftStart.dispatchId()))
+          .isEqualTo("FINISHED");
+      assertThat(
+              jdbc.queryForObject(
+                  "select revision from execution_runs where id=?", Long.class, driftStart.runId()))
+          .isEqualTo(1);
+      assertThat(
+              jdbc.queryForObject(
+                  "select count(*) from execution_budget_reservations where action_id=?",
+                  Integer.class,
+                  driftStart.dispatchId()))
+          .isZero();
+      for (var decision :
+          java.util.List.of(
+              ExecutionReviewDecisionStore.Decision.REWORK,
+              ExecutionReviewDecisionStore.Decision.ACCEPT)) {
+        var preflight = flow.preflight(org, run, actor);
+        UUID key = UUID.randomUUID();
+        long revision = Long.parseLong(preflight.revision());
+        var started = flow.start(org, run, revision, key, preflight.fingerprint(), actor);
+        assertThat(flow.start(org, run, revision, key, preflight.fingerprint(), actor))
+            .isEqualTo(started);
+        assertThatThrownBy(() -> flow.start(org, run, revision, key, "0".repeat(64), actor))
+            .isInstanceOf(IllegalStateException.class);
+        flow.poll();
+        assertThat(
+                jdbc.queryForObject(
+                    "select status from execution_runs where id=?", String.class, run))
+            .isEqualTo("IN_REVIEW");
+        var review = decisions.current(org, run);
+        assertThat(outputs.read(run, review.attempt(), review.outputSha256()))
+            .isEqualTo("Verified result");
+        tx.executeWithoutResult(
+            t ->
+                decisions.decide(
+                    org,
+                    actor,
+                    run,
+                    new ExecutionReviewDecisionStore.Request(
+                        review.attempt(),
+                        review.revision(),
+                        review.outputSha256(),
+                        decision,
+                        decision == ExecutionReviewDecisionStore.Decision.REWORK
+                            ? "More evidence"
+                            : null)));
+        assertThat(
+                jdbc.queryForObject(
+                    "select state from execution_start_dispatch where id=?",
+                    String.class,
+                    started.dispatchId()))
+            .isEqualTo("FINISHED");
+        assertThat(
+                jdbc.queryForObject(
+                    "select status from execution_budget_reservations where action_id=?",
+                    String.class,
+                    started.dispatchId()))
+            .isEqualTo("SETTLED");
+      }
+      assertThat(calls.get()).isEqualTo(3);
+      assertThat(
+              jdbc.queryForObject(
+                  "select status from execution_runs where id=?", String.class, run))
+          .isEqualTo("COMPLETED");
+      // Revoke the issuer after budget authorization but before committed handoff.
+      jdbc.update("update execution_runs set status='CREATED',revision=revision+1 where id=?", run);
+      jdbc.update("update tasks set status='READY' where id=?", task);
+      revokeBeforeSend.set(true);
+      var revokedPreflight = flow.preflight(org, run, actor);
+      var revoked =
+          flow.start(
+              org,
+              run,
+              Long.parseLong(revokedPreflight.revision()),
+              UUID.randomUUID(),
+              revokedPreflight.fingerprint(),
+              actor);
+      flow.poll();
+      assertThat(calls.get()).isEqualTo(3);
+      assertThat(
+              jdbc.queryForObject(
+                  "select state from execution_start_dispatch where id=?",
+                  String.class,
+                  revoked.dispatchId()))
+          .isEqualTo("FINISHED");
+      assertThat(
+              jdbc.queryForObject(
+                  "select actual_microusd from execution_budget_reservations where action_id=?",
+                  Long.class,
+                  revoked.dispatchId()))
+          .isZero();
+      revokeBeforeSend.set(false);
+      jdbc.update(
+          "update organization_memberships set role='ADMIN' where account_id=?", actor.id());
+      // Controlled fixture reset exercises post-delivery ambiguity without accepting a fabricated
+      // result.
+      jdbc.update("update execution_runs set status='CREATED',revision=revision+1 where id=?", run);
+      jdbc.update(
+          "update tasks set status='READY',pending_reason=null,waiting_since=null,resolver=null"
+              + " where id=?",
+          task);
+      malformed.set(true);
+      var p = flow.preflight(org, run, actor);
+      var unknown =
+          flow.start(
+              org, run, Long.parseLong(p.revision()), UUID.randomUUID(), p.fingerprint(), actor);
+      flow.poll();
+      flow.poll();
+      assertThat(calls.get()).isEqualTo(4);
+      assertThat(
+              jdbc.queryForObject(
+                  "select state from execution_start_dispatch where id=?",
+                  String.class,
+                  unknown.dispatchId()))
+          .isEqualTo("UNKNOWN");
+      assertThat(
+              jdbc.queryForObject(
+                  "select status from execution_budget_reservations where action_id=?",
+                  String.class,
+                  unknown.dispatchId()))
+          .isEqualTo("UNKNOWN");
+      assertThat(
+              jdbc.queryForObject(
+                  "select status from execution_runs where id=?", String.class, run))
+          .isEqualTo("BLOCKED");
+      assertThat(decisions.current(org, run)).isNull();
+      malformed.set(false);
+      // Rebuild every worker/store from the same durable database; no in-memory receipt or claim.
+      java.util.function.Supplier<OpenAiExecutionFlow> restarted =
+          () -> {
+            var freshControls = new MissionExecutionControlStore(jdbc);
+            var freshClaims = new ExecutionClaimStore(jdbc, freshControls);
+            var freshBudgets = new ExecutionBudgetStore(jdbc, freshClaims);
+            var freshAuthority = new ExecutionReviewDecisionStore(jdbc, freshClaims);
+            var freshStarts = new ExecutionStartService(jdbc, freshAuthority);
+            return new OpenAiExecutionFlow(
+                jdbc,
+                tx.getTransactionManager(),
+                freshStarts,
+                new ExecutionDispatchClaimService(jdbc, freshClaims, freshStarts),
+                freshClaims,
+                freshBudgets,
+                new ExecutionModelAuthorizationStore(
+                    jdbc, freshClaims, freshBudgets, freshControls, grants, true),
+                new ExecutionAttemptReconciliationStore(jdbc, freshClaims),
+                new ExecutionOutputContentStore(jdbc, freshClaims),
+                new ExecutionRunReviewStore(jdbc, freshClaims),
+                freshAuthority,
+                connections,
+                credentials,
+                transport,
+                new OpenAiExecutionFlow.Settings("fixture-model", 100, 1000000, 1000000, 20000),
+                java.time.Clock.systemUTC());
+          };
+      UUID queuedTask = UUID.randomUUID(), queuedKey = UUID.randomUUID();
+      jdbc.update(
+          "insert into tasks(id,organization_id,team_id,mission_id,title,status,owner_agent_id)"
+              + " values(?,?,?,?,'Restart queue','READY',?)",
+          queuedTask,
+          org,
+          team,
+          mission,
+          agent);
+      var queuedProposal = flow.taskPreflight(org, team, mission, queuedTask, actor);
+      var queued =
+          flow.startTask(
+              org, team, mission, queuedTask, queuedKey, queuedProposal.fingerprint(), actor);
+      var rebuilt = restarted.get();
+      assertThat(
+              rebuilt.startTask(
+                  org, team, mission, queuedTask, queuedKey, queuedProposal.fingerprint(), actor))
+          .isEqualTo(queued);
+      int beforeRestart = calls.get();
+      if (nativePostgres) {
+        runRecoveryProcess(jdbc, org, server.getAddress().getPort(), null, null);
+      } else {
+        rebuilt.poll();
+      }
+      restarted.get().poll();
+      assertThat(calls.get()).isEqualTo(beforeRestart + 1);
+      assertThat(
+              jdbc.queryForObject(
+                  "select state from execution_start_dispatch where id=?",
+                  String.class,
+                  queued.dispatchId()))
+          .isEqualTo("FINISHED");
+      assertThat(decisions.current(org, queued.runId())).isNotNull();
+      // Abrupt Error deliberately escapes the normal failure handler, modelling a dead worker.
+      // Native PostgreSQL also kills a separate JVM after the provider accepts its request.
+      for (int stage : nativePostgres ? java.util.List.of(0, 1, 2) : java.util.List.of(0, 1)) {
+        boolean handedOff = stage > 0;
+        UUID crashTask = UUID.randomUUID(), crashKey = UUID.randomUUID();
+        jdbc.update(
+            "insert into tasks(id,organization_id,team_id,mission_id,title,status,owner_agent_id)"
+                + " values(?,?,?,?,'Worker crash','READY',?)",
+            crashTask,
+            org,
+            team,
+            mission,
+            agent);
+        var proposal = flow.taskPreflight(org, team, mission, crashTask, actor);
+        var command =
+            flow.startTask(org, team, mission, crashTask, crashKey, proposal.fingerprint(), actor);
+        int beforeCrash = calls.get();
+        if (stage == 2) {
+          blockProviderResponse.set(true);
+          try {
+            runRecoveryProcess(
+                jdbc, org, server.getAddress().getPort(), requestArrived, releaseResponse);
+          } finally {
+            blockProviderResponse.set(false);
+            releaseResponse.countDown();
+          }
+          beforeCrash++;
+        } else {
+          crashBeforeHandoff.set(!handedOff);
+          crashAfterHandoff.set(handedOff);
+          try {
+            assertThatThrownBy(() -> restarted.get().poll())
+                .isInstanceOf(SimulatedWorkerCrash.class);
+          } finally {
+            crashBeforeHandoff.set(false);
+            crashAfterHandoff.set(false);
+          }
+        }
+        assertThat(
+                jdbc.queryForObject(
+                    "select state from execution_start_dispatch where id=?",
+                    String.class,
+                    command.dispatchId()))
+            .isEqualTo("CLAIMED");
+        assertThat(
+                jdbc.queryForObject(
+                    "select status from execution_budget_reservations where action_id=?",
+                    String.class,
+                    command.dispatchId()))
+            .isEqualTo("HELD");
+        assertThat(
+                jdbc.queryForObject(
+                    "select count(*) from execution_model_authorizations where action_id=? and"
+                        + " handed_off_at is not null",
+                    Integer.class,
+                    command.dispatchId()))
+            .isEqualTo(handedOff ? 1 : 0);
+        var afterCrash = restarted.get();
+        assertThat(
+                afterCrash.startTask(
+                    org, team, mission, crashTask, crashKey, proposal.fingerprint(), actor))
+            .isEqualTo(command);
+        afterCrash.poll();
+        afterCrash.poll();
+        assertThat(calls.get()).isEqualTo(beforeCrash);
+        var obsolete =
+            jdbc.queryForObject(
+                "select attempt_id,worker_id,fence from execution_claims where run_id=? and"
+                    + " invalidated_at is null",
+                (rs, n) ->
+                    new ExecutionClaimStore.Token(
+                        org,
+                        command.runId(),
+                        rs.getObject(1, UUID.class),
+                        rs.getObject(2, UUID.class),
+                        rs.getLong(3)),
+                command.runId());
+        jdbc.update(
+            "update execution_claims set issued_at=?,expires_at=? where run_id=? and fence=?",
+            OffsetDateTime.now().minusMinutes(3),
+            OffsetDateTime.now().minusMinutes(1),
+            command.runId(),
+            obsolete.fence());
+        var freshClaims = new ExecutionClaimStore(jdbc, new MissionExecutionControlStore(jdbc));
+        var expiry =
+            new ExecutionLeaseExpiryStore(
+                jdbc, freshClaims, new ExecutionBudgetStore(jdbc, freshClaims));
+        assertThat(tx.<Boolean>execute(t -> expiry.expire(org, command.runId(), obsolete.fence())))
+            .isTrue();
+        assertThat(tx.<Boolean>execute(t -> expiry.expire(org, command.runId(), obsolete.fence())))
+            .isFalse();
+        assertThatThrownBy(() -> tx.executeWithoutResult(t -> freshClaims.requireCurrent(obsolete)))
+            .isInstanceOf(IllegalStateException.class);
+        afterCrash.poll();
+        assertThat(calls.get()).isEqualTo(beforeCrash);
+        assertThat(
+                jdbc.queryForObject(
+                    "select status from execution_runs where id=?", String.class, command.runId()))
+            .isEqualTo("BLOCKED");
+        assertThat(
+                jdbc.queryForObject(
+                    "select status from execution_budget_reservations where action_id=?",
+                    String.class,
+                    command.dispatchId()))
+            .isEqualTo(handedOff ? "UNKNOWN" : "SETTLED");
+        if (!handedOff)
+          assertThat(
+                  jdbc.queryForObject(
+                      "select actual_microusd from execution_budget_reservations where action_id=?",
+                      Long.class,
+                      command.dispatchId()))
+              .isZero();
+        assertThat(decisions.current(org, command.runId())).isNull();
+      }
+    } finally {
+      server.stop(0);
+      timer.shutdownNow();
+    }
+  }
+
+  private void runRecoveryProcess(
+      JdbcTemplate jdbc, UUID org, int providerPort, CountDownLatch arrived, CountDownLatch release)
+      throws Exception {
+    String schema;
+    try (var connection = jdbc.getDataSource().getConnection()) {
+      schema = connection.getSchema();
+    }
+    var diagnostic =
+        java.nio.file.Files.createTempFile(
+            "openai-worker-process-",
+            ".log",
+            java.nio.file.attribute.PosixFilePermissions.asFileAttribute(
+                java.nio.file.attribute.PosixFilePermissions.fromString("rw-------")));
+    var command =
+        new ProcessBuilder(
+            java.nio.file.Path.of(System.getProperty("java.home"), "bin", "java").toString(),
+            "-cp",
+            System.getProperty("java.class.path"),
+            OpenAiRecoveryWorkerProcess.class.getName());
+    command.environment().put("OPENAI_RECOVERY_SCHEMA", schema);
+    command.environment().put("OPENAI_RECOVERY_ORG", org.toString());
+    command
+        .environment()
+        .put("OPENAI_RECOVERY_ENDPOINT", "http://127.0.0.1:" + providerPort + "/completion");
+    command.redirectErrorStream(true);
+    command.redirectOutput(diagnostic.toFile());
+    var process = command.start();
+    try {
+      if (arrived == null) {
+        assertThat(process.waitFor(25, TimeUnit.SECONDS))
+            .as("Fresh JVM completes committed queue command")
+            .isTrue();
+        assertThat(process.exitValue()).as("Recovery worker success").isZero();
+      } else {
+        assertThat(arrived.await(25, TimeUnit.SECONDS))
+            .as("Provider accepted committed handoff before worker kill")
+            .isTrue();
+        process.destroyForcibly();
+        assertThat(process.waitFor(10, TimeUnit.SECONDS)).isTrue();
+        assertThat(process.exitValue()).isNotZero();
+      }
+    } finally {
+      process.destroyForcibly();
+      process.waitFor(10, TimeUnit.SECONDS);
+      if (release != null) release.countDown();
+      java.nio.file.Files.deleteIfExists(diagnostic);
+    }
+  }
+
+  private static final class SimulatedWorkerCrash extends Error {}
+
+  private <T> java.util.List<T> raceOpenAi(
+      java.util.concurrent.Callable<T> first, java.util.concurrent.Callable<T> second)
+      throws Exception {
+    var pool = Executors.newFixedThreadPool(2);
+    var ready = new CountDownLatch(2);
+    var go = new CountDownLatch(1);
+    try {
+      var a =
+          pool.submit(
+              () -> {
+                ready.countDown();
+                if (!go.await(10, TimeUnit.SECONDS))
+                  throw new IllegalStateException("Race start timeout");
+                return first.call();
+              });
+      var b =
+          pool.submit(
+              () -> {
+                ready.countDown();
+                if (!go.await(10, TimeUnit.SECONDS))
+                  throw new IllegalStateException("Race start timeout");
+                return second.call();
+              });
+      assertThat(ready.await(10, TimeUnit.SECONDS)).isTrue();
+      go.countDown();
+      return java.util.List.of(a.get(20, TimeUnit.SECONDS), b.get(20, TimeUnit.SECONDS));
+    } finally {
+      go.countDown();
+      pool.shutdownNow();
+    }
   }
 
   private void verifyAtomicPublication(
