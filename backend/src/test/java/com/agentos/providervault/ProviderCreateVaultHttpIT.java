@@ -807,6 +807,18 @@ class ProviderCreateVaultHttpIT {
       connection = created.result().receipt().connectionId();
     }
     publishCheckEvidence(org, connection, Provider.OPENAI);
+    assertThat(
+            jdbc.queryForObject(
+                "select"
+                    + " has_table_privilege('vault_browser_web','public.provider_credential_versions','SELECT')",
+                Boolean.class))
+        .isFalse();
+    assertThat(
+            jdbc.queryForObject(
+                "select"
+                    + " has_table_privilege('vault_browser_writer','public.provider_credential_versions','SELECT')",
+                Boolean.class))
+        .isTrue();
     jdbc.update(
         "insert into teams(id,organization_id,name,status,created_at,updated_at)"
             + " values(?,?,'Execution team','ACTIVE',current_timestamp,current_timestamp)",
@@ -1718,10 +1730,10 @@ values(?,?,?,?,0,1,1,?,?,?,?,?,?,?,?,?,'ACCESSIBLE','MODEL_DISCOVERY')
           "grant select,insert,update on public.authentication_attempts,"
               + "public.provider_read_admission to vault_browser_web");
       // Explicit runtime permissions on this disposable test login only. Provider command
-      // metadata remains read-only; the credential writer continues to use its separate login.
+      // metadata remains inaccessible; the credential writer uses its separate login.
       statement.execute(
           "grant select on"
-              + " public.provider_credential_versions,public.task_dependencies,public.accepted_mission_plan_dependencies,public.execution_capacity_limits"
+              + " public.task_dependencies,public.accepted_mission_plan_dependencies,public.execution_capacity_limits"
               + " to vault_browser_web");
       statement.execute(
           "grant select,insert,update on"

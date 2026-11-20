@@ -1,8 +1,6 @@
 package com.agentos.orchestration.application;
 
 import com.agentos.model.infrastructure.OpenAiTextTransport;
-import com.agentos.providerconnections.ProviderConnectionService;
-import com.agentos.providercredentials.CredentialBoundary;
 import java.time.Clock;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -39,8 +37,7 @@ class OpenAiExecutionConfiguration {
       ExecutionOutputContentStore outputs,
       ExecutionRunReviewStore reviews,
       ExecutionReviewDecisionStore authority,
-      ProviderConnectionService connections,
-      @Qualifier("openAiExecutionCredentials") CredentialBoundary credentials,
+      OpenAiExecutionRuntime runtime,
       @Qualifier("openAiExecutionCancellations") ScheduledExecutorService cancellations,
       Environment env) {
     if (!env.getProperty("agentos.provider-model-discovery.http-enabled", Boolean.class, false)
@@ -65,8 +62,8 @@ class OpenAiExecutionConfiguration {
         outputs,
         reviews,
         authority,
-        connections,
-        credentials,
+        runtime.connections(),
+        runtime.credentials(),
         new OpenAiTextTransport(Clock.systemUTC(), cancellations),
         settings,
         Clock.systemUTC());

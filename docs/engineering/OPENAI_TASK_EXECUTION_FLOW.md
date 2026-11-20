@@ -30,7 +30,7 @@ agentos:
       maximum-microusd: "<positive-cap-at-least-reservation>"
 ```
 
-The reservation is ceil((17408 × input rate + output ceiling × output rate) / 1000000). Four active budget buckets and capacity policies (ORGANIZATION, TEAM, AGENT, MISSION) must exist. They are enforced at worker admission; absence does not authorize a provider call. `poll-enabled` defaults true; disabling it queues Starts without automatically executing them and is intended for controlled test/maintenance environments. Credentials come only from the exact tenant/connection/revision in Vault. No raw key or endpoint is accepted from an API caller.
+The reservation is ceil((17408 × input rate + output ceiling × output rate) / 1000000). Four active budget buckets and capacity policies (ORGANIZATION, TEAM, AGENT, MISSION) must exist. They are enforced at worker admission; absence does not authorize a provider call. `poll-enabled` defaults true; disabling it queues Starts without automatically executing them and is intended for controlled test/maintenance environments. Credential metadata lookups use the managed Vault runtime's dedicated writer datasource and transaction proxy. The restricted Provider List reader receives no SELECT on `provider_credential_versions`; the enabled-runtime browser gate asserts that separation. Credentials come only from the exact tenant/connection/revision in Vault. No raw key or endpoint is accepted from an API caller.
 
 Start endpoints:
 - GET/POST `/api/v1/organizations/{org}/teams/{team}/missions/{mission}/tasks/{task}/start`: first single-task acceptance and Start.

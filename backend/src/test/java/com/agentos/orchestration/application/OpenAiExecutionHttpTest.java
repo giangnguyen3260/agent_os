@@ -9,7 +9,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.agentos.auth.HumanIdentity;
-import com.agentos.providercredentials.CredentialBoundary;
 import com.agentos.providermetadata.ProviderMetadataCoordinator;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -38,8 +37,8 @@ import org.springframework.test.web.servlet.MockMvc;
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 class OpenAiExecutionHttpTest {
-  @MockBean(name = "openAiExecutionCredentials")
-  CredentialBoundary credentials;
+  @MockBean(name = "openAiExecutionRuntime")
+  OpenAiExecutionRuntime runtime;
 
   @MockBean(name = "providerModelDiscoveryCoordinator")
   ProviderMetadataCoordinator discovery;
