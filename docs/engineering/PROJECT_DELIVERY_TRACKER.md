@@ -4,7 +4,17 @@ PM baseline: 5 November 2026 (Asia/Saigon). Repository: `giangnguyen3260/agent_o
 Initial reviewed source: `c4622de9652f8c0a05a63d8c277147642d1d54df`, branch
 `feature/provider-create-retry-after`. Working tree was clean before this document.
 
-## Current delivery checkpoint — 21 November 2026
+## Current delivery checkpoint — 21 November 2026, Mission plan configuration review
+
+Verified published baseline is Draft PR120 head `49f083b555d8c3c21a421d691a555c0e4f65cb49`: all six matching workflows succeeded, including Code quality, native PostgreSQL completion tests, managed TLS Vault and Docker/browser regression. The managed browser now covers controlled Task Start → REWORK → Start → ACCEPT → Mission REVIEW → COMPLETED → reload. Provider responses remain simulated; real OpenAI, fresh-Mission planning/start, merge and deployment are not claimed.
+
+Next coherent feature is [Mission plan configuration review](MISSION_PLAN_REVIEW_CONTRACT.md): an opt-in ADMIN API/UI for reading the complete configured Task graph, full input/revisions/current owners, stable dependency order and blockers. It never accepts a plan, changes lifecycle or grants execution. `executionAuthorized` is always false; scope/input limits never present a truncated graph as complete. AI plan generation, durable acceptance and Mission-wide start remain subsequent work.
+
+Local candidate validation: five Spring/H2/MockMvc tests passed; 18 intercepted-API browser cases passed across desktop/tablet/mobile with retries disabled; Java21 compile/import/format, Angular production build/lint, Prettier and diff checks passed. A native PostgreSQL suite inherits the five feature cases in an isolated random schema and is explicitly selected in Quality; its actual execution and matching-head CI remain pending publication. BA review findings about valid DB limit fixtures, priority readiness and aggregate UTF8 limits were addressed.
+
+Next actions: publish the complete API/UI/contract/test feature as one stacked draft PR; verify native and full exact-head CI; then add reviewed immutable full-plan acceptance and explicit Mission start without overwriting manually configured Tasks. Operator-credential OpenAI acceptance remains an independent gate waiting for test settings/egress.
+
+## Earlier local delivery checkpoint — 21 November 2026
 
 The latest verified published baseline is Draft [PR #119](https://github.com/giangnguyen3260/agent_os/pull/119), head `4999f939d6c7d043afef4ab68a63af71abe3d3fb`, stacked on #118. A fresh GitHub check on 21 November confirms all six matching workflows succeeded: [Quality](https://github.com/giangnguyen3260/agent_os/actions/runs/44767041862), [Docker/browser](https://github.com/giangnguyen3260/agent_os/actions/runs/44767041812), [TLS Vault](https://github.com/giangnguyen3260/agent_os/actions/runs/44767041931), [options policy](https://github.com/giangnguyen3260/agent_os/actions/runs/44767042048), [SQL evidence](https://github.com/giangnguyen3260/agent_os/actions/runs/44767041961) and [guarded publication](https://github.com/giangnguyen3260/agent_os/actions/runs/44767041959). PR remains open/draft/unmerged, with no GitHub reviews. No deployment evidence is claimed.
 
