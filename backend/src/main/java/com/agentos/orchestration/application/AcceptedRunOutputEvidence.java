@@ -9,7 +9,12 @@ import org.springframework.jdbc.core.JdbcTemplate;
 /** Same-plan accepted output with complete settled provenance, independent of Mission size. */
 final class AcceptedRunOutputEvidence {
   record Evidence(
-      UUID runId, UUID attemptId, String outputSha256, String requestSha256, long runRevision) {}
+      UUID runId,
+      UUID attemptId,
+      String outputSha256,
+      String requestSha256,
+      long runRevision,
+      String provenanceSha256) {}
 
   private final JdbcTemplate jdbc;
 
@@ -24,7 +29,7 @@ final class AcceptedRunOutputEvidence {
 select t.id,r.id,a.id,e.output_sha256,x.content,r.revision,r.plan_revision,
   a.attempt_number,p.owner_agent_id,p.task_edit_revision,p.task_owner_revision,p.dependency_revision,
   z.action_id,z.connection_id,q.request_sha256,u.provider_request_sha256,u.input_tokens,u.output_tokens,
-  b.actual_microusd,q.input_rate,q.output_rate,q.maximum_microusd,q.request_body
+  b.actual_microusd,q.input_rate,q.output_rate,q.maximum_microusd,q.request_body,z.credential_revision,z.model_id,z.fence,z.control_revision
 from tasks t
 join execution_runs r on r.organization_id=t.organization_id and r.team_id=t.team_id
   and r.mission_id=t.mission_id and r.task_id=t.id
@@ -66,7 +71,19 @@ where t.organization_id=? and r.id=? and r.plan_revision=?
                   rs.getLong(20),
                   rs.getLong(21),
                   rs.getLong(22),
-                  rs.getBytes(23)
+                  rs.getBytes(23),
+                  rs.getObject(13, UUID.class),
+                  rs.getObject(14, UUID.class),
+                  rs.getString(16),
+                  rs.getInt(8),
+                  rs.getObject(9, UUID.class),
+                  rs.getInt(10),
+                  rs.getInt(11),
+                  rs.getInt(12),
+                  rs.getLong(24),
+                  rs.getString(25),
+                  rs.getLong(26),
+                  rs.getLong(27)
                 },
             org,
             run,
@@ -109,7 +126,16 @@ where t.organization_id=? and r.id=? and r.plan_revision=?
                     + " state<>'FINISHED'",
                 run)
             > 0) return null;
-    return new Evidence(run, (UUID) row[0], (String) row[1], (String) row[4], (Long) row[3]);
+    var provenance = new StringBuilder(org + "|" + run + "|" + plan);
+    for (int i = 0; i < row.length; i++)
+      if (i != 2 && i != 11) provenance.append('|').append(row[i]);
+    return new Evidence(
+        run,
+        (UUID) row[0],
+        (String) row[1],
+        (String) row[4],
+        (Long) row[3],
+        sha(provenance.toString().getBytes(StandardCharsets.UTF_8)));
   }
 
   private long count(String sql, UUID run) {

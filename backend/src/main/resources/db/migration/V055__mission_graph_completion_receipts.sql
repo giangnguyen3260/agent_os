@@ -1,0 +1,20 @@
+create table mission_graph_completion_receipts (
+ organization_id uuid not null,
+ team_id uuid not null,
+ mission_id uuid not null,
+ plan_revision bigint not null,
+ actor_id uuid not null references human_accounts(id),
+ idempotency_key uuid not null,
+ action varchar(20) not null check(action in ('SUBMIT_REVIEW','COMPLETE')),
+ source_fingerprint varchar(64) not null check(length(source_fingerprint)=64),
+ result_status varchar(20) not null,
+ source_control_revision bigint not null check(source_control_revision>0),
+ result_control_revision bigint not null check(result_control_revision=source_control_revision+1),
+ manifest_json text not null check(length(manifest_json)<=1048576),
+ manifest_sha256 varchar(64) not null check(length(manifest_sha256)=64),
+ created_at timestamptz not null default current_timestamp,
+ primary key(organization_id,actor_id,idempotency_key),
+ unique(organization_id,team_id,mission_id,action),
+ foreign key(organization_id,team_id,mission_id,plan_revision) references mission_graph_admissions(organization_id,team_id,mission_id,plan_revision),
+ check((action='SUBMIT_REVIEW' and result_status='REVIEW') or(action='COMPLETE' and result_status='COMPLETED'))
+);

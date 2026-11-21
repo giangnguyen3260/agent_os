@@ -188,6 +188,20 @@ const reasons: Record<string, string> = {
     @if (graph(); as g) {
       <section>
         <h2>Thực thi theo kế hoạch</h2>
+        @if (g.admitted && graphCompletionEnabled()) {
+          <a
+            [routerLink]="[
+              '/workspace',
+              org,
+              'teams',
+              team,
+              'missions',
+              mission,
+              'graph-completion',
+            ]"
+            >Hoàn tất Mission theo kế hoạch</a
+          >
+        }
         <p>Phiên bản {{ g.planRevision || 'chưa có' }} · {{ g.status }}</p>
         <p>
           Tiếp nhận tạo đủ Run và mở Task theo phụ thuộc. Mỗi Run vẫn cần xem
@@ -333,6 +347,7 @@ export class MissionPlanReviewComponent {
   org = '';
   team = '';
   mission = '';
+  readonly graphCompletionEnabled = signal(false);
   readonly graph = signal<GraphAssessment | null>(null);
   readonly graphConfirm = signal(false);
   readonly graphPending = signal<GraphCommand | null>(null);
@@ -366,6 +381,7 @@ export class MissionPlanReviewComponent {
   }
   private clear() {
     this.generation++;
+    this.graphCompletionEnabled.set(false);
     this.graph.set(null);
     this.graphConfirm.set(false);
     this.graphPending.set(null);
@@ -601,6 +617,9 @@ export class MissionPlanReviewComponent {
           throw new Error('Invalid graph admission assessment');
         this.graph.set(graph);
       }
+      this.graphCompletionEnabled.set(
+        response.headers.get('X-AgentOS-Graph-Completion') === 'true',
+      );
       this.data.set(r);
     } catch (e) {
       if (this.active(g, a)) {

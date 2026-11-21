@@ -84,6 +84,7 @@ import org.springframework.test.context.DynamicPropertySource;
       "agentos.mission-plan-review.enabled=true",
       "agentos.mission-plan-acceptance.enabled=true",
       "agentos.mission-graph-admission.enabled=true",
+      "agentos.mission-graph-completion.enabled=true",
       "agentos.execution.openai.enabled=true",
       "agentos.execution.openai.poll-enabled=false",
       "agentos.execution.openai.model=fixture-model-01",
@@ -1127,13 +1128,20 @@ values(?,?,?,?,0,1,1,?,?,?,?,?,?,?,?,?,'ACCESSIBLE','MODEL_DISCOVERY')
         assertThat(
                 jdbc.queryForObject(
                     "select status from missions where id=?", String.class, mission))
-            .isEqualTo("RUNNING");
+            .isEqualTo("COMPLETED");
         assertThat(
                 jdbc.queryForObject(
                     "select count(*) from mission_completion_receipts where organization_id=?",
                     Long.class,
                     org))
             .isZero();
+        assertThat(
+                jdbc.queryForObject(
+                    "select count(*) from mission_graph_completion_receipts where"
+                        + " organization_id=?",
+                    Long.class,
+                    org))
+            .isEqualTo(2L);
         return;
       }
       assertThat(sent.get()).isEqualTo(live == null ? 2 : 0);
@@ -1936,6 +1944,8 @@ values(?,?,?,?,0,1,1,?,?,?,?,?,?,?,?,?,'ACCESSIBLE','MODEL_DISCOVERY')
               + " to vault_browser_web");
       statement.execute(
           "grant select,insert on public.mission_completion_receipts to vault_browser_web");
+      statement.execute(
+          "grant select,insert on public.mission_graph_completion_receipts to vault_browser_web");
       statement.execute(
           "grant select,insert on"
               + " public.accepted_mission_plan_dependencies,public.mission_plan_acceptance_versions,public.mission_graph_admissions,public.mission_graph_admission_runs,public.mission_graph_dependency_releases"

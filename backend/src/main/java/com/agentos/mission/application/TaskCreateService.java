@@ -68,6 +68,15 @@ public class TaskCreateService {
             org,
             team);
     if (teams.isEmpty()) throw new EntityNotFoundException("Team not found");
+    boolean admitted =
+        !jdbc.queryForList(
+                "select mission_id from mission_graph_admissions where organization_id=? and"
+                    + " team_id=? and mission_id=?",
+                UUID.class,
+                org,
+                team,
+                mission)
+            .isEmpty();
     var rows =
         jdbc.query(
             "select title,status,task_intake_version,task_intake_paused from missions where"
@@ -87,7 +96,8 @@ public class TaskCreateService {
                         && List.of("CREATED", "READY", "RUNNING", "WAITING_APPROVAL")
                             .contains(rs.getString(2))
                         && !rs.getBoolean(4)
-                        && rs.getLong(3) < Long.MAX_VALUE),
+                        && rs.getLong(3) < Long.MAX_VALUE
+                        && !admitted),
             org,
             team,
             mission);
