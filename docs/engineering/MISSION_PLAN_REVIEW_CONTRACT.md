@@ -75,3 +75,6 @@ There are no Accept, Start, Run manager, Generate with AI, Apply plan or tool ac
 This feature does not close Mission planning/start. The next product work must define an Agent-generated bounded proposal, human correction/rejection/regeneration, immutable complete-DAG acceptance with required/optional membership, explicit Mission start that atomically admits the entire current snapshot, dependency release from accepted prerequisite output, and generalized Mission completion. Those commands must retain current authority, revision/fingerprint, budget/capacity, claim/fencing and unknown-outcome rules.
 
 A fresh Mission still starts at CREATED. Reviewing its existing configuration does not move it to PLANNING, READY or RUNNING. The current single-Task execution/completion path and its real-provider acceptance gate remain separately scoped; they are not evidence of multi-Agent planning.
+
+
+Acceptance extension: when `agentos.mission-plan-acceptance.enabled=true`, read-only eligibility includes READY as well as CREATED. The default review-only deployment retains CREATED eligibility. Acceptance is a separate explicit command; see [acceptance contract](MISSION_PLAN_ACCEPTANCE_CONTRACT.md).

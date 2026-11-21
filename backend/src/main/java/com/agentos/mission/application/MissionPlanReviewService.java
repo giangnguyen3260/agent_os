@@ -59,12 +59,17 @@ public class MissionPlanReviewService {
   private final JdbcTemplate jdbc;
   private final MissionCreateService authorization;
   private final ObjectMapper json;
+  private final org.springframework.core.env.Environment environment;
 
   public MissionPlanReviewService(
-      JdbcTemplate jdbc, MissionCreateService authorization, ObjectMapper json) {
+      JdbcTemplate jdbc,
+      MissionCreateService authorization,
+      ObjectMapper json,
+      org.springframework.core.env.Environment environment) {
     this.jdbc = jdbc;
     this.authorization = authorization;
     this.json = json;
+    this.environment = environment;
   }
 
   @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
@@ -82,7 +87,11 @@ public class MissionPlanReviewService {
     if (parents.isEmpty()) throw new EntityNotFoundException("Mission not found");
     var parent = parents.getFirst();
     var blockers = new ArrayList<String>();
-    if (!"CREATED".equals(parent.get(1))) blockers.add("MISSION_STATE_UNAVAILABLE");
+    if (!("CREATED".equals(parent.get(1))
+        || ("READY".equals(parent.get(1))
+            && environment.getProperty(
+                "agentos.mission-plan-acceptance.enabled", Boolean.class, false))))
+      blockers.add("MISSION_STATE_UNAVAILABLE");
     if (!"ACTIVE".equals(parent.get(2)) || !"ACTIVE".equals(parent.get(3)))
       blockers.add("PARENT_UNAVAILABLE");
     long count =

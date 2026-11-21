@@ -1,4 +1,4 @@
-import {HttpClient, HttpErrorResponse} from '@angular/common/http';
+import {HttpClient, HttpErrorResponse, HttpHeaders} from '@angular/common/http';
 import {
   Component,
   DestroyRef,
@@ -42,8 +42,28 @@ interface Review {
   executionAuthorized: false;
   fingerprint: string;
 }
+interface Accepted {
+  organizationId: string;
+  teamId: string;
+  missionId: string;
+  planRevision: string | null;
+  matchesCurrent: boolean;
+  snapshot: Review | null;
+  executionAuthorized: false;
+}
+interface Command {
+  idempotencyKey: string;
+  expectedFingerprint: string;
+}
+function revision(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    /^[1-9][0-9]{0,18}$/.test(value) &&
+    BigInt(value) <= 9223372036854775807n
+  );
+}
 const reasons: Record<string, string> = {
-  MISSION_STATE_UNAVAILABLE: 'Mission cần ở trạng thái CREATED.',
+  MISSION_STATE_UNAVAILABLE: 'Mission cần ở trạng thái CREATED hoặc READY.',
   PARENT_UNAVAILABLE: 'Workspace và Team cần hoạt động.',
   NO_TASKS: 'Mission chưa có Task.',
   SCOPE_LIMIT_EXCEEDED:
@@ -78,10 +98,50 @@ const reasons: Record<string, string> = {
     >
     <p>
       Xem toàn bộ Task, Agent phụ trách và thứ tự phụ thuộc hiện tại. Kế hoạch
-      này chưa được chấp nhận và chưa cho phép thực thi.
+      chỉ xác nhận cấu hình; chưa cho phép thực thi.
     </p>
     <p role="status">{{ busy() ? 'Đang kiểm tra…' : message() }}</p>
     <button (click)="load()" [disabled]="busy()">Tải lại cấu hình</button>
+    @if (receipt()) {
+      <p role="status">{{ receipt() }}</p>
+    }
+    @if (pending()) {
+      <p>Kết quả gửi chưa xác định. Gửi lại đúng lệnh đang giữ để đối chiếu.</p>
+      <button (click)="send()" [disabled]="busy()">Gửi lại lệnh duyệt</button>
+    }
+    @if (accepted(); as saved) {
+      @if (saved.snapshot; as snapshot) {
+        <section>
+          <h2>Kế hoạch đã duyệt · phiên bản {{ saved.planRevision }}</h2>
+          <p>
+            {{
+              saved.matchesCurrent
+                ? 'Khớp cấu hình hiện tại.'
+                : 'Cấu hình đã thay đổi hoặc không còn đủ điều kiện; cần xem xét lại.'
+            }}
+          </p>
+          <details>
+            <summary>Nội dung đã lưu bất biến</summary>
+            @for (t of ordered(snapshot); track t.id) {
+              <article>
+                <h3>{{ t.title }}</h3>
+                <p>Agent: {{ t.ownerName }}</p>
+                <p>
+                  Phụ thuộc:
+                  @for (id of dependencies(snapshot, t.id); track id) {
+                    {{ taskName(snapshot, id) }} ·
+                  }
+                </p>
+                <pre>{{ t.description }}</pre>
+                <pre>{{ t.acceptanceCriteria }}</pre>
+              </article>
+            }
+          </details>
+        </section>
+      } @else {
+        <p>Chưa có kế hoạch được duyệt.</p>
+      }
+    }
     @if (data(); as r) {
       <section>
         <h2>{{ r.title }}</h2>
@@ -91,6 +151,27 @@ const reasons: Record<string, string> = {
             Cấu hình đủ điều kiện để xem xét. Chưa kiểm chứng quyền model, ngân
             sách hoặc điều kiện khởi chạy.
           </p>
+        }
+        @if (
+          enabled() &&
+          accepted() &&
+          r.canReviewConfiguration &&
+          !accepted()?.matchesCurrent &&
+          !pending()
+        ) {
+          <label
+            ><input
+              type="checkbox"
+              [checked]="confirm()"
+              (change)="confirm.set($any($event.target).checked)"
+              [disabled]="busy()"
+            />
+            Tôi xác nhận toàn bộ Task, nội dung và quan hệ phụ thuộc hiển thị
+            hiện tại.</label
+          >
+          <button (click)="accept()" [disabled]="busy() || !confirm()">
+            Chấp nhận kế hoạch
+          </button>
         }
         @if (r.blockers.length) {
           <ul>
@@ -152,6 +233,11 @@ export class MissionPlanReviewComponent {
   org = '';
   team = '';
   mission = '';
+  readonly enabled = signal(false);
+  readonly accepted = signal<Accepted | null>(null);
+  readonly confirm = signal(false);
+  readonly pending = signal<Command | null>(null);
+  readonly receipt = signal('');
   readonly data = signal<Review | null>(null);
   readonly busy = signal(false);
   readonly message = signal('');
@@ -175,6 +261,11 @@ export class MissionPlanReviewComponent {
   }
   private clear() {
     this.generation++;
+    this.enabled.set(false);
+    this.accepted.set(null);
+    this.confirm.set(false);
+    this.pending.set(null);
+    this.receipt.set('');
     this.data.set(null);
     this.busy.set(false);
     this.message.set('');
@@ -311,7 +402,7 @@ export class MissionPlanReviewComponent {
     return (
       !r.canReviewConfiguration ||
       (!r.blockers.length &&
-        r.status === 'CREATED' &&
+        ['CREATED', 'READY'].includes(r.status) &&
         r.tasks.length > 0 &&
         r.order.length === r.tasks.length &&
         r.tasks.every(
@@ -330,6 +421,9 @@ export class MissionPlanReviewComponent {
     const g = ++this.generation,
       a = this.auth.user()?.id;
     this.data.set(null);
+    this.accepted.set(null);
+    this.enabled.set(false);
+    this.confirm.set(false);
     this.busy.set(true);
     this.message.set('');
     try {
@@ -345,20 +439,50 @@ export class MissionPlanReviewComponent {
       if (!this.active(g, a)) return;
       if (w?.id !== this.org || w.role !== 'ADMIN')
         throw new HttpErrorResponse({status: 403});
-      const {data: r} = await firstValueFrom(
+      const response = await firstValueFrom(
         this.http
           .get<{
             data: Review;
           }>(
             `/api/v1/organizations/${this.org}/teams/${this.team}/missions/${this.mission}/plan-review`,
+            {observe: 'response'},
           )
           .pipe(timeout(15000)),
       );
       if (!this.active(g, a)) return;
-      if (!this.valid(r)) throw new Error('Invalid configuration assessment');
+      const r = response.body?.data;
+      if (!r || !this.valid(r))
+        throw new Error('Invalid configuration assessment');
+      if (response.headers.get('X-AgentOS-Plan-Acceptance') === 'true') {
+        const {data: saved} = await firstValueFrom(
+          this.http
+            .get<{data: Accepted}>(this.base() + '/accepted-plan')
+            .pipe(timeout(15000)),
+        );
+        if (!this.active(g, a)) return;
+        if (
+          !saved ||
+          saved.organizationId !== this.org ||
+          saved.teamId !== this.team ||
+          saved.missionId !== this.mission ||
+          saved.executionAuthorized !== false ||
+          typeof saved.matchesCurrent !== 'boolean' ||
+          (saved.planRevision === null
+            ? saved.snapshot !== null || saved.matchesCurrent
+            : !revision(saved.planRevision) ||
+              !saved.snapshot ||
+              !this.valid(saved.snapshot) ||
+              !saved.snapshot.canReviewConfiguration)
+        )
+          throw new Error('Invalid accepted snapshot');
+        this.accepted.set(saved);
+        this.enabled.set(true);
+      }
       this.data.set(r);
     } catch (e) {
-      if (this.active(g, a))
+      if (this.active(g, a)) {
+        if (e instanceof HttpErrorResponse && [401, 403].includes(e.status))
+          this.clear();
         this.message.set(
           e instanceof HttpErrorResponse && [401, 403].includes(e.status)
             ? 'Cần quyền ADMIN hiện hành.'
@@ -366,8 +490,122 @@ export class MissionPlanReviewComponent {
               ? 'Mission hoặc tính năng xem kế hoạch chưa khả dụng.'
               : 'Không xác nhận được toàn bộ cấu hình. Hãy tải lại.',
         );
+      }
     } finally {
       if (this.active(g, a)) this.busy.set(false);
     }
+  }
+  private base() {
+    return `/api/v1/organizations/${this.org}/teams/${this.team}/missions/${this.mission}`;
+  }
+  accept() {
+    const r = this.data();
+    if (
+      !r?.canReviewConfiguration ||
+      !this.enabled() ||
+      !this.accepted() ||
+      this.accepted()?.matchesCurrent ||
+      !this.confirm() ||
+      this.busy() ||
+      this.pending()
+    )
+      return;
+    this.pending.set({
+      idempotencyKey: crypto.randomUUID(),
+      expectedFingerprint: r.fingerprint,
+    });
+    void this.send();
+  }
+  async send() {
+    const p = this.pending();
+    if (!p || this.busy()) return;
+    const g = this.generation,
+      a = this.auth.user()?.id;
+    this.busy.set(true);
+    this.message.set('');
+    this.confirm.set(false);
+    let success = false;
+    try {
+      const {data: w} = await firstValueFrom(
+        this.http
+          .get<{
+            data: {id: string; role: string};
+          }>(`/api/v1/auth/workspaces/${this.org}`)
+          .pipe(timeout(15000)),
+      );
+      if (!this.active(g, a)) return;
+      if (w?.id !== this.org || w.role !== 'ADMIN')
+        throw new HttpErrorResponse({status: 403});
+      const {data: csrf} = await firstValueFrom(
+        this.http
+          .get<{data: {headerName: string; token: string}}>('/api/v1/auth/csrf')
+          .pipe(timeout(15000)),
+      );
+      if (!this.active(g, a)) return;
+      if (
+        csrf?.headerName !== 'X-CSRF-TOKEN' ||
+        typeof csrf.token !== 'string' ||
+        !csrf.token ||
+        csrf.token.length > 4096
+      )
+        throw new Error('Invalid CSRF');
+      const {data: result} = await firstValueFrom(
+        this.http
+          .post<{
+            data: {
+              organizationId: string;
+              teamId: string;
+              missionId: string;
+              planRevision: string;
+              idempotencyKey: string;
+              sourceFingerprint: string;
+              executionAuthorized: false;
+            };
+          }>(this.base() + '/plan-review/accept', p, {
+            headers: new HttpHeaders().set(csrf.headerName, csrf.token),
+          })
+          .pipe(timeout(15000)),
+      );
+      if (!this.active(g, a)) return;
+      if (
+        !result ||
+        result.organizationId !== this.org ||
+        result.teamId !== this.team ||
+        result.missionId !== this.mission ||
+        result.idempotencyKey !== p.idempotencyKey ||
+        result.sourceFingerprint !== p.expectedFingerprint ||
+        result.executionAuthorized !== false ||
+        !revision(result.planRevision)
+      )
+        throw new Error('Unconfirmed receipt');
+      this.pending.set(null);
+      this.receipt.set(
+        `Đã ghi nhận lệnh duyệt phiên bản ${result.planRevision}. Cấu hình hiện tại được kiểm tra riêng bên dưới.`,
+      );
+      success = true;
+    } catch (e) {
+      if (!this.active(g, a)) return;
+      this.data.set(null);
+      this.accepted.set(null);
+      this.enabled.set(false);
+      if (
+        e instanceof HttpErrorResponse &&
+        [400, 401, 403, 404, 409].includes(e.status)
+      ) {
+        this.pending.set(null);
+        if ([401, 403].includes(e.status)) this.clear();
+        this.message.set(
+          [401, 403].includes(e.status)
+            ? 'Cần quyền ADMIN hiện hành.'
+            : 'Chưa duyệt được kế hoạch. Tải lại cấu hình để kiểm tra.',
+        );
+      } else
+        this.message.set(
+          'Kết quả gửi chưa xác định. Giữ đúng lệnh để gửi lại.',
+        );
+    } finally {
+      if (this.active(g, a)) this.busy.set(false);
+    }
+    if (success && this.active(g, a)) await this.load();
   }
 }

@@ -18,9 +18,12 @@ import org.springframework.web.bind.annotation.RestController;
     "/api/v1/organizations/{organizationId}/teams/{teamId}/missions/{missionId}/plan-review")
 public class MissionPlanReviewController {
   private final MissionPlanReviewService service;
+  private final org.springframework.core.env.Environment environment;
 
-  public MissionPlanReviewController(MissionPlanReviewService service) {
+  public MissionPlanReviewController(
+      MissionPlanReviewService service, org.springframework.core.env.Environment environment) {
     this.service = service;
+    this.environment = environment;
   }
 
   @GetMapping
@@ -31,6 +34,11 @@ public class MissionPlanReviewController {
       @AuthenticationPrincipal HumanIdentity actor) {
     return ResponseEntity.ok()
         .header("Cache-Control", "no-store")
+        .header(
+            "X-AgentOS-Plan-Acceptance",
+            Boolean.toString(
+                environment.getProperty(
+                    "agentos.mission-plan-acceptance.enabled", Boolean.class, false)))
         .body(ApiResponse.ok(service.current(organizationId, teamId, missionId, actor)));
   }
 }

@@ -47,15 +47,16 @@ This is local evidence only: new-head CI, native PostgreSQL completion races, re
 4. Operator secrets are supplied through private files/configuration, never chat, source or browser storage. Paid acceptance requires explicit opt-in and reviewed model/rates/cap. Missing credentials block only real-provider acceptance, not independent reversible implementation.
 5. Keep draft PRs unmerged until integration is deliberately reviewed. Source publication and deployment have separate status; runtime is opt-in and disabled by default.
 
-## Next three actions
+## Current delivery checkpoint
 
-1. Implement and validate the single-Task Mission completion feature against its contract, including stale/replay/race and unsupported-scope denial.
-2. Review the combined local change set and resolve the recorded publication block before creating a stacked draft PR; inspect exact-head CI afterward.
-3. Run operator-credential acceptance when test configuration/egress are available, while preparing the complete-DAG planning contract for milestone 3.
+- PR120 implements bounded single-Task Mission completion; its final head has six green workflows.
+- PR121 implements full configured Task graph review. Head `081f492231a1668f816f3eaa5ba8371fffd54e21` has six green workflows, including the preserved MEMBER workspace regression. Both remain Draft/unmerged.
+- Current acceptance feature adds explicit ADMIN acceptance of the complete graph, immutable content, READY lifecycle, stale detection and new revisions after edits. It does not start execution. See [acceptance contract](MISSION_PLAN_ACCEPTANCE_CONTRACT.md) and [validation](MISSION_PLAN_ACCEPTANCE_QC.md).
 
+## Next implementation steps
 
-## Local completion evidence
+1. Publish the reviewed acceptance change as a stacked Draft PR and inspect matching-head CI, including native PostgreSQL acceptance tests.
+2. Specify and implement complete-graph execution admission against the selected current accepted revision: full configuration freshness, all-or-nothing Runs, controlled task readiness and budget/control boundaries. Existing single-Task execution remains bounded and separate.
+3. Continue DAG scheduling and Mission completion semantics across the full required graph; perform real-provider acceptance only with operator-supplied private configuration and explicit paid opt-in.
 
-The single-Task completion source, API/UI, strict command wire format, V052 receipts, audit and fingerprint guards are implemented locally. Independent BA review found and closed missing execution provenance, accepted-output reread, and workspace403/timeout behavior. Feature tests cover both transitions, historical replay after later completion, altered scope/evidence, unresolved historical execution/accounting, current authority, malformed commands, competing keys and transactional failure.
-
-Validation and remaining gates are recorded in [MISSION_COMPLETION_QC.md](MISSION_COMPLETION_QC.md). Published baseline remains PR119; no new source has been published, merged or deployed by this milestone. Real-provider acceptance is still separate.
+No merge, deployment or real-provider completion is implied by local tests or Draft PR publication.
