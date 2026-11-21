@@ -41,6 +41,7 @@ class MissionCompletionIntegrationTest {
   @Autowired MissionCompletionService service;
   @Autowired MockMvc mvc;
   @Autowired PlatformTransactionManager manager;
+  @Autowired com.agentos.mission.application.TaskCreateService tasks;
 
   record Fixture(
       UUID org,
@@ -647,5 +648,49 @@ class MissionCompletionIntegrationTest {
           "alter table mission_completion_receipts drop constraint reject_test_completion");
     }
     assertThat(apply(f, c).status()).isEqualTo("REVIEW");
+  }
+
+  @Test
+  void taskCreationAndMissionReviewCannotBothWin() throws Exception {
+    var f = fixture();
+    var c = command(f);
+    var request =
+        new com.agentos.mission.api.dto.TaskCreateRequest(
+            "Competing Task", "Input", "Output", "NORMAL", null, List.of(), 0L);
+    try (var workers = java.util.concurrent.Executors.newFixedThreadPool(2)) {
+      var gate = new java.util.concurrent.CountDownLatch(1);
+      var submit =
+          workers.submit(
+              () -> {
+                gate.await();
+                try {
+                  apply(f, c);
+                  return true;
+                } catch (MissionCompletionService.Conflict conflict) {
+                  return false;
+                }
+              });
+      var create =
+          workers.submit(
+              () -> {
+                gate.await();
+                try {
+                  tasks.create(
+                      f.org(), f.team(), f.mission(), f.actor(), UUID.randomUUID(), request);
+                  return true;
+                } catch (com.agentos.mission.application.MissionCreateService.Conflict conflict) {
+                  return false;
+                }
+              });
+      gate.countDown();
+      boolean reviewed = submit.get(10, java.util.concurrent.TimeUnit.SECONDS),
+          created = create.get(10, java.util.concurrent.TimeUnit.SECONDS);
+      assertThat(List.of(reviewed, created)).containsExactlyInAnyOrder(true, false);
+      assertThat(state(f)).isEqualTo(reviewed ? "REVIEW" : "RUNNING");
+      assertThat(
+              jdbc.queryForObject(
+                  "select count(*) from tasks where mission_id=?", Integer.class, f.mission()))
+          .isEqualTo(reviewed ? 1 : 2);
+    }
   }
 }

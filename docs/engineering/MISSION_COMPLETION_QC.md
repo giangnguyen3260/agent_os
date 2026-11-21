@@ -26,3 +26,11 @@ Build/serve the frontend and run `mission-completion.spec.mjs` with Playwright o
 Feature is opt-in: `agentos.mission-completion.enabled=true`. The application database principal needs SELECT/INSERT on the new receipt table and the existing scoped lifecycle/evidence access; do not grant credential-metadata access merely for completion. Default-disabled operation retains the existing runtime behavior.
 
 Remaining gates: native PostgreSQL migration/locking/races (including actual TaskCreate vs SUBMIT_REVIEW), real-backend browser acceptance, matching new-head CI after authorized publication, merge and deployment. Actual OpenAI invocation remains an independent operator-credential gate. Starting from a newly created Mission is not delivered: planning/full-plan acceptance/start/dependency admission are separate work.
+
+## Native acceptance follow-up
+
+PR120 head `e7c39469f8970c1d08b01e24f5056e40b59861a4` passed all six matching workflows, including Docker/browser regression. This closes baseline CI only; later changes need matching-head CI.
+
+The follow-up adds `MissionCompletionPostgresIT`, inheriting the full completion/security/rollback/race suite and running it against a random isolated PostgreSQL schema. It requires the existing `TASK_EDIT_TEST_JDBC_URL`, `TASK_EDIT_TEST_DB_USER` and `TASK_EDIT_TEST_DB_PASSWORD` settings, fails when absent or non-PostgreSQL, and drops only its generated schema afterward. Quality explicitly selects this native suite. It does not silently skip or fall back to H2.
+
+The shared suite now includes an actual `TaskCreateService` vs SUBMIT_REVIEW race: either the new Task commits first and blocks review, or REVIEW commits first and blocks Task creation. All 13 shared cases passed locally on H2; discovery found 13 inherited native cases, and changed sources compile. Independent review found no source blocker. Native execution remains pending CI and is not claimed from discovery/compilation.
