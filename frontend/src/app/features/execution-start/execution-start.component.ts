@@ -23,6 +23,8 @@ interface Preflight {
   maxOutputTokens: number;
   maximumMicrousd: string;
   fingerprint: string;
+  dependencyContextSha256?: string | null;
+  dependencyCount?: number;
 }
 interface Pending {
   expectedRevision: string;
@@ -35,6 +37,13 @@ interface Pending {
   styleUrl: '../execution-review/execution-review.component.css',
   template: ` <main>
     <h1>Khởi chạy Task bằng OpenAI</h1>
+    @if (run) {
+      <p>
+        Ngữ cảnh phụ thuộc, nếu được chọn khi tiếp nhận graph, phải vừa giới hạn
+        8 KiB; tổng nội dung message tối đa 16 KiB. Context vượt giới hạn sẽ bị
+        chặn, không tự cắt hoặc bỏ output.
+      </p>
+    }
     @if (run) {
       <a [routerLink]="['/workspace', org, 'execution-runs', run]"
         >Về lần chạy / kiểm tra trạng thái</a
@@ -88,6 +97,16 @@ interface Pending {
           <dt>Ngân sách giữ tối đa (micro-USD)</dt>
           <dd>{{ p.maximumMicrousd }}</dd>
         </dl>
+        @if (p.dependencyContextSha256) {
+          <p>
+            Đầu vào đã ghim từ {{ p.dependencyCount }} Task tiên quyết. Dữ liệu
+            tham khảo được hiển thị trong request bên dưới; giới hạn ngữ cảnh 8
+            KiB, không tự cắt nội dung.
+          </p>
+          <p>
+            Mã ngữ cảnh: <code>{{ p.dependencyContextSha256 }}</code>
+          </p>
+        }
         <h2>Request sẽ gửi tới model</h2>
         <pre tabindex="0" aria-label="Request đề xuất">{{
           p.requestPreview
@@ -203,6 +222,17 @@ export class ExecutionStartComponent {
         !data.requestPreview.trim() ||
         typeof data.revision !== 'string' ||
         !/^(0|[1-9]\d{0,18})$/.test(data.revision) ||
+        ((data.dependencyContextSha256 !== undefined ||
+          data.dependencyCount !== undefined) &&
+          !(
+            (data.dependencyContextSha256 === null &&
+              data.dependencyCount === 0) ||
+            (typeof data.dependencyContextSha256 === 'string' &&
+              /^[0-9a-f]{64}$/.test(data.dependencyContextSha256) &&
+              Number.isInteger(data.dependencyCount) &&
+              data.dependencyCount! >= 0 &&
+              data.dependencyCount! <= 200)
+          )) ||
         typeof data.fingerprint !== 'string' ||
         !/^[0-9a-f]{64}$/.test(data.fingerprint) ||
         typeof data.model !== 'string' ||

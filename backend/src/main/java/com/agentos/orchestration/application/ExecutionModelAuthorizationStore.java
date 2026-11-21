@@ -26,6 +26,10 @@ class ExecutionModelAuthorizationStore {
       "${agentos.mission-graph-admission.enabled:false}")
   private boolean graphAdmissionEnabled;
 
+  @org.springframework.beans.factory.annotation.Value(
+      "${agentos.execution.dependency-context.enabled:false}")
+  private boolean dependencyContextEnabled;
+
   private final JdbcTemplate jdbc;
   private final ExecutionClaimStore claims;
   private final ExecutionBudgetStore budgets;
@@ -62,6 +66,10 @@ class ExecutionModelAuthorizationStore {
     var target = requireTarget(token, request.connection(), request.model());
     new MissionGraphDependencyStore(jdbc, graphAdmissionEnabled)
         .requireStart(token.organization(), token.run());
+    String contextRequestSha =
+        new ExecutionDependencyContextStore(jdbc, dependencyContextEnabled)
+            .requireFresh(token.organization(), token.run(), request.action());
+    if (contextRequestSha != null && !contextRequestSha.equals(request.sha256())) throw denied();
     if (!budgets.reserve(token, request.action(), request.maximumMicrousd())) throw denied();
 
     claims.requireCurrent(token);
@@ -101,7 +109,11 @@ class ExecutionModelAuthorizationStore {
     var target = requireTarget(token, connection, model);
     new MissionGraphDependencyStore(jdbc, graphAdmissionEnabled)
         .requireStart(token.organization(), token.run());
+    String contextRequestSha =
+        new ExecutionDependencyContextStore(jdbc, dependencyContextEnabled)
+            .requireFresh(token.organization(), token.run(), action);
     String digest = digest(exactBody);
+    if (contextRequestSha != null && !contextRequestSha.equals(digest)) throw denied();
     claims.requireCurrent(token);
     if (jdbc.update(
             """

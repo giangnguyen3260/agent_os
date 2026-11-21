@@ -47,7 +47,9 @@ public final class OpenAiExecutionFlow {
       String model,
       int maxOutputTokens,
       String maximumMicrousd,
-      String fingerprint) {
+      String fingerprint,
+      String dependencyContextSha256,
+      int dependencyCount) {
     @Override
     public String toString() {
       return "ExecutionPreflight[redacted]";
@@ -62,7 +64,8 @@ public final class OpenAiExecutionFlow {
       long credentialRevision,
       String model,
       byte[] body,
-      String sha) {}
+      String sha,
+      ExecutionDependencyContextStore.Captured context) {}
 
   private record Job(
       UUID org,
@@ -84,6 +87,10 @@ public final class OpenAiExecutionFlow {
       return "ExecutionJob[redacted]";
     }
   }
+
+  @org.springframework.beans.factory.annotation.Value(
+      "${agentos.execution.dependency-context.enabled:false}")
+  private boolean dependencyContextEnabled;
 
   private final JdbcTemplate jdbc;
   private final TransactionTemplate tx;
@@ -162,7 +169,9 @@ public final class OpenAiExecutionFlow {
               p.model(),
               settings.outputTokens(),
               Long.toString(reservation()),
-              fingerprint(rev, p));
+              fingerprint(rev, p),
+              p.context() == null ? null : p.context().sha256(),
+              p.context() == null ? 0 : p.context().count());
         });
   }
 
@@ -188,6 +197,12 @@ public final class OpenAiExecutionFlow {
                     String.class,
                     old.getFirst());
             if (hashes.size() != 1 || !hashes.getFirst().equals(fingerprint)) throw unavailable();
+            String storedSha =
+                jdbc.queryForObject(
+                    "select request_sha256 from execution_openai_requests where dispatch_id=?",
+                    String.class,
+                    old.getFirst());
+            ExecutionDependencyContextStore.storedDigest(jdbc, org, run, old.getFirst(), storedSha);
             var receipt = starts.start(org, run, revision, key, actor);
             return new Started(receipt.dispatchId(), run, Long.toString(revision));
           }
@@ -211,6 +226,8 @@ values(?,?,?,?,?,?,?,?,?,?,?)
               reservation(),
               settings.inputRate(),
               settings.outputRate());
+          new ExecutionDependencyContextStore(jdbc, dependencyContextEnabled)
+              .save(org, run, receipt.dispatchId(), p.context(), p.sha());
           jdbc.update(
               """
 insert into audit_events(id,organization_id,mission_id,task_id,actor_type,actor_id,event_type,payload,created_at)
@@ -419,7 +436,7 @@ where exists(select 1 from organizations o where o.id=t.organization_id and o.st
                                       + "\nAcceptance criteria: "
                                       + java.util.Objects.toString(rs.getString(10), ""))),
                           settings.outputTokens()));
-              var p = new Prepared(owner, connection, rs.getLong(6), model, body, sha(body));
+              var p = new Prepared(owner, connection, rs.getLong(6), model, body, sha(body), null);
               String hash =
                   sha(
                       (org
@@ -451,6 +468,8 @@ where exists(select 1 from organizations o where o.id=t.organization_id and o.st
   }
 
   private Prepared prepare(UUID org, UUID run) {
+    var context =
+        new ExecutionDependencyContextStore(jdbc, dependencyContextEnabled).capture(org, run);
     var rows =
         jdbc.query(
             """
@@ -474,16 +493,13 @@ where r.organization_id=? and r.id=?
                       rs.getObject(4, UUID.class),
                       rs.getObject(1, UUID.class),
                       rs.getString(3),
-                      List.of(
-                          new ModelMessage(
-                              "system", rs.getString(10) + "\nOutput format: " + rs.getString(11)),
-                          new ModelMessage(
-                              "user",
-                              rs.getString(7)
-                                  + "\n"
-                                  + java.util.Objects.toString(rs.getString(8), "")
-                                  + "\nAcceptance criteria: "
-                                  + java.util.Objects.toString(rs.getString(9), ""))),
+                      messages(
+                          rs.getString(10),
+                          rs.getString(11),
+                          rs.getString(7),
+                          rs.getString(8),
+                          rs.getString(9),
+                          context),
                       settings.outputTokens());
               if (!settings.model().equals(request.model())) throw unavailable();
               if (!models.configurationGranted(
@@ -502,12 +518,38 @@ where r.organization_id=? and r.id=?
                   rs.getLong(2),
                   request.model(),
                   body,
-                  sha(body));
+                  sha(body),
+                  context);
             },
             org,
             run);
     if (rows.size() != 1) throw unavailable();
     return rows.getFirst();
+  }
+
+  private List<ModelMessage> messages(
+      String responsibilities,
+      String format,
+      String title,
+      String description,
+      String criteria,
+      ExecutionDependencyContextStore.Captured context) {
+    var messages = new java.util.ArrayList<ModelMessage>();
+    String system = responsibilities + "\nOutput format: " + format;
+    if (context != null && context.count() > 0)
+      system += "\n" + ExecutionDependencyContextStore.INSTRUCTION;
+    messages.add(new ModelMessage("system", system));
+    if (context != null && context.count() > 0)
+      messages.add(new ModelMessage("user", context.json()));
+    messages.add(
+        new ModelMessage(
+            "user",
+            title
+                + "\n"
+                + java.util.Objects.toString(description, "")
+                + "\nAcceptance criteria: "
+                + java.util.Objects.toString(criteria, "")));
+    return List.copyOf(messages);
   }
 
   private void requireBudget(UUID org, UUID team, UUID mission, UUID owner) {
@@ -577,7 +619,8 @@ where b.organization_id=? and b.opens_at<=current_timestamp and b.closes_at>curr
                 + ":"
                 + settings.outputRate()
                 + ":"
-                + reservation())
+                + reservation()
+                + (p.context() == null ? "" : ":" + p.context().sha256()))
             .getBytes(StandardCharsets.UTF_8));
   }
 

@@ -63,6 +63,7 @@ interface GraphRun {
   runStatus: string;
 }
 interface GraphAssessment {
+  dependencyContextRequired?: boolean;
   organizationId: string;
   teamId: string;
   missionId: string;
@@ -80,6 +81,7 @@ interface GraphCommand extends Command {
   expectedPlanRevision: string;
 }
 interface GraphReceipt {
+  dependencyContextRequired?: boolean;
   organizationId: string;
   teamId: string;
   missionId: string;
@@ -188,6 +190,13 @@ const reasons: Record<string, string> = {
     @if (graph(); as g) {
       <section>
         <h2>Thực thi theo kế hoạch</h2>
+        <p>
+          {{
+            g.dependencyContextRequired
+              ? 'Đã chọn truyền output đã ACCEPT của Task phụ thuộc trực tiếp vào request kế tiếp; nội dung được ghim và kiểm tra trước khi gửi.'
+              : 'Chế độ chỉ điều phối thứ tự; output Task trước chưa được tự đưa vào request Task sau.'
+          }}
+        </p>
         @if (g.admitted && graphCompletionEnabled()) {
           <a
             [routerLink]="[
@@ -353,6 +362,7 @@ export class MissionPlanReviewComponent {
   readonly graphPending = signal<GraphCommand | null>(null);
   readonly graphReceipt = signal('');
   private expectedGraph: Review | null = null;
+  private expectedGraphContext: boolean | undefined;
   readonly enabled = signal(false);
   readonly accepted = signal<Accepted | null>(null);
   readonly confirm = signal(false);
@@ -387,6 +397,7 @@ export class MissionPlanReviewComponent {
     this.graphPending.set(null);
     this.graphReceipt.set('');
     this.expectedGraph = null;
+    this.expectedGraphContext = undefined;
     this.enabled.set(false);
     this.accepted.set(null);
     this.confirm.set(false);
@@ -805,6 +816,8 @@ export class MissionPlanReviewComponent {
       g.teamId === this.team &&
       g.missionId === this.mission &&
       g.executionAuthorized === false &&
+      (g.dependencyContextRequired === undefined ||
+        typeof g.dependencyContextRequired === 'boolean') &&
       typeof g.admitted === 'boolean' &&
       typeof g.canAdmit === 'boolean' &&
       typeof g.status === 'string' &&
@@ -841,6 +854,7 @@ export class MissionPlanReviewComponent {
     )
       return;
     this.expectedGraph = g.snapshot;
+    this.expectedGraphContext = g.dependencyContextRequired;
     this.graphPending.set({
       idempotencyKey: crypto.randomUUID(),
       expectedPlanRevision: g.planRevision,
@@ -897,6 +911,7 @@ export class MissionPlanReviewComponent {
         r.teamId !== this.team ||
         r.missionId !== this.mission ||
         r.executionAuthorized !== false ||
+        r.dependencyContextRequired !== this.expectedGraphContext ||
         r.idempotencyKey !== command.idempotencyKey ||
         r.sourceFingerprint !== command.expectedFingerprint ||
         r.planRevision !== command.expectedPlanRevision ||

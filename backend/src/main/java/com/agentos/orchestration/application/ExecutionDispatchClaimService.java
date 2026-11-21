@@ -9,6 +9,10 @@ import org.springframework.transaction.annotation.Transactional;
 /** Internal worker admission; callers must supply an authenticated worker identity. */
 @Service
 class ExecutionDispatchClaimService {
+  @org.springframework.beans.factory.annotation.Value(
+      "${agentos.execution.dependency-context.enabled:false}")
+  private boolean dependencyContextEnabled;
+
   private final JdbcTemplate jdbc;
   private final ExecutionClaimStore claims;
   private final ExecutionStartService starts;
@@ -52,6 +56,8 @@ where d.organization_id=? and d.id=? and d.state='QUEUED' for update
             Long.class,
             dispatch);
     starts.requireEligible(organization, run, revision);
+    new ExecutionDependencyContextStore(jdbc, dependencyContextEnabled)
+        .requireFresh(organization, run, dispatch);
     if (jdbc.update(
             """
             update execution_runs set status='RUNNING',revision=revision+1

@@ -35,7 +35,8 @@ public class MissionGraphAdmissionService {
       boolean canAdmit,
       List<String> blockers,
       String fingerprint,
-      boolean executionAuthorized) {}
+      boolean executionAuthorized,
+      boolean dependencyContextRequired) {}
 
   public record Receipt(
       UUID organizationId,
@@ -45,7 +46,12 @@ public class MissionGraphAdmissionService {
       UUID idempotencyKey,
       String sourceFingerprint,
       List<Run> runs,
-      boolean executionAuthorized) {}
+      boolean executionAuthorized,
+      boolean dependencyContextRequired) {}
+
+  @org.springframework.beans.factory.annotation.Value(
+      "${agentos.execution.dependency-context.enabled:false}")
+  private boolean dependencyContextEnabled;
 
   private final JdbcTemplate jdbc;
   private final ExecutionReviewDecisionStore authority;
@@ -87,6 +93,16 @@ public class MissionGraphAdmissionService {
     if (count("execution_runs", org, team, mission) > 0
         || count("mission_execution_controls", org, team, mission) > 0)
       blockers.add("RUNTIME_EXISTS");
+    boolean contextRequired =
+        admitted
+            ? jdbc.queryForObject(
+                "select dependency_context_required from mission_graph_admissions where"
+                    + " organization_id=? and team_id=? and mission_id=?",
+                Boolean.class,
+                org,
+                team,
+                mission)
+            : dependencyContextEnabled;
     var runs = admitted ? mapping(org, team, mission, false) : List.<Run>of();
     if (admitted
         && (!Long.toString(revisions.getFirst()).equals(a.planRevision())
@@ -108,7 +124,9 @@ public class MissionGraphAdmissionService {
                 + "|"
                 + a.matchesCurrent()
                 + "|"
-                + blockers);
+                + blockers
+                + "|"
+                + contextRequired);
     return new Assessment(
         org,
         team,
@@ -121,7 +139,8 @@ public class MissionGraphAdmissionService {
         blockers.isEmpty(),
         List.copyOf(blockers),
         fingerprint,
-        false);
+        false,
+        contextRequired);
   }
 
   @Transactional
@@ -175,7 +194,8 @@ public class MissionGraphAdmissionService {
           key,
           expectedFingerprint,
           mapping(org, team, mission, true),
-          false);
+          false,
+          contextMode(org, team, mission));
     }
     var s = current(org, team, mission, actor);
     if (!s.canAdmit()
@@ -193,15 +213,16 @@ public class MissionGraphAdmissionService {
         .initialize(new MissionExecutionControlStore.Scope(org, team, mission));
     jdbc.update(
         "insert into"
-            + " mission_graph_admissions(organization_id,team_id,mission_id,plan_revision,actor_id,idempotency_key,source_fingerprint)"
-            + " values(?,?,?,?,?,?,?)",
+            + " mission_graph_admissions(organization_id,team_id,mission_id,plan_revision,actor_id,idempotency_key,source_fingerprint,dependency_context_required)"
+            + " values(?,?,?,?,?,?,?,?)",
         org,
         team,
         mission,
         revision,
         actor.id(),
         key,
-        expectedFingerprint);
+        expectedFingerprint,
+        dependencyContextEnabled);
     for (var task : s.snapshot().tasks()) {
       boolean root = s.snapshot().edges().stream().noneMatch(e -> e.taskId().equals(task.id()));
       UUID run = UUID.randomUUID();
@@ -258,7 +279,18 @@ public class MissionGraphAdmissionService {
         key,
         expectedFingerprint,
         mapping(org, team, mission, true),
-        false);
+        false,
+        dependencyContextEnabled);
+  }
+
+  private boolean contextMode(UUID org, UUID team, UUID mission) {
+    return jdbc.queryForObject(
+        "select dependency_context_required from mission_graph_admissions where organization_id=?"
+            + " and team_id=? and mission_id=?",
+        Boolean.class,
+        org,
+        team,
+        mission);
   }
 
   private List<Run> mapping(UUID org, UUID team, UUID mission, boolean original) {
