@@ -51,7 +51,7 @@ This is local evidence only: new-head CI, native PostgreSQL completion races, re
 
 - PR120 implements bounded single-Task Mission completion; its final head has six green workflows.
 - PR121 implements full configured Task graph review. Head `081f492231a1668f816f3eaa5ba8371fffd54e21` has six green workflows, including the preserved MEMBER workspace regression. Both remain Draft/unmerged.
-- Current acceptance feature adds explicit ADMIN acceptance of the complete graph, immutable content, READY lifecycle, stale detection and new revisions after edits. It does not start execution. See [acceptance contract](MISSION_PLAN_ACCEPTANCE_CONTRACT.md) and [validation](MISSION_PLAN_ACCEPTANCE_QC.md).
+- PR122 adds explicit ADMIN acceptance of the complete graph, immutable content, READY lifecycle, stale detection and new revisions after edits. It does not start execution. See [acceptance contract](MISSION_PLAN_ACCEPTANCE_CONTRACT.md) and [validation](MISSION_PLAN_ACCEPTANCE_QC.md).
 
 ## Next implementation steps
 
@@ -60,3 +60,8 @@ This is local evidence only: new-head CI, native PostgreSQL completion races, re
 3. Continue DAG scheduling and Mission completion semantics across the full required graph; perform real-provider acceptance only with operator-supplied private configuration and explicit paid opt-in.
 
 No merge, deployment or real-provider completion is implied by local tests or Draft PR publication.
+
+
+## Graph admission implementation checkpoint
+
+PR122 final published head `dca273b165a5422aedddcc8afcd50bb8bcfb0303` is six-workflow green. The next graph admission candidate is implemented locally, with its contract and precise validation limits in [contract](MISSION_GRAPH_ADMISSION_CONTRACT.md) and [QC](MISSION_GRAPH_ADMISSION_QC.md). Its native PostgreSQL and real-backend Vault/browser suites are wired for matching-head CI. Publication, matching CI, merge and deployment remain distinct gates.

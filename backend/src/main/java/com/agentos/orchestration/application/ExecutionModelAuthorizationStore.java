@@ -22,6 +22,10 @@ class ExecutionModelAuthorizationStore {
 
   private record Target(UUID agent, long credentialRevision, long controlRevision) {}
 
+  @org.springframework.beans.factory.annotation.Value(
+      "${agentos.mission-graph-admission.enabled:false}")
+  private boolean graphAdmissionEnabled;
+
   private final JdbcTemplate jdbc;
   private final ExecutionClaimStore claims;
   private final ExecutionBudgetStore budgets;
@@ -56,6 +60,8 @@ class ExecutionModelAuthorizationStore {
         || request.sha256() == null
         || !request.sha256().matches("[0-9a-f]{64}")) throw denied();
     var target = requireTarget(token, request.connection(), request.model());
+    new MissionGraphDependencyStore(jdbc, graphAdmissionEnabled)
+        .requireStart(token.organization(), token.run());
     if (!budgets.reserve(token, request.action(), request.maximumMicrousd())) throw denied();
 
     claims.requireCurrent(token);
@@ -93,6 +99,8 @@ class ExecutionModelAuthorizationStore {
         || body.length == 0) throw denied();
     byte[] exactBody = body.clone();
     var target = requireTarget(token, connection, model);
+    new MissionGraphDependencyStore(jdbc, graphAdmissionEnabled)
+        .requireStart(token.organization(), token.run());
     String digest = digest(exactBody);
     claims.requireCurrent(token);
     if (jdbc.update(

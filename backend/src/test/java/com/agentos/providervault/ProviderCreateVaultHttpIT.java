@@ -81,6 +81,9 @@ import org.springframework.test.context.DynamicPropertySource;
       "agentos.provider-access-check.http-enabled=true",
       "agentos.provider-model-discovery.http-enabled=true",
       "agentos.mission-completion.enabled=true",
+      "agentos.mission-plan-review.enabled=true",
+      "agentos.mission-plan-acceptance.enabled=true",
+      "agentos.mission-graph-admission.enabled=true",
       "agentos.execution.openai.enabled=true",
       "agentos.execution.openai.poll-enabled=false",
       "agentos.execution.openai.model=fixture-model-01",
@@ -811,7 +814,16 @@ class ProviderCreateVaultHttpIT {
     executeVaultTask(OpenAiLiveAcceptance.from(System.getenv()));
   }
 
+  @Test
+  void browserAdmitsAndExecutesDiamondGraphWithManagedVaultCredential() throws Exception {
+    executeVaultTask(null, true);
+  }
+
   private void executeVaultTask(OpenAiLiveAcceptance live) throws Exception {
+    executeVaultTask(live, false);
+  }
+
+  private void executeVaultTask(OpenAiLiveAcceptance live, boolean graph) throws Exception {
     String model = environment.getRequiredProperty("agentos.execution.openai.model");
     UUID org = UUID.randomUUID(),
         actor = UUID.randomUUID(),
@@ -875,6 +887,35 @@ class ProviderCreateVaultHttpIT {
         team,
         mission,
         agent);
+    if (graph) {
+      jdbc.update("update missions set status='CREATED' where id=?", mission);
+      jdbc.update(
+          "update tasks set title='Graph A',status='DRAFT',priority='NORMAL',description='Write a"
+              + " short summary',acceptance_criteria='Useful text' where id=?",
+          task);
+      var ids = new UUID[] {task, UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID()};
+      for (int i = 1; i < 4; i++)
+        jdbc.update(
+            "insert into"
+                + " tasks(id,organization_id,team_id,mission_id,title,status,owner_agent_id,description,acceptance_criteria,priority)"
+                + " values(?,?,?,?,?,'DRAFT',?,'Write a short summary','Useful text','NORMAL')",
+            ids[i],
+            org,
+            team,
+            mission,
+            "Graph " + (char) ('A' + i),
+            agent);
+      for (int[] edge : new int[][] {{1, 0}, {2, 0}, {3, 1}, {3, 2}})
+        jdbc.update(
+            "insert into"
+                + " task_dependencies(organization_id,team_id,mission_id,task_id,dependency_task_id)"
+                + " values(?,?,?,?,?)",
+            org,
+            team,
+            mission,
+            ids[edge[0]],
+            ids[edge[1]]);
+    }
     UUID check = UUID.randomUUID();
     var at = java.time.OffsetDateTime.now().minusSeconds(2);
     var until = at.plusMinutes(5);
@@ -1032,12 +1073,69 @@ values(?,?,?,?,0,1,1,?,?,?,?,?,?,?,?,?,'ACCESSIBLE','MODEL_DISCOVERY')
           50,
           TimeUnit.MILLISECONDS);
       try {
-        runConnectionBrowser("openai_execution", org, actor, connection, task, live != null);
+        runConnectionBrowser(
+            graph ? "graph_admission" : "openai_execution",
+            org,
+            actor,
+            connection,
+            task,
+            live != null);
       } catch (Exception | AssertionError failure) {
         if (failures.get() != null) failure.addSuppressed(failures.get());
         throw failure;
       }
       assertThat(failures.get()).isNull();
+      if (graph) {
+        assertThat(sent.get()).isEqualTo(4);
+        assertThat(authorized.get()).isTrue();
+        assertThat(committed.get()).isTrue();
+        assertThat(
+                jdbc.queryForObject(
+                    "select count(*) from execution_runs where organization_id=? and"
+                        + " status='COMPLETED'",
+                    Long.class,
+                    org))
+            .isEqualTo(4L);
+        assertThat(
+                jdbc.queryForObject(
+                    "select count(*) from mission_graph_dependency_releases x join execution_runs r"
+                        + " on r.id=x.run_id where r.organization_id=?",
+                    Long.class,
+                    org))
+            .isEqualTo(3L);
+        assertThat(
+                jdbc.queryForObject(
+                    "select count(*) from execution_start_dispatch where organization_id=? and"
+                        + " state='FINISHED'",
+                    Long.class,
+                    org))
+            .isEqualTo(4L);
+        assertThat(
+                jdbc.queryForObject(
+                    "select count(*) from execution_model_usage where organization_id=?",
+                    Long.class,
+                    org))
+            .isEqualTo(4L);
+        assertThat(
+                jdbc.queryForObject(
+                    "select sum(b.actual_microusd) from execution_budget_reservations b join"
+                        + " execution_runs r on r.id=b.run_id where r.organization_id=? and"
+                        + " b.status='SETTLED'",
+                    Long.class,
+                    org))
+            .isEqualTo(52L);
+        assertThat(
+                jdbc.queryForObject(
+                    "select status from missions where id=?", String.class, mission))
+            .isEqualTo("RUNNING");
+        assertThat(
+                jdbc.queryForObject(
+                    "select count(*) from mission_completion_receipts where organization_id=?",
+                    Long.class,
+                    org))
+            .isZero();
+        return;
+      }
       assertThat(sent.get()).isEqualTo(live == null ? 2 : 0);
       if (live == null) {
         assertThat(authorized.get())
@@ -1378,7 +1476,8 @@ values(?,?,?,?,0,1,1,?,?,?,?,?,?,?,?,?,'ACCESSIBLE','MODEL_DISCOVERY')
       command.environment().put(prefix + "_CONNECTION", connection.toString());
       if (draft != null && operation.equals("model_discovery"))
         command.environment().put("PROVIDER_MODEL_DISCOVERY_AGENT", draft.toString());
-      if (draft != null && operation.equals("openai_execution")) {
+      if (draft != null
+          && (operation.equals("openai_execution") || operation.equals("graph_admission"))) {
         command.environment().put("PROVIDER_OPENAI_EXECUTION_TASK", draft.toString());
         command
             .environment()
@@ -1837,6 +1936,13 @@ values(?,?,?,?,0,1,1,?,?,?,?,?,?,?,?,?,'ACCESSIBLE','MODEL_DISCOVERY')
               + " to vault_browser_web");
       statement.execute(
           "grant select,insert on public.mission_completion_receipts to vault_browser_web");
+      statement.execute(
+          "grant select,insert on"
+              + " public.accepted_mission_plan_dependencies,public.mission_plan_acceptance_versions,public.mission_graph_admissions,public.mission_graph_admission_runs,public.mission_graph_dependency_releases"
+              + " to vault_browser_web");
+      statement.execute(
+          "grant select,insert,update on public.mission_plan_selections to vault_browser_web");
+      statement.execute("grant select on public.task_dependencies to vault_browser_web");
       statement.execute("grant select,insert on public.audit_events to vault_browser_web");
       statement.execute("grant insert on public.authentication_audit to vault_browser_web");
       statement.execute(

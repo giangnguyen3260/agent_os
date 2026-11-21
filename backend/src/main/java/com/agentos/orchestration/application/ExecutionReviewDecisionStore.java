@@ -31,6 +31,10 @@ class ExecutionReviewDecisionStore {
       String outputSha256,
       boolean reworkAvailable) {}
 
+  @org.springframework.beans.factory.annotation.Value(
+      "${agentos.mission-graph-admission.enabled:false}")
+  private boolean graphAdmissionEnabled;
+
   private final JdbcTemplate jdbc;
   private final ExecutionClaimStore claims;
 
@@ -83,6 +87,7 @@ where d.run_id=? and d.attempt_id=?
         || (request.decision() == Decision.REWORK && !target.reworkAvailable())) {
       throw unavailable();
     }
+    new MissionGraphDependencyStore(jdbc, graphAdmissionEnabled).requireReview(organization, run);
     var at = claims.now();
     boolean rework = request.decision() == Decision.REWORK;
     if (jdbc.update(
@@ -112,6 +117,9 @@ where d.run_id=? and d.attempt_id=?
         request.decision().name(),
         request.reason(),
         at);
+    if (!rework)
+      new MissionGraphDependencyStore(jdbc, graphAdmissionEnabled)
+          .requireAcceptedOwnOutput(organization, run);
     jdbc.update(
         """
 insert into audit_events (id,organization_id,mission_id,task_id,actor_type,actor_id,event_type,payload,created_at)
@@ -125,6 +133,8 @@ values (?,?,?,?,'HUMAN',?,?,?,?)
         rework ? "EXECUTION_REWORK_REQUESTED" : "EXECUTION_OUTPUT_ACCEPTED",
         "{\"runId\":\"" + run + "\",\"attemptId\":\"" + request.attempt() + "\"}",
         at);
+    if (!rework)
+      new MissionGraphDependencyStore(jdbc, graphAdmissionEnabled).release(organization, run);
   }
 
   Target current(UUID organization, UUID run) {

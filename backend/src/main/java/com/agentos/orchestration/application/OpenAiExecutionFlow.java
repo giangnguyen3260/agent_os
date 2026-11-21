@@ -386,6 +386,8 @@ where exists(select 1 from organizations o where o.id=t.organization_id and o.st
   and m.status='RUNNING' and tm.status='ACTIVE' and a.status='ACTIVE'
   and not exists(select 1 from task_dependencies d where d.organization_id=t.organization_id and d.team_id=t.team_id and d.mission_id=t.mission_id and d.task_id=t.id)
   and not exists(select 1 from execution_runs r where r.organization_id=t.organization_id and r.task_id=t.id)
+  and not exists(select 1 from mission_plan_selections p where p.organization_id=t.organization_id and p.team_id=t.team_id and p.mission_id=t.mission_id)
+  and not exists(select 1 from mission_graph_admissions p where p.organization_id=t.organization_id and p.team_id=t.team_id and p.mission_id=t.mission_id)
   and not exists(select 1 from mission_execution_controls x where x.organization_id=t.organization_id and x.team_id=t.team_id and x.mission_id=t.mission_id and x.state<>'OPEN')
 """,
             (rs, n) -> {
