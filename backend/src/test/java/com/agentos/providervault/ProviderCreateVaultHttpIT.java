@@ -86,6 +86,7 @@ import org.springframework.test.context.DynamicPropertySource;
       "agentos.mission-graph-admission.enabled=true",
       "agentos.mission-graph-completion.enabled=true",
       "agentos.execution.dependency-context.enabled=true",
+      "agentos.mission-plan-proposal.enabled=true",
       "agentos.execution.openai.enabled=true",
       "agentos.execution.openai.poll-enabled=false",
       "agentos.execution.openai.model=fixture-model-01",
@@ -109,6 +110,16 @@ class ProviderCreateVaultHttpIT {
                   ((AbstractHttp11Protocol<?>) connector.getProtocolHandler())
                       .setContinueResponseTiming("onRead"));
     }
+  }
+
+  private static String planningProposal() {
+    return """
+{"schemaVersion":1,"tasks":[
+{"key":"a","title":"Research","description":"Collect evidence","acceptanceCriteria":"Sources","priority":"NORMAL","dependencies":[]},
+{"key":"b","title":"Draft","description":"Use research","acceptanceCriteria":"Draft","priority":"NORMAL","dependencies":["a"]},
+{"key":"c","title":"Check","description":"Check research","acceptanceCriteria":"Checks","priority":"NORMAL","dependencies":["a"]},
+{"key":"d","title":"Finish","description":"Combine","acceptanceCriteria":"Final","priority":"NORMAL","dependencies":["b","c"]}]}
+""";
   }
 
   private static final String PASSWORD = "Vault-browser-fixture-93847";
@@ -889,7 +900,17 @@ class ProviderCreateVaultHttpIT {
         team,
         mission,
         agent);
+    UUID proposalTarget =
+        UUID.nameUUIDFromBytes(("proposal-target:" + mission).getBytes(StandardCharsets.UTF_8));
     if (graph) {
+      jdbc.update(
+          "insert into"
+              + " missions(id,organization_id,team_id,title,goal,status,priority,created_at,updated_at)"
+              + " values(?,?,?,'Imported Mission','Reviewed"
+              + " plan','CREATED','NORMAL',current_timestamp,current_timestamp)",
+          proposalTarget,
+          org,
+          team);
       jdbc.update("update missions set status='CREATED' where id=?", mission);
       jdbc.update(
           "update tasks set title='Graph A',status='DRAFT',priority='NORMAL',description='Write a"
@@ -1057,14 +1078,27 @@ values(?,?,?,?,0,1,1,?,?,?,?,?,?,?,?,?,'ACCESSIBLE','MODEL_DISCOVERY')
             }
             dependencyContextMatched.compareAndSet(true, matched && titles.equals(expected));
           }
+          String output =
+              taskTitle.equals("Graph D")
+                  ? planningProposal()
+                  : taskTitle + " verified task output";
           byte[] response =
-              ("{\"id\":\"vault-completion-"
-                      + ordinal
-                      + "\",\"object\":\"chat.completion\",\"choices\":[{\"finish_reason\":\"stop\",\"message\":{\"role\":\"assistant\",\"content\":\""
-                      + taskTitle
-                      + " verified task"
-                      + " output\"}}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":3,\"total_tokens\":13}}")
-                  .getBytes(StandardCharsets.UTF_8);
+              json.writeValueAsBytes(
+                  java.util.Map.of(
+                      "id",
+                      "vault-completion-" + ordinal,
+                      "object",
+                      "chat.completion",
+                      "choices",
+                      java.util.List.of(
+                          java.util.Map.of(
+                              "finish_reason",
+                              "stop",
+                              "message",
+                              java.util.Map.of("role", "assistant", "content", output))),
+                      "usage",
+                      java.util.Map.of(
+                          "prompt_tokens", 10, "completion_tokens", 3, "total_tokens", 13)));
           exchange.getResponseHeaders().set("Content-Type", "application/json");
           exchange.sendResponseHeaders(200, response.length);
           exchange.getResponseBody().write(response);
@@ -1192,6 +1226,52 @@ values(?,?,?,?,0,1,1,?,?,?,?,?,?,?,?,?,'ACCESSIBLE','MODEL_DISCOVERY')
                     Long.class,
                     org))
             .isEqualTo(2L);
+        assertThat(
+                jdbc.queryForObject(
+                    "select count(*) from mission_plan_proposal_receipts where mission_id=?",
+                    Long.class,
+                    proposalTarget))
+            .isEqualTo(1L);
+        assertThat(
+                jdbc.queryForObject(
+                    "select count(*) from mission_plan_proposal_tasks where mission_id=?",
+                    Long.class,
+                    proposalTarget))
+            .isEqualTo(4L);
+        assertThat(
+                jdbc.queryForObject(
+                    "select count(*) from tasks where mission_id=? and status='DRAFT'",
+                    Long.class,
+                    proposalTarget))
+            .isEqualTo(4L);
+        assertThat(
+                jdbc.queryForObject(
+                    "select count(*) from task_dependencies where mission_id=?",
+                    Long.class,
+                    proposalTarget))
+            .isEqualTo(4L);
+        assertThat(
+                jdbc.queryForObject(
+                    "select task_intake_version from missions where id=?",
+                    Long.class,
+                    proposalTarget))
+            .isEqualTo(1L);
+        assertThat(
+                jdbc.queryForObject(
+                    "select status from missions where id=?", String.class, proposalTarget))
+            .isEqualTo("CREATED");
+        assertThat(
+                jdbc.queryForObject(
+                    "select count(*) from execution_runs where mission_id=?",
+                    Long.class,
+                    proposalTarget))
+            .isZero();
+        assertThat(
+                jdbc.queryForObject(
+                    "select count(*) from accepted_mission_plans where mission_id=?",
+                    Long.class,
+                    proposalTarget))
+            .isZero();
         return;
       }
       assertThat(sent.get()).isEqualTo(live == null ? 2 : 0);
@@ -1546,13 +1626,29 @@ values(?,?,?,?,0,1,1,?,?,?,?,?,?,?,?,?,'ACCESSIBLE','MODEL_DISCOVERY')
             .environment()
             .put("PROVIDER_OPENAI_EXECUTION_REAL_PROVIDER", Boolean.toString(realProvider));
 
-        var scope = jdbc.queryForMap("select team_id,mission_id from tasks where id=?", draft);
+        var scope =
+            jdbc.queryForMap(
+                "select team_id,mission_id,owner_agent_id from tasks where id=?", draft);
         command
             .environment()
             .put("PROVIDER_OPENAI_EXECUTION_TEAM", scope.get("team_id").toString());
         command
             .environment()
             .put("PROVIDER_OPENAI_EXECUTION_MISSION", scope.get("mission_id").toString());
+        if (operation.equals("graph_admission")) {
+          command
+              .environment()
+              .put(
+                  "PROVIDER_PLAN_PROPOSAL_TARGET",
+                  UUID.nameUUIDFromBytes(
+                          ("proposal-target:" + scope.get("mission_id"))
+                              .getBytes(StandardCharsets.UTF_8))
+                      .toString());
+          command
+              .environment()
+              .put("PROVIDER_PLAN_PROPOSAL_OWNER", scope.get("owner_agent_id").toString());
+          command.environment().put("PROVIDER_PLAN_PROPOSAL_JSON", planningProposal());
+        }
       }
       Path diagnostics =
           Files.createTempFile(
@@ -1997,7 +2093,9 @@ values(?,?,?,?,0,1,1,?,?,?,?,?,?,?,?,?,'ACCESSIBLE','MODEL_DISCOVERY')
       statement.execute(
           "grant select,insert on public.mission_graph_completion_receipts to vault_browser_web");
       statement.execute(
-          "grant select,insert on public.execution_dependency_contexts to vault_browser_web");
+          "grant select,insert on"
+              + " public.execution_dependency_contexts,public.mission_plan_proposal_receipts,public.mission_plan_proposal_tasks,public.task_dependencies"
+              + " to vault_browser_web");
       statement.execute(
           "grant select,insert on"
               + " public.accepted_mission_plan_dependencies,public.mission_plan_acceptance_versions,public.mission_graph_admissions,public.mission_graph_admission_runs,public.mission_graph_dependency_releases"

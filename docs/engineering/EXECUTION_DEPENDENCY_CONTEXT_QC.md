@@ -17,3 +17,7 @@ Required external evidence is authored/compiled and wired from initial publicati
 - The native PostgreSQL/TLS Vault/real-backend worker diamond fixture now admits REQUIRED mode. Provider and browser independently check B/C receive exact A text; D receives exact B+C text without separately injecting A. Outputs are distinct per Task. It verifies four immutable context records, four explicit provider sends, unchanged settled usage and full graph REVIEW/COMPLETED with output reread. The provider endpoint is simulated, never paid OpenAI.
 
 Bounds remain 8 KiB canonical context, 16 KiB total message content, 32 KiB request and at most eight messages; input reservation remains 17408 tokens. Oversize is a deliberate fail-closed limit, not an automatic repair/replan feature. Existing admissions remain order-only and are never silently converted. No merge or deployment.
+
+## Matching-head CI completed — 22 November 2026
+
+PR125 head `60288ab7f29ae471c0d28493378006aca6c10b4b` passed all six workflows, including Docker build/smoke. Quality run 44932391185 passed 10 H2 and 10 native PostgreSQL context cases, zero failures/errors/skips for those suites. Full selected backend count: 1832 tests, zero failures/errors, one skipped case. Vault run 44932391170 passed first attempt and proves distinct exact predecessor content forwarding, four explicit sends, settlement and full graph closure using a simulated provider. Paid OpenAI remains opt-in and unverified. PR remains Draft/unmerged; no deployment.

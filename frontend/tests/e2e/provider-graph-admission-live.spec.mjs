@@ -54,6 +54,7 @@ test('accepted diamond graph admits all Runs and releases dependencies after exa
   await expect(task('Graph B')).toContainText('BLOCKED');
   await expect(task('Graph C')).toContainText('BLOCKED');
   await expect(task('Graph D')).toContainText('BLOCKED');
+  let plannerRun;
   for (const name of ['Graph A', 'Graph B', 'Graph C', 'Graph D']) {
     await expect(
       task(name).getByRole('link', {
@@ -112,8 +113,14 @@ test('accepted diamond graph admits all Runs and releases dependencies after exa
       )
       .toBe(true);
     await review.click();
+    if (name === 'Graph D')
+      plannerRun = new URL(page.url()).pathname.match(
+        /execution-runs\/([^/]+)/,
+      )?.[1];
     await expect(page.getByLabel('Nội dung kết quả')).toHaveText(
-      name + ' verified task output',
+      name === 'Graph D'
+        ? process.env.PROVIDER_PLAN_PROPOSAL_JSON
+        : name + ' verified task output',
     );
     await page
       .getByRole('button', {name: 'Duyệt kết quả', exact: true})
@@ -174,4 +181,49 @@ test('accepted diamond graph admits all Runs and releases dependencies after exa
   await expect(page.getByLabel('Nội dung output đã ACCEPT')).toHaveText(
     'Graph A verified task output',
   );
+  if (
+    !plannerRun ||
+    !process.env.PROVIDER_PLAN_PROPOSAL_TARGET ||
+    !process.env.PROVIDER_PLAN_PROPOSAL_OWNER
+  )
+    throw new Error('Missing reviewed plan fixture');
+  const proposalPath = `/workspace/${org}/teams/${team}/missions/${process.env.PROVIDER_PLAN_PROPOSAL_TARGET}/plan-proposal`;
+  await page.goto(proposalPath);
+  await expect(
+    page.getByRole('heading', {name: 'Imported Mission', exact: true}),
+  ).toBeVisible();
+  await page
+    .getByLabel('Run lập kế hoạch nguồn', {exact: true})
+    .fill(plannerRun);
+  await page
+    .getByRole('button', {name: 'Đọc output nguồn đã ACCEPT', exact: true})
+    .click();
+  await expect(page.getByLabel('JSON đề xuất', {exact: true})).toHaveValue(
+    process.env.PROVIDER_PLAN_PROPOSAL_JSON,
+  );
+  for (const key of ['a', 'b', 'c', 'd'])
+    await page
+      .getByLabel('Agent cho ' + key, {exact: true})
+      .selectOption(process.env.PROVIDER_PLAN_PROPOSAL_OWNER);
+  await page
+    .getByRole('button', {name: 'Xem trước toàn bộ kế hoạch', exact: true})
+    .click();
+  await expect(page.locator('article')).toHaveCount(4);
+  await expect(page.getByText(/AGENT_OUTPUT · Output/)).toBeVisible();
+  await page
+    .getByRole('button', {name: 'Áp dụng thành Task DRAFT', exact: true})
+    .click();
+  await expect(
+    page.getByRole('heading', {name: 'Đã nhập 4 Task', exact: true}),
+  ).toBeVisible();
+  await page
+    .getByRole('link', {name: 'Xem và duyệt kế hoạch từ Task', exact: true})
+    .click();
+  await expect(
+    page.getByRole('heading', {
+      name: 'Kế hoạch từ Task đã cấu hình',
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(page.locator('article')).toHaveCount(4);
 });
