@@ -8,7 +8,7 @@ test.skip(
 test('Task Start, Vault-backed worker, rework and acceptance use real backend APIs', async ({
   page,
 }) => {
-  test.setTimeout(90_000);
+  test.setTimeout(110_000);
   const org = process.env.PROVIDER_VAULT_ORG;
   const team = process.env.PROVIDER_OPENAI_EXECUTION_TEAM;
   const mission = process.env.PROVIDER_OPENAI_EXECUTION_MISSION;
@@ -18,6 +18,10 @@ test('Task Start, Vault-backed worker, rework and acceptance use real backend AP
   if (!org || !team || !mission || !task || !email || !password)
     throw new Error('Missing disposable OpenAI execution browser fixtures');
   const taskPath = `/workspace/${org}/teams/${team}/missions/${mission}/tasks/${task}`;
+  const realProvider =
+    process.env.PROVIDER_OPENAI_EXECUTION_REAL_PROVIDER === 'true';
+  const model =
+    process.env.PROVIDER_OPENAI_EXECUTION_MODEL || 'fixture-model-01';
   const starts = [];
   page.on('request', r => {
     if (r.method() === 'POST' && new URL(r.url()).pathname.endsWith('/start'))
@@ -33,7 +37,7 @@ test('Task Start, Vault-backed worker, rework and acceptance use real backend AP
     await expect(page.getByLabel('Request đề xuất')).toContainText(
       'Vault execution Task',
     );
-    await expect(page.getByRole('main')).toContainText('fixture-model-01');
+    await expect(page.getByRole('main')).toContainText(model);
     await expect(page.getByRole('main')).not.toContainText(
       'browser-vault-disposable-synthetic-key',
     );
@@ -63,13 +67,13 @@ test('Task Start, Vault-backed worker, rework and acceptance use real backend AP
             await refresh.click();
           return review.isVisible();
         },
-        {timeout: 25_000},
+        {timeout: 40_000},
       )
       .toBe(true);
     await review.click();
-    await expect(page.getByLabel('Nội dung kết quả')).toHaveText(
-      'Vault verified task output',
-    );
+    const output = page.getByLabel('Nội dung kết quả');
+    if (realProvider) await expect(output).toContainText(/\S/);
+    else await expect(output).toHaveText('Vault verified task output');
     if (decision === 'REWORK')
       await page
         .getByLabel('Lý do yêu cầu làm lại')

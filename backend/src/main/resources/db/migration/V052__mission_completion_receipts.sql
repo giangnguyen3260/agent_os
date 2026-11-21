@@ -1,0 +1,25 @@
+-- Explicit human review and completion of the bounded single-Task Mission flow.
+create table mission_completion_receipts (
+    organization_id uuid not null,
+    team_id uuid not null,
+    mission_id uuid not null,
+    actor_id uuid not null references human_accounts(id),
+    idempotency_key uuid not null,
+    action varchar(20) not null check (action in ('SUBMIT_REVIEW','COMPLETE')),
+    source_fingerprint varchar(64) not null check (char_length(source_fingerprint)=64),
+    source_control_revision bigint not null check (source_control_revision>0),
+    result_control_revision bigint not null check (result_control_revision=source_control_revision+1),
+    result_status varchar(12) not null,
+    task_id uuid not null,
+    run_id uuid not null,
+    attempt_id uuid not null,
+    output_sha256 varchar(64) not null check (char_length(output_sha256)=64),
+    recorded_at timestamptz not null default current_timestamp,
+    primary key (organization_id,actor_id,idempotency_key),
+    unique (organization_id,team_id,mission_id,action),
+    foreign key (organization_id,team_id,mission_id) references missions(organization_id,team_id,id),
+    foreign key (organization_id,team_id,mission_id,task_id) references tasks(organization_id,team_id,mission_id,id),
+    foreign key (organization_id,run_id) references execution_runs(organization_id,id),
+    foreign key (run_id,attempt_id) references execution_attempts(run_id,id),
+    check ((action='SUBMIT_REVIEW' and result_status='REVIEW') or (action='COMPLETE' and result_status='COMPLETED'))
+);
