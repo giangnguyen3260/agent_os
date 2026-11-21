@@ -106,6 +106,13 @@ public class MissionCompletionService {
         || !List.of("OPEN", "PAUSE_REQUESTED").contains(parent[4] == null ? "" : parent[4]))
       blockers.add("EXECUTION_CONTROL_UNAVAILABLE");
     if (count(
+            "select count(*) from mission_graph_admissions where organization_id=? and team_id=?"
+                + " and mission_id=?",
+            org,
+            team,
+            mission)
+        > 0) blockers.add("UNSUPPORTED_SCOPE");
+    if (count(
                 "select count(*) from tasks where organization_id=? and team_id=? and mission_id=?",
                 org,
                 team,

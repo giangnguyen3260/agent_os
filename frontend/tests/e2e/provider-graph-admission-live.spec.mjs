@@ -40,14 +40,12 @@ test('accepted diamond graph admits all Runs and releases dependencies after exa
     .getByRole('button', {name: 'Tiếp nhận toàn bộ kế hoạch', exact: true})
     .click();
   const panel = () =>
-    page
-      .locator('section')
-      .filter({
-        has: page.getByRole('heading', {
-          name: 'Thực thi theo kế hoạch',
-          exact: true,
-        }),
-      });
+    page.locator('section').filter({
+      has: page.getByRole('heading', {
+        name: 'Thực thi theo kế hoạch',
+        exact: true,
+      }),
+    });
   const task = name =>
     panel()
       .locator('article')
@@ -111,4 +109,52 @@ test('accepted diamond graph admits all Runs and releases dependencies after exa
       await expect(task('Graph D')).toContainText('BLOCKED');
   }
   await expect(panel()).toContainText('RUNNING');
+  await panel()
+    .getByRole('link', {name: 'Hoàn tất Mission theo kế hoạch', exact: true})
+    .click();
+  await expect(
+    page.getByRole('heading', {
+      name: 'Trạng thái hiện tại: RUNNING',
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(page.locator('article')).toHaveCount(4);
+  await page
+    .getByRole('button', {name: 'Xem output đã ACCEPT', exact: true})
+    .first()
+    .click();
+  await expect(page.getByLabel('Nội dung output đã ACCEPT')).toHaveText(
+    'Vault verified task output',
+  );
+  for (const [button, status] of [
+    ['Đưa Mission vào review', 'REVIEW'],
+    ['Hoàn tất Mission', 'COMPLETED'],
+  ]) {
+    await page
+      .getByLabel(
+        'Tôi xác nhận toàn bộ bản kê đầu ra và bước chuyển trạng thái này.',
+      )
+      .check();
+    await page.getByRole('button', {name: button, exact: true}).click();
+    await expect(
+      page.getByRole('heading', {
+        name: `Trạng thái hiện tại: ${status}`,
+        exact: true,
+      }),
+    ).toBeVisible();
+  }
+  await page.reload();
+  await expect(
+    page.getByRole('heading', {
+      name: 'Trạng thái hiện tại: COMPLETED',
+      exact: true,
+    }),
+  ).toBeVisible();
+  await page
+    .getByRole('button', {name: 'Xem output đã ACCEPT', exact: true})
+    .first()
+    .click();
+  await expect(page.getByLabel('Nội dung output đã ACCEPT')).toHaveText(
+    'Vault verified task output',
+  );
 });

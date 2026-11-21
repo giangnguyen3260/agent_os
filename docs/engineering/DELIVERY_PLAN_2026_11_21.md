@@ -65,3 +65,8 @@ No merge, deployment or real-provider completion is implied by local tests or Dr
 ## Graph admission implementation checkpoint
 
 PR122 final published head `dca273b165a5422aedddcc8afcd50bb8bcfb0303` is six-workflow green. The next graph admission candidate is implemented locally, with its contract and precise validation limits in [contract](MISSION_GRAPH_ADMISSION_CONTRACT.md) and [QC](MISSION_GRAPH_ADMISSION_QC.md). Its native PostgreSQL and real-backend Vault/browser suites are wired for matching-head CI. Publication, matching CI, merge and deployment remain distinct gates.
+
+
+## Full graph completion candidate
+
+A local candidate now adds two-phase closure for admitted graphs, pinned output/source manifests, exact accepted-output reread and post-admission TaskCreate freeze. See [contract](MISSION_GRAPH_COMPLETION_CONTRACT.md) and [QC](MISSION_GRAPH_COMPLETION_QC.md). All 43 selected backend cases and 72 mocked browser cases passed locally. Native PostgreSQL and full Vault/browser closure require matching-head CI before being claimed verified. Corrected PR123 head is `477ce690d92a1a2b0b123cfe2a46160cee3069b3`, with five successful workflows and Docker still running at this checkpoint.

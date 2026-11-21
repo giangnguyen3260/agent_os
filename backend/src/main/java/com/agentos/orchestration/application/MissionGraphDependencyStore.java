@@ -49,6 +49,12 @@ final class MissionGraphDependencyStore {
       throw denied();
   }
 
+  void requireConfiguration(UUID org, UUID run) {
+    var s = scope(org, run);
+    if (s == null || !enabled) throw denied();
+    validate(org, s);
+  }
+
   void requireReview(UUID org, UUID run) {
     if (scope(org, run) != null && !enabled) throw denied();
   }

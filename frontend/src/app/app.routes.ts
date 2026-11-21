@@ -30,6 +30,14 @@ import {approvalDetailNavigationGuard} from './features/approvals/approval-navig
 
 export const routes: Routes = [
   {
+    path: 'workspace/:id/teams/:teamId/missions/:missionId/graph-completion',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import(
+        './features/mission-graph-completion/mission-graph-completion.component'
+      ).then(m => m.MissionGraphCompletionComponent),
+  },
+  {
     path: 'workspace/:id/teams/:teamId/missions/:missionId/plan-review',
     canActivate: [authGuard],
     loadComponent: () =>
