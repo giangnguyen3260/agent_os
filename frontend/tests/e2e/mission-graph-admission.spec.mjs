@@ -204,14 +204,12 @@ test('explicit graph confirmation admits complete Runs and shows only dependency
     .getByLabel('Tôi xác nhận tiếp nhận toàn bộ kế hoạch đã duyệt này.')
     .check();
   await button.click();
-  const panel = page
-    .locator('section')
-    .filter({
-      has: page.getByRole('heading', {
-        name: 'Thực thi theo kế hoạch',
-        exact: true,
-      }),
-    });
+  const panel = page.locator('section').filter({
+    has: page.getByRole('heading', {
+      name: 'Thực thi theo kế hoạch',
+      exact: true,
+    }),
+  });
   await expect(panel.locator('article')).toHaveCount(2);
   await expect(
     panel.getByRole('link', {name: 'Xem trước và Start Run', exact: true}),
@@ -242,6 +240,10 @@ test('ambiguous admission reuses exact command and erases private state after ro
   ).toBeVisible();
   expect(state.graphCommands).toHaveLength(2);
   expect(state.graphCommands[0]).toEqual(state.graphCommands[1]);
+  // Receipt visibility precedes the mandatory current-state reload finishing.
+  await expect(
+    page.getByRole('button', {name: 'Tải lại cấu hình', exact: true}),
+  ).toBeEnabled();
   state.denied = true;
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect(
@@ -264,7 +266,7 @@ test('malformed admission mapping cannot confirm a successful receipt', async ({
     .click();
   await expect(
     page.getByRole('button', {name: 'Gửi lại lệnh tiếp nhận', exact: true}),
-  ).toBeVisible();
+  ).toBeEnabled();
   await expect(page.getByText(/Đã ghi nhận tiếp nhận phiên bản 1/)).toHaveCount(
     0,
   );
