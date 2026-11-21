@@ -149,3 +149,46 @@ test('focus rechecks current authority and erases previously read input', async 
   await expect(page.locator('article')).toHaveCount(0);
   expect(state.writes).toHaveLength(0);
 });
+
+test('Mission workspace retains disabled Plan for MEMBER without the ADMIN review link', async ({
+  page,
+}) => {
+  await mock(page, {role: 'MEMBER'});
+  await page.route(/\/api\/v1\/.*\/workspace$/, r =>
+    r.fulfill({
+      json: {
+        data: {
+          generatedAt: '2026-11-21T00:00:00Z',
+          mission: {
+            id: mission,
+            organizationId: org,
+            teamId: team,
+            teamName: 'Team',
+            title: 'Configuration plan',
+            status: 'CREATED',
+            priority: 'NORMAL',
+            managerAgentId: null,
+            managerName: null,
+          },
+          summary: {
+            totalTasks: 0,
+            completedTasks: 0,
+            runningTasks: 0,
+            pendingTasks: 0,
+            reviewTasks: 0,
+          },
+        },
+      },
+    }),
+  );
+  await page.route(/\/api\/v1\/.*\/workspace\/tasks(?:\?.*)?$/, r =>
+    r.fulfill({json: {data: {items: [], page: 0, size: 20, total: 0}}}),
+  );
+  await page.goto(path.replace('/plan-review', '/workspace'));
+  await expect(
+    page.getByRole('button', {name: 'Plan', exact: true}),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole('link', {name: 'Xem kế hoạch từ Task', exact: true}),
+  ).toHaveCount(0);
+});

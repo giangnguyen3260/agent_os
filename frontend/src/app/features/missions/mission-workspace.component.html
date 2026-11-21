@@ -191,6 +191,15 @@
             ]"
             >Xem kế hoạch từ Task</a
           >
+        } @else {
+          <button
+            class="button secondary"
+            type="button"
+            disabled
+            aria-describedby="execution-unavailable"
+          >
+            Plan
+          </button>
         }
         @for (action of ['Outputs']; track action) {
           <button
