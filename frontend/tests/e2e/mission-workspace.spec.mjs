@@ -410,6 +410,9 @@ test('MW06 member revocation, disabled mutations, native compact navigation and 
     'Outputs',
   ])
     await expect(button(p, name)).toBeDisabled();
+  await expect(
+    p.getByRole('link', {name: 'Xem kế hoạch từ Task', exact: true}),
+  ).toHaveCount(0);
   await expect(surface(p)).toContainText(/unavailable/i);
   if (info.project.name !== 'desktop') {
     await button(p, 'Menu').click();

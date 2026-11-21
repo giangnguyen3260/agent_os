@@ -177,7 +177,31 @@
       </p>
       <p class="caption">Mission overview · Scroll down for waiting details</p>
       <div class="actions">
-        @for (action of ['Plan', 'Outputs']; track action) {
+        @if (context()?.role === 'ADMIN') {
+          <a
+            class="button secondary"
+            [routerLink]="[
+              '/workspace',
+              id,
+              'teams',
+              teamId,
+              'missions',
+              missionId,
+              'plan-review',
+            ]"
+            >Xem kế hoạch từ Task</a
+          >
+        } @else {
+          <button
+            class="button secondary"
+            type="button"
+            disabled
+            aria-describedby="execution-unavailable"
+          >
+            Plan
+          </button>
+        }
+        @for (action of ['Outputs']; track action) {
           <button
             class="button secondary"
             type="button"
