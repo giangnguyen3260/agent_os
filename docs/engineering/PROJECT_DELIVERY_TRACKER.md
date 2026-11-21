@@ -4,7 +4,36 @@ PM baseline: 5 November 2026 (Asia/Saigon). Repository: `giangnguyen3260/agent_o
 Initial reviewed source: `c4622de9652f8c0a05a63d8c277147642d1d54df`, branch
 `feature/provider-create-retry-after`. Working tree was clean before this document.
 
-## Current delivery checkpoint — 7 November 2026
+## Current delivery checkpoint — 21 November 2026
+
+The latest verified published baseline is Draft [PR #119](https://github.com/giangnguyen3260/agent_os/pull/119), head `4999f939d6c7d043afef4ab68a63af71abe3d3fb`, stacked on #118. A fresh GitHub check on 21 November confirms all six matching workflows succeeded: [Quality](https://github.com/giangnguyen3260/agent_os/actions/runs/44767041862), [Docker/browser](https://github.com/giangnguyen3260/agent_os/actions/runs/44767041812), [TLS Vault](https://github.com/giangnguyen3260/agent_os/actions/runs/44767041931), [options policy](https://github.com/giangnguyen3260/agent_os/actions/runs/44767042048), [SQL evidence](https://github.com/giangnguyen3260/agent_os/actions/runs/44767041961) and [guarded publication](https://github.com/giangnguyen3260/agent_os/actions/runs/44767041959). PR remains open/draft/unmerged, with no GitHub reviews. No deployment evidence is claimed.
+
+The delivered flow is bounded text Task Start → durable worker dispatch → output review → REWORK/explicit Start → ACCEPT, with model authority, managed credentials and budget settlement. PR119's provider acceptance is controlled loopback; genuine OpenAI execution remains an open release gate. General planning/dependency DAGs, tools, operator reconciliation and aggregate Mission completion remain separate scope.
+
+Current delivery: opt-in operator-credential OpenAI execution acceptance, using the managed TLS Vault/browser fixture and unchanged production HTTPS route. Explicit model/rates/cap settings and a dedicated key file are required; default CI remains synthetic. See [execution acceptance instructions](OPENAI_TASK_EXECUTION_FLOW.md#operator-credential-execution-acceptance). The local tree was checked equal to PR119's Git tree before changes. This delivery does not claim a real OpenAI call, merge, deployment or production readiness.
+
+Local validation for this candidate: changed Java sources compiled on Java 21; six operator-setting tests and four existing transport tests passed. The existing RuntimePersistenceTest flow passed with an explicitly preloaded Byte Buddy agent (the first attempt failed because this runtime cannot self-attach). Four shell negative-selection checks failed closed before Docker/key access. Browser test discovery found desktop/tablet/mobile variants; Prettier, Java import checks, Bash/Node syntax and diff checks passed. Docker/Vault and paid OpenAI execution were not run locally; the paid case lacks operator settings/key and local Docker is unavailable. Matching new-head CI remains required.
+
+Next actions:
+1. Validate and publish the opt-in acceptance source/tests/docs as one stacked draft PR; check CI on its exact head.
+2. Run the operator-credential case only with explicitly configured test credentials, reviewed model/rates/cap and public HTTPS egress. Keep the real-provider gate open until it passes; never request key bytes in chat.
+3. Continue the next product scope (planning/dependencies and aggregate Mission completion) after its contract is reviewed; retain UNKNOWN/no-resend and current authority/budget rules.
+
+### PM/BA continuation — bounded single-Task Mission completion
+
+The active feature is now the [single-Task Mission completion contract](MISSION_COMPLETION_CONTRACT.md), sequenced in the [feature delivery plan](DELIVERY_PLAN_2026_11_21.md). Source implements ADMIN assessment and two explicit durable actions: RUNNING/WAITING_APPROVAL → REVIEW → COMPLETED. It requires exactly one Task/Run, the exact accepted plan/configuration, verified latest ACCEPTed output, linked PR119 handoff/request/usage/settlement provenance, and no historical unresolved effects. A successful Task response alone cannot close a Mission.
+
+Implementation includes V052 receipt/audit persistence, side-effect-free no-store assessment, strict ADMIN/CSRF commands, exact fingerprint revalidation and historical same-command replay. The UI provides escaped accepted text with SHA-256 verification, blockers, two confirmations, authority revalidation, route/account fencing and explicit retained-command retry after ambiguous responses. The independent BA review findings were corrected before the final local checkpoint.
+
+Local evidence: 12 new Spring/H2/MockMvc cases and 12 selected runtime/transport/settings regressions passed. The frontend production build/lint, formatting, import and diff checks passed. All 24 browser cases passed with retries disabled using intercepted APIs (desktop/tablet/mobile), not a live backend or OpenAI. See [QC evidence and remaining gates](MISSION_COMPLETION_QC.md). Native PostgreSQL, real-backend browser acceptance, exact-head GitHub CI, merge and deployment are unverified for this new source. Existing publication rejection applies to the earlier seven-file harness submission; no new publication attempt is made for this feature.
+
+The entry point remains a RUNNING/WAITING_APPROVAL Mission with one correctly executed and ACCEPTed Task. Creating a new Mission, generating/accepting a full plan and Mission-wide start/dependency admission remain milestone 3. Do not report a fresh-Mission end-to-end demo as complete.
+
+Next: review/publish the coherent local package when the explicit repository-publication block is resolved, run its matching native/CI gates, then implement the complete-DAG planning/start contract while the operator-credential acceptance gate remains separately tracked.
+
+The dated sections below are historical and do not replace this checkpoint.
+
+## Historical delivery checkpoint — 7 November 2026
 
 This checkpoint governs current delivery status. The dated historical sections
 below preserve earlier evidence and decisions. The latest verified baseline is PR74 head

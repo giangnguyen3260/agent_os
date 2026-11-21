@@ -116,6 +116,19 @@
               teamId,
               'missions',
               missionId,
+              'completion',
+            ]"
+            >Review / hoàn tất Mission</a
+          >
+          <a
+            class="button secondary"
+            [routerLink]="[
+              '/workspace',
+              id,
+              'teams',
+              teamId,
+              'missions',
+              missionId,
               'intake',
             ]"
             >Quản lý nhận task</a
@@ -157,9 +170,10 @@
         </button>
       </div>
       <p id="execution-unavailable" class="caption">
-        Planning, outputs and execution are unavailable. Open a DRAFT task to
-        configure its input or Agent owner. Mission status is saved state.
-        Updated {{ data.generatedAt | date: 'medium' }}.
+        Open a Task to inspect its execution and accepted output. Use Mission
+        completion review for the supported single-Task flow. Planning and
+        Mission execution controls remain unavailable here. Updated
+        {{ data.generatedAt | date: 'medium' }}.
       </p>
       <p class="caption">Mission overview · Scroll down for waiting details</p>
       <div class="actions">

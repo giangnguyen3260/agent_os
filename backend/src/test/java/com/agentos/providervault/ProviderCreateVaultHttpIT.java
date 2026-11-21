@@ -80,6 +80,7 @@ import org.springframework.test.context.DynamicPropertySource;
       "agentos.provider-rotate.http-enabled=true",
       "agentos.provider-access-check.http-enabled=true",
       "agentos.provider-model-discovery.http-enabled=true",
+      "agentos.mission-completion.enabled=true",
       "agentos.execution.openai.enabled=true",
       "agentos.execution.openai.poll-enabled=false",
       "agentos.execution.openai.model=fixture-model-01",
@@ -119,6 +120,14 @@ class ProviderCreateVaultHttpIT {
 
   @DynamicPropertySource
   static void configuration(DynamicPropertyRegistry properties) {
+    if ("true".equals(System.getenv("AGENTOS_OPENAI_EXECUTION_LIVE"))) {
+      var live = OpenAiLiveAcceptance.from(System.getenv());
+      properties.add("agentos.execution.openai.model", live::model);
+      properties.add("agentos.execution.openai.max-output-tokens", () -> "512");
+      properties.add("agentos.execution.openai.input-rate-microusd-per-million", live::inputRate);
+      properties.add("agentos.execution.openai.output-rate-microusd-per-million", live::outputRate);
+      properties.add("agentos.execution.openai.maximum-microusd", live::maximumMicrousd);
+    }
     provisionReader();
     properties.add("spring.flyway.enabled", () -> "false");
     properties.add("spring.datasource.url", () -> required("AGENTOS_TEST_JOURNAL_URL"));
@@ -793,6 +802,17 @@ class ProviderCreateVaultHttpIT {
 
   @Test
   void browserExecutesReworksAndAcceptsTaskUsingManagedVaultCredential() throws Exception {
+    executeVaultTask(null);
+  }
+
+  @Test
+  @EnabledIfEnvironmentVariable(named = "AGENTOS_OPENAI_EXECUTION_LIVE", matches = "true")
+  void browserExecutesReworksAndAcceptsTaskUsingRealOpenAi() throws Exception {
+    executeVaultTask(OpenAiLiveAcceptance.from(System.getenv()));
+  }
+
+  private void executeVaultTask(OpenAiLiveAcceptance live) throws Exception {
+    String model = environment.getRequiredProperty("agentos.execution.openai.model");
     UUID org = UUID.randomUUID(),
         actor = UUID.randomUUID(),
         team = UUID.randomUUID(),
@@ -801,7 +821,9 @@ class ProviderCreateVaultHttpIT {
         agent = UUID.randomUUID();
     var human = seedCheckBrowserAdmin(org, actor, "OpenAI execution");
     UUID connection;
-    try (var body = checkCreateBody(null, Provider.OPENAI, "Execution fixture")) {
+    try (var body =
+        checkCreateBody(
+            live == null ? null : live.keyFile(), Provider.OPENAI, "Execution fixture")) {
       var created = creates.create(human, org, UUID.randomUUID(), body);
       assertThat(created.state()).isEqualTo(WriteState.COMMITTED);
       connection = created.result().receipt().connectionId();
@@ -887,18 +909,20 @@ values(?,?,?,?,0,1,1,?,?,?,?,?,?,?,?,?,'ACCESSIBLE','MODEL_DISCOVERY')
     jdbc.update(
         "insert into"
             + " provider_model_discovery_entries(organization_id,connection_id,check_id,model_ordinal,model_id)"
-            + " values(?,?,?,1,'fixture-model-01')",
+            + " values(?,?,?,1,?)",
         org,
         connection,
-        check);
+        check,
+        model);
     jdbc.update(
         "insert into"
             + " agent_model_bindings(organization_id,agent_id,revision,connection_id,check_id,model_id)"
-            + " values(?,?,1,?,?,'fixture-model-01')",
+            + " values(?,?,1,?,?,?)",
         org,
         agent,
         connection,
-        check);
+        check,
+        model);
     jdbc.update(
         "insert into agent_model_grants(organization_id,agent_id,revision,binding_revision,enabled)"
             + " values(?,?,1,1,true)",
@@ -988,13 +1012,14 @@ values(?,?,?,?,0,1,1,?,?,?,?,?,?,?,?,?,'ACCESSIBLE','MODEL_DISCOVERY')
               java.util.concurrent.ScheduledExecutorService.class,
               boolean.class);
       ctor.setAccessible(true);
-      transportField.set(
-          openAiExecution,
-          ctor.newInstance(
-              URI.create("http://127.0.0.1:" + provider.getAddress().getPort() + "/completion"),
-              Clock.systemUTC(),
-              timer,
-              true));
+      if (live == null)
+        transportField.set(
+            openAiExecution,
+            ctor.newInstance(
+                URI.create("http://127.0.0.1:" + provider.getAddress().getPort() + "/completion"),
+                Clock.systemUTC(),
+                timer,
+                true));
       workers.scheduleWithFixedDelay(
           () -> {
             try {
@@ -1007,19 +1032,21 @@ values(?,?,?,?,0,1,1,?,?,?,?,?,?,?,?,?,'ACCESSIBLE','MODEL_DISCOVERY')
           50,
           TimeUnit.MILLISECONDS);
       try {
-        runConnectionBrowser("openai_execution", org, actor, connection, task);
+        runConnectionBrowser("openai_execution", org, actor, connection, task, live != null);
       } catch (Exception | AssertionError failure) {
         if (failures.get() != null) failure.addSuppressed(failures.get());
         throw failure;
       }
       assertThat(failures.get()).isNull();
-      assertThat(sent.get()).isEqualTo(2);
-      assertThat(authorized.get())
-          .as("Both requests borrow the exact credential created in TLS Vault")
-          .isTrue();
-      assertThat(committed.get())
-          .as("Exact handoff and HELD budget are committed before each provider call")
-          .isTrue();
+      assertThat(sent.get()).isEqualTo(live == null ? 2 : 0);
+      if (live == null) {
+        assertThat(authorized.get())
+            .as("Both requests borrow the exact credential created in TLS Vault")
+            .isTrue();
+        assertThat(committed.get())
+            .as("Exact handoff and HELD budget are committed before each provider call")
+            .isTrue();
+      }
       assertThat(jdbc.queryForObject("select status from tasks where id=?", String.class, task))
           .isEqualTo("COMPLETED");
       assertThat(
@@ -1047,10 +1074,64 @@ values(?,?,?,?,0,1,1,?,?,?,?,?,?,?,?,?,'ACCESSIBLE','MODEL_DISCOVERY')
               jdbc.queryForObject(
                   "select count(*) from execution_budget_reservations b join execution_runs r on"
                       + " r.id=b.run_id where r.task_id=? and b.status='SETTLED' and"
-                      + " b.actual_microusd=13",
+                      + " b.actual_microusd between 0 and ?",
+                  Integer.class,
+                  task,
+                  live == null ? 13 : live.maximumMicrousd()))
+          .isEqualTo(2);
+      assertThat(
+              jdbc.queryForObject(
+                  "select count(*) from execution_model_authorizations a join execution_runs r"
+                      + " on r.id=a.run_id where r.task_id=? and a.handed_off_at is not null",
                   Integer.class,
                   task))
           .isEqualTo(2);
+      if (live == null) {
+        assertThat(
+                jdbc.queryForObject(
+                    "select status from missions where id=?", String.class, mission))
+            .isEqualTo("COMPLETED");
+        assertThat(
+                jdbc.queryForList(
+                    "select action from mission_completion_receipts where organization_id=? and"
+                        + " mission_id=? order by result_control_revision",
+                    String.class,
+                    org,
+                    mission))
+            .containsExactly("SUBMIT_REVIEW", "COMPLETE");
+        assertThat(
+                jdbc.queryForObject(
+                    "select count(*) from mission_completion_receipts where organization_id=? and"
+                        + " mission_id=? and task_id=?",
+                    Integer.class,
+                    org,
+                    mission,
+                    task))
+            .isEqualTo(2);
+        assertThat(
+                jdbc.queryForObject(
+                    "select count(*) from audit_events where organization_id=? and mission_id=? and"
+                        + " event_type in"
+                        + " ('MISSION_COMPLETION_REVIEW_SUBMITTED','MISSION_COMPLETED')",
+                    Integer.class,
+                    org,
+                    mission))
+            .isEqualTo(2);
+        assertThat(
+                jdbc.queryForObject(
+                    "select"
+                        + " has_table_privilege('vault_browser_web','public.mission_completion_receipts','UPDATE')",
+                    Boolean.class))
+            .isFalse();
+      }
+      if (live == null)
+        assertThat(
+                jdbc.queryForObject(
+                    "select sum(b.actual_microusd) from execution_budget_reservations b join"
+                        + " execution_runs r on r.id=b.run_id where r.task_id=?",
+                    Long.class,
+                    task))
+            .isEqualTo(26L);
     } finally {
       workers.shutdownNow();
       workers.awaitTermination(10, TimeUnit.SECONDS);
@@ -1244,6 +1325,12 @@ values(?,?,?,?,0,1,1,?,?,?,?,?,?,?,?,?,'ACCESSIBLE','MODEL_DISCOVERY')
 
   private void runConnectionBrowser(
       String operation, UUID org, UUID actor, UUID connection, UUID draft) throws Exception {
+    runConnectionBrowser(operation, org, actor, connection, draft, false);
+  }
+
+  private void runConnectionBrowser(
+      String operation, UUID org, UUID actor, UUID connection, UUID draft, boolean realProvider)
+      throws Exception {
     Path frontend = Path.of(System.getProperty("user.dir")).toAbsolutePath().resolve("frontend");
     if (!Files.isDirectory(frontend))
       frontend = frontend.getParent().getParent().resolve("frontend");
@@ -1293,6 +1380,15 @@ values(?,?,?,?,0,1,1,?,?,?,?,?,?,?,?,?,'ACCESSIBLE','MODEL_DISCOVERY')
         command.environment().put("PROVIDER_MODEL_DISCOVERY_AGENT", draft.toString());
       if (draft != null && operation.equals("openai_execution")) {
         command.environment().put("PROVIDER_OPENAI_EXECUTION_TASK", draft.toString());
+        command
+            .environment()
+            .put(
+                "PROVIDER_OPENAI_EXECUTION_MODEL",
+                environment.getRequiredProperty("agentos.execution.openai.model"));
+        command
+            .environment()
+            .put("PROVIDER_OPENAI_EXECUTION_REAL_PROVIDER", Boolean.toString(realProvider));
+
         var scope = jdbc.queryForMap("select team_id,mission_id from tasks where id=?", draft);
         command
             .environment()
@@ -1739,6 +1835,8 @@ values(?,?,?,?,0,1,1,?,?,?,?,?,?,?,?,?,'ACCESSIBLE','MODEL_DISCOVERY')
           "grant select,insert,update on"
               + " public.teams,public.missions,public.tasks,public.accepted_mission_plans,public.accepted_mission_plan_tasks,public.mission_execution_controls,public.execution_runs,public.execution_attempts,public.execution_start_dispatch,public.execution_openai_requests,public.execution_claims,public.execution_budget_buckets,public.execution_budget_reservations,public.execution_budget_reservation_buckets,public.execution_model_authorizations,public.execution_model_usage,public.execution_attempt_reconciliations,public.execution_verified_output_content,public.execution_reconciled_review_submissions,public.execution_review_decisions"
               + " to vault_browser_web");
+      statement.execute(
+          "grant select,insert on public.mission_completion_receipts to vault_browser_web");
       statement.execute("grant select,insert on public.audit_events to vault_browser_web");
       statement.execute("grant insert on public.authentication_audit to vault_browser_web");
       statement.execute(

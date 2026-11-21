@@ -2,6 +2,25 @@
 # CI-only disposable Vault. Never point this at an existing project or volume.
 set -euo pipefail
 umask 077
+# Paid provider execution is never part of the default CI suite.
+selection=ProviderCreateVaultHttpIT,ProviderRenameVaultIT
+if [[ "${1:-}" == --openai-execution-live && $# == 1 ]]; then
+  [[ "${AGENTOS_OPENAI_EXECUTION_LIVE:-}" == true ]] || {
+    echo "Real OpenAI execution requires explicit opt-in" >&2; exit 1;
+  }
+  for name in AGENTOS_OPENAI_EXECUTION_KEY_FILE AGENTOS_OPENAI_EXECUTION_MODEL \
+    AGENTOS_OPENAI_EXECUTION_INPUT_RATE AGENTOS_OPENAI_EXECUTION_OUTPUT_RATE \
+    AGENTOS_OPENAI_EXECUTION_MAXIMUM_MICROUSD; do
+    [[ -n "${!name:-}" ]] || { echo "Missing real OpenAI execution setting: $name" >&2; exit 1; }
+  done
+  [[ "$AGENTOS_OPENAI_EXECUTION_KEY_FILE" == /* && -f "$AGENTOS_OPENAI_EXECUTION_KEY_FILE" && -r "$AGENTOS_OPENAI_EXECUTION_KEY_FILE" ]] || {
+    echo "Real OpenAI execution requires a readable absolute key file" >&2; exit 1;
+  }
+  selection=ProviderCreateVaultHttpIT#browserExecutesReworksAndAcceptsTaskUsingRealOpenAi
+elif [[ $# != 0 || "${AGENTOS_OPENAI_EXECUTION_LIVE:-false}" != false ]]; then
+  echo "Use --openai-execution-live with explicit settings for paid acceptance" >&2
+  exit 1
+fi
 scratch=$(mktemp -d)
 project="agentos-vault-ci-${RANDOM}-$$"
 compose=(docker compose -p "$project" -f compose.vault.yaml -f compose.vault-ci.yaml)
@@ -132,5 +151,9 @@ request 200 PUT sys/unseal --data-binary "@$scratch/unseal.json"
 request 200 GET 'agentos/data/provider-credentials/fixture?version=1' -H "@$scratch/app.headers"
 jq -e '.data.data.credential=="synthetic-vault-ci-only" and .data.metadata.version==1' "$scratch/response" >/dev/null
 java_probe restart
-mvn -B -ntp -f backend/pom.xml -Dtest=ProviderCreateVaultHttpIT,ProviderRenameVaultIT test
-echo "Disposable Vault TLS, credential Create, command-only Rename and restart checks passed"
+mvn -B -ntp -f backend/pom.xml "-Dtest=$selection" test
+if [[ "$selection" == *UsingRealOpenAi ]]; then
+  echo "Real OpenAI Task Start, two attempts, usage settlement and browser review acceptance passed"
+else
+  echo "Disposable Vault TLS, credential Create, command-only Rename and restart checks passed"
+fi
