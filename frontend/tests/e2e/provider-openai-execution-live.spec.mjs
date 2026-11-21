@@ -100,6 +100,40 @@ test('Task Start, Vault-backed worker, rework and acceptance use real backend AP
         .click();
   }
   await expect(page.getByRole('main')).toContainText('COMPLETED');
+  if (!realProvider) {
+    await page.goto(
+      `/workspace/${org}/teams/${team}/missions/${mission}/completion`,
+    );
+    await expect(page.getByLabel('Output đã ACCEPT')).toHaveText(
+      'Vault verified task output',
+    );
+    for (const [button, target] of [
+      ['Đưa Mission vào review', 'REVIEW'],
+      ['Hoàn tất Mission', 'COMPLETED'],
+    ]) {
+      await page.getByRole('button', {name: button, exact: true}).click();
+      await page.getByRole('button', {name: 'Xác nhận', exact: true}).click();
+      await expect(
+        page.getByRole('heading', {
+          name: `Trạng thái hiện tại: ${target}`,
+          exact: true,
+        }),
+      ).toBeVisible();
+    }
+    await page.reload();
+    await expect(
+      page.getByRole('heading', {
+        name: 'Trạng thái hiện tại: COMPLETED',
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(page.getByLabel('Output đã ACCEPT')).toHaveText(
+      'Vault verified task output',
+    );
+    await expect(
+      page.getByRole('button', {name: 'Hoàn tất Mission', exact: true}),
+    ).toHaveCount(0);
+  }
   expect(starts).toHaveLength(2);
   expect(starts[0].idempotencyKey).not.toBe(starts[1].idempotencyKey);
 });

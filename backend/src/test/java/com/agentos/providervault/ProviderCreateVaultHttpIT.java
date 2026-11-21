@@ -80,6 +80,7 @@ import org.springframework.test.context.DynamicPropertySource;
       "agentos.provider-rotate.http-enabled=true",
       "agentos.provider-access-check.http-enabled=true",
       "agentos.provider-model-discovery.http-enabled=true",
+      "agentos.mission-completion.enabled=true",
       "agentos.execution.openai.enabled=true",
       "agentos.execution.openai.poll-enabled=false",
       "agentos.execution.openai.model=fixture-model-01",
@@ -1085,6 +1086,44 @@ values(?,?,?,?,0,1,1,?,?,?,?,?,?,?,?,?,'ACCESSIBLE','MODEL_DISCOVERY')
                   Integer.class,
                   task))
           .isEqualTo(2);
+      if (live == null) {
+        assertThat(
+                jdbc.queryForObject(
+                    "select status from missions where id=?", String.class, mission))
+            .isEqualTo("COMPLETED");
+        assertThat(
+                jdbc.queryForList(
+                    "select action from mission_completion_receipts where organization_id=? and"
+                        + " mission_id=? order by result_control_revision",
+                    String.class,
+                    org,
+                    mission))
+            .containsExactly("SUBMIT_REVIEW", "COMPLETE");
+        assertThat(
+                jdbc.queryForObject(
+                    "select count(*) from mission_completion_receipts where organization_id=? and"
+                        + " mission_id=? and task_id=?",
+                    Integer.class,
+                    org,
+                    mission,
+                    task))
+            .isEqualTo(2);
+        assertThat(
+                jdbc.queryForObject(
+                    "select count(*) from audit_events where organization_id=? and mission_id=? and"
+                        + " event_type in"
+                        + " ('MISSION_COMPLETION_REVIEW_SUBMITTED','MISSION_COMPLETED')",
+                    Integer.class,
+                    org,
+                    mission))
+            .isEqualTo(2);
+        assertThat(
+                jdbc.queryForObject(
+                    "select"
+                        + " has_table_privilege('vault_browser_web','public.mission_completion_receipts','UPDATE')",
+                    Boolean.class))
+            .isFalse();
+      }
       if (live == null)
         assertThat(
                 jdbc.queryForObject(
@@ -1796,6 +1835,8 @@ values(?,?,?,?,0,1,1,?,?,?,?,?,?,?,?,?,'ACCESSIBLE','MODEL_DISCOVERY')
           "grant select,insert,update on"
               + " public.teams,public.missions,public.tasks,public.accepted_mission_plans,public.accepted_mission_plan_tasks,public.mission_execution_controls,public.execution_runs,public.execution_attempts,public.execution_start_dispatch,public.execution_openai_requests,public.execution_claims,public.execution_budget_buckets,public.execution_budget_reservations,public.execution_budget_reservation_buckets,public.execution_model_authorizations,public.execution_model_usage,public.execution_attempt_reconciliations,public.execution_verified_output_content,public.execution_reconciled_review_submissions,public.execution_review_decisions"
               + " to vault_browser_web");
+      statement.execute(
+          "grant select,insert on public.mission_completion_receipts to vault_browser_web");
       statement.execute("grant select,insert on public.audit_events to vault_browser_web");
       statement.execute("grant insert on public.authentication_audit to vault_browser_web");
       statement.execute(
