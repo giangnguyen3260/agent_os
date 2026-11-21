@@ -65,6 +65,23 @@ test('accepted diamond graph admits all Runs and releases dependencies after exa
       .getByRole('link', {name: 'Xem trước và Start Run', exact: true})
       .click();
     await expect(page.getByLabel('Request đề xuất')).toContainText(name);
+    if (name === 'Graph B' || name === 'Graph C') {
+      await expect(page.getByLabel('Request đề xuất')).toContainText(
+        'Graph A verified task output',
+      );
+    }
+    if (name === 'Graph D') {
+      await expect(page.getByLabel('Request đề xuất')).toContainText(
+        'Graph B verified task output',
+      );
+      await expect(page.getByLabel('Request đề xuất')).toContainText(
+        'Graph C verified task output',
+      );
+      await expect(page.getByLabel('Request đề xuất')).not.toContainText(
+        'Graph A verified task output',
+      );
+    }
+
     await page
       .getByRole('button', {name: 'Xác nhận Start Task', exact: true})
       .click();
@@ -96,7 +113,7 @@ test('accepted diamond graph admits all Runs and releases dependencies after exa
       .toBe(true);
     await review.click();
     await expect(page.getByLabel('Nội dung kết quả')).toHaveText(
-      'Vault verified task output',
+      name + ' verified task output',
     );
     await page
       .getByRole('button', {name: 'Duyệt kết quả', exact: true})
@@ -124,7 +141,7 @@ test('accepted diamond graph admits all Runs and releases dependencies after exa
     .first()
     .click();
   await expect(page.getByLabel('Nội dung output đã ACCEPT')).toHaveText(
-    'Vault verified task output',
+    'Graph A verified task output',
   );
   for (const [button, status] of [
     ['Đưa Mission vào review', 'REVIEW'],
@@ -155,6 +172,6 @@ test('accepted diamond graph admits all Runs and releases dependencies after exa
     .first()
     .click();
   await expect(page.getByLabel('Nội dung output đã ACCEPT')).toHaveText(
-    'Vault verified task output',
+    'Graph A verified task output',
   );
 });

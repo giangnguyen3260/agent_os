@@ -85,6 +85,7 @@ import org.springframework.test.context.DynamicPropertySource;
       "agentos.mission-plan-acceptance.enabled=true",
       "agentos.mission-graph-admission.enabled=true",
       "agentos.mission-graph-completion.enabled=true",
+      "agentos.execution.dependency-context.enabled=true",
       "agentos.execution.openai.enabled=true",
       "agentos.execution.openai.poll-enabled=false",
       "agentos.execution.openai.model=fixture-model-01",
@@ -992,6 +993,7 @@ values(?,?,?,?,0,1,1,?,?,?,?,?,?,?,?,?,'ACCESSIBLE','MODEL_DISCOVERY')
           scope.getValue());
     }
     var sent = new AtomicInteger();
+    var dependencyContextMatched = new java.util.concurrent.atomic.AtomicBoolean(true);
     var authorized = new java.util.concurrent.atomic.AtomicBoolean(true);
     var committed = new java.util.concurrent.atomic.AtomicBoolean(true);
     var provider =
@@ -1024,10 +1026,42 @@ values(?,?,?,?,0,1,1,?,?,?,?,?,?,?,?,?,'ACCESSIBLE','MODEL_DISCOVERY')
                       org,
                       sha)
                   == 1);
+          String taskTitle =
+              graph
+                  ? json.readTree(request)
+                      .path("messages")
+                      .get(json.readTree(request).path("messages").size() - 1)
+                      .path("content")
+                      .asText()
+                      .split("\n", 2)[0]
+                  : "Vault";
+          if (graph) {
+            var messages = json.readTree(request).path("messages");
+            var expected =
+                taskTitle.equals("Graph A")
+                    ? java.util.Set.<String>of()
+                    : taskTitle.equals("Graph D")
+                        ? java.util.Set.of("Graph B", "Graph C")
+                        : java.util.Set.of("Graph A");
+            var titles = new java.util.HashSet<String>();
+            boolean matched = messages.size() == (expected.isEmpty() ? 2 : 3);
+            if (!expected.isEmpty() && messages.size() == 3) {
+              var context = json.readTree(messages.get(1).path("content").asText());
+              for (var input : context.path("inputs")) {
+                String name = input.path("title").asText();
+                titles.add(name);
+                matched &= input.path("content").asText().equals(name + " verified task output");
+              }
+              matched &=
+                  messages.get(0).path("content").asText().contains("untrusted reference data");
+            }
+            dependencyContextMatched.compareAndSet(true, matched && titles.equals(expected));
+          }
           byte[] response =
               ("{\"id\":\"vault-completion-"
                       + ordinal
-                      + "\",\"object\":\"chat.completion\",\"choices\":[{\"finish_reason\":\"stop\",\"message\":{\"role\":\"assistant\",\"content\":\"Vault"
+                      + "\",\"object\":\"chat.completion\",\"choices\":[{\"finish_reason\":\"stop\",\"message\":{\"role\":\"assistant\",\"content\":\""
+                      + taskTitle
                       + " verified task"
                       + " output\"}}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":3,\"total_tokens\":13}}")
                   .getBytes(StandardCharsets.UTF_8);
@@ -1088,6 +1122,22 @@ values(?,?,?,?,0,1,1,?,?,?,?,?,?,?,?,?,'ACCESSIBLE','MODEL_DISCOVERY')
       assertThat(failures.get()).isNull();
       if (graph) {
         assertThat(sent.get()).isEqualTo(4);
+        assertThat(dependencyContextMatched.get())
+            .as("Provider receives exact direct predecessor outputs as data")
+            .isTrue();
+        assertThat(
+                jdbc.queryForObject(
+                    "select dependency_context_required from mission_graph_admissions where"
+                        + " organization_id=?",
+                    Boolean.class,
+                    org))
+            .isTrue();
+        assertThat(
+                jdbc.queryForObject(
+                    "select count(*) from execution_dependency_contexts where organization_id=?",
+                    Long.class,
+                    org))
+            .isEqualTo(4L);
         assertThat(authorized.get()).isTrue();
         assertThat(committed.get()).isTrue();
         assertThat(
@@ -1946,6 +1996,8 @@ values(?,?,?,?,0,1,1,?,?,?,?,?,?,?,?,?,'ACCESSIBLE','MODEL_DISCOVERY')
           "grant select,insert on public.mission_completion_receipts to vault_browser_web");
       statement.execute(
           "grant select,insert on public.mission_graph_completion_receipts to vault_browser_web");
+      statement.execute(
+          "grant select,insert on public.execution_dependency_contexts to vault_browser_web");
       statement.execute(
           "grant select,insert on"
               + " public.accepted_mission_plan_dependencies,public.mission_plan_acceptance_versions,public.mission_graph_admissions,public.mission_graph_admission_runs,public.mission_graph_dependency_releases"

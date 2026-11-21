@@ -126,9 +126,18 @@ where t.organization_id=? and r.id=? and r.plan_revision=?
                     + " state<>'FINISHED'",
                 run)
             > 0) return null;
+    String contextSha;
+    try {
+      contextSha =
+          ExecutionDependencyContextStore.storedDigest(
+              jdbc, org, run, (UUID) row[12], (String) row[4]);
+    } catch (IllegalStateException e) {
+      return null;
+    }
     var provenance = new StringBuilder(org + "|" + run + "|" + plan);
     for (int i = 0; i < row.length; i++)
       if (i != 2 && i != 11) provenance.append('|').append(row[i]);
+    if (!contextSha.isEmpty()) provenance.append("|dependencyContext:").append(contextSha);
     return new Evidence(
         run,
         (UUID) row[0],
