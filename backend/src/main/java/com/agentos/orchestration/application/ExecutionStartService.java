@@ -11,6 +11,10 @@ import org.springframework.transaction.annotation.Transactional;
 class ExecutionStartService {
   record Receipt(UUID dispatchId, UUID runId, long sourceRevision) {}
 
+  @org.springframework.beans.factory.annotation.Value(
+      "${agentos.mission-graph-admission.enabled:false}")
+  private boolean graphAdmissionEnabled;
+
   private final JdbcTemplate jdbc;
   private final ExecutionReviewDecisionStore authority;
 
@@ -69,6 +73,7 @@ values(?,?,?,?,?,?,?,'QUEUED')
   }
 
   void requireEligible(UUID organization, UUID run, long revision) {
+    new MissionGraphDependencyStore(jdbc, graphAdmissionEnabled).requireStart(organization, run);
     var eligible =
         jdbc.queryForList(
             """

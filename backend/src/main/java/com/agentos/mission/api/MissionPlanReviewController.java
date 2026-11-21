@@ -39,6 +39,11 @@ public class MissionPlanReviewController {
             Boolean.toString(
                 environment.getProperty(
                     "agentos.mission-plan-acceptance.enabled", Boolean.class, false)))
+        .header(
+            "X-AgentOS-Graph-Admission",
+            Boolean.toString(
+                environment.getProperty(
+                    "agentos.mission-graph-admission.enabled", Boolean.class, false)))
         .body(ApiResponse.ok(service.current(organizationId, teamId, missionId, actor)));
   }
 }

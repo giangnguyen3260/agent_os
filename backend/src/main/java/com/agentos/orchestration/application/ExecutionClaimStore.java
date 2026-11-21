@@ -18,6 +18,10 @@ class ExecutionClaimStore {
   private record Claim(
       Token token, OffsetDateTime expiresAt, OffsetDateTime deadline, boolean invalidated) {}
 
+  @org.springframework.beans.factory.annotation.Value(
+      "${agentos.mission-graph-admission.enabled:false}")
+  private boolean graphAdmissionEnabled;
+
   private final JdbcTemplate jdbc;
   private final MissionExecutionControlStore controls;
   private final String wallClockQuery;
@@ -43,6 +47,7 @@ class ExecutionClaimStore {
       OffsetDateTime deadline) {
     lockRun(organization, run, true);
     controls.requireOpen(organization, run);
+    new MissionGraphDependencyStore(jdbc, graphAdmissionEnabled).requireStart(organization, run);
     requireRunningAttempt(run, attempt);
     var previous = latest(organization, run);
     if (previous != null

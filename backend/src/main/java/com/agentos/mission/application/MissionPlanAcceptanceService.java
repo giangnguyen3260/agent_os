@@ -91,6 +91,7 @@ public class MissionPlanAcceptanceService {
           || v.content().getBytes(StandardCharsets.UTF_8).length > 8388608
           || !sha(v.content()).equals(v.sha())) throw new Conflict();
       var r = json.readValue(v.content(), Review.class);
+      MissionPlanSnapshotValidator.requireValid(r);
       if (!org.equals(r.organizationId())
           || !v.team().equals(r.teamId())
           || !v.mission().equals(r.missionId())
@@ -243,6 +244,7 @@ public class MissionPlanAcceptanceService {
     }
     if (previous != null && previous.revision() == Long.MAX_VALUE) throw new Conflict();
     long revision = previous == null ? 1 : previous.revision() + 1;
+    MissionPlanSnapshotValidator.requireValid(now);
     String content;
     try {
       content = json.writeValueAsString(now);
