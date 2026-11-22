@@ -14,6 +14,7 @@ interface Work {
   unknownAttempts: number;
   liveClaims: number;
   unsettledReservations: number;
+  handedOffRequests: number;
 }
 interface Run {
   taskId: string;
@@ -138,6 +139,7 @@ const hash = (v: unknown): v is string =>
       <ul>
         <li>Đã xếp hàng: {{ s.work.queued }}</li>
         <li>Worker đã nhận: {{ s.work.claimed }}</li>
+        <li>Request đã gửi đang chờ kết quả: {{ s.work.handedOffRequests }}</li>
         <li>Attempt đang hoạt động: {{ s.work.activeAttempts }}</li>
         <li>Kết quả request chưa rõ: {{ s.work.unknownDispatches }}</li>
         <li>Attempt chưa rõ: {{ s.work.unknownAttempts }}</li>
@@ -348,6 +350,7 @@ export class MissionExecutionControlsComponent {
         'unknownAttempts',
         'liveClaims',
         'unsettledReservations',
+        'handedOffRequests',
       ].every(
         k =>
           Number.isSafeInteger(s.work[k as keyof Work]) &&
@@ -397,6 +400,7 @@ export class MissionExecutionControlsComponent {
       new Set(s.runs.map(r => r.taskId)).size !== s.runs.length
     )
       return false;
+    if (s.work.handedOffRequests > s.work.claimed) return false;
     const w = s.work,
       drained = w.claimed === 0 && w.activeAttempts === 0 && w.liveClaims === 0,
       reconciled =

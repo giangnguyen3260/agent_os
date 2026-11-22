@@ -7,6 +7,20 @@ test('accepted diamond graph admits all Runs and releases dependencies after exa
   page,
 }) => {
   test.setTimeout(110000);
+  const controlStatuses = [];
+  page.on('close', () =>
+    console.log(
+      'PROVIDER_GRAPH_CONTROL_DIAGNOSTIC statuses=' + controlStatuses.join(','),
+    ),
+  );
+  page.on('response', response => {
+    if (
+      response.request().method() === 'POST' &&
+      new URL(response.url()).pathname.endsWith('/execution-controls')
+    )
+      controlStatuses.push(response.status());
+  });
+
   const org = process.env.PROVIDER_VAULT_ORG,
     team = process.env.PROVIDER_OPENAI_EXECUTION_TEAM,
     mission = process.env.PROVIDER_OPENAI_EXECUTION_MISSION;
@@ -98,6 +112,22 @@ test('accepted diamond graph admits all Runs and releases dependencies after exa
       await page.goto(
         `/workspace/${org}/teams/${team}/missions/${mission}/execution-controls`,
       );
+      await expect
+        .poll(
+          async () => {
+            const refresh = page.getByRole('button', {
+              name: 'Kiểm tra trạng thái hiện tại',
+              exact: true,
+            });
+            if (await refresh.isEnabled().catch(() => false))
+              await refresh.click();
+            return page
+              .getByText('Request đã gửi đang chờ kết quả: 1', {exact: true})
+              .isVisible();
+          },
+          {timeout: 15000},
+        )
+        .toBe(true);
       await expect(
         page.getByRole('button', {name: 'Tạm dừng thực thi', exact: true}),
       ).toBeEnabled();

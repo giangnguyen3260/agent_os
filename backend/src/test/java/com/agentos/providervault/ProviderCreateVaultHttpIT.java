@@ -1709,7 +1709,9 @@ values(?,?,?,?,0,1,1,?,?,?,?,?,?,?,?,?,'ACCESSIBLE','MODEL_DISCOVERY')
                   .filter(
                       line ->
                           line.matches(
-                              "PROVIDER_RENAME_LIVE_DIAGNOSTIC posts=[0-9]+ statuses=[0-9,]*"))
+                              "(?:PROVIDER_RENAME_LIVE_DIAGNOSTIC posts=[0-9]+"
+                                  + " statuses=[0-9,]*|PROVIDER_GRAPH_CONTROL_DIAGNOSTIC"
+                                  + " statuses=[0-9,]*)"))
                   .findFirst()
                   .orElse("");
           throw new AssertionError(

@@ -63,6 +63,7 @@ async function mock(page, options = {}) {
         unknownAttempts: state.unknown,
         liveClaims: state.claimed,
         unsettledReservations: state.unknown,
+        handedOffRequests: state.claimed,
       },
       canPause: live && state.control === 'OPEN',
       canResume: live && state.control === 'PAUSE_REQUESTED' && drained,

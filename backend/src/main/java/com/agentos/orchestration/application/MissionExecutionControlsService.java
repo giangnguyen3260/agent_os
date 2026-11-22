@@ -34,7 +34,8 @@ public class MissionExecutionControlsService {
       int activeAttempts,
       int unknownAttempts,
       int liveClaims,
-      int unsettledReservations) {}
+      int unsettledReservations,
+      int handedOffRequests) {}
 
   public record Run(
       UUID taskId, UUID runId, String title, String taskStatus, String status, String revision) {}
@@ -160,7 +161,16 @@ public class MissionExecutionControlsService {
             "select count(*) from execution_budget_reservations b join execution_runs r on"
                 + " r.id=b.run_id where "
                 + scope
-                + " and b.status<>'SETTLED'"));
+                + " and b.status<>'SETTLED'"),
+        count(
+            org,
+            team,
+            mission,
+            "select count(*) from execution_model_authorizations a join execution_runs r on"
+                + " r.id=a.run_id join execution_start_dispatch d on d.run_id=a.run_id and"
+                + " d.id=a.action_id where "
+                + scope
+                + " and d.state='CLAIMED' and a.handed_off_at is not null"));
   }
 
   private record Reviewed(Snapshot snapshot, String sourceJson, String metadataJson) {}
