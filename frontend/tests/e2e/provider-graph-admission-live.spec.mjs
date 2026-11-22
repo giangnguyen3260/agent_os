@@ -101,14 +101,12 @@ test('accepted diamond graph admits all Runs and releases dependencies after exa
       .getByRole('button', {name: 'Xác nhận Start Task', exact: true})
       .click();
     await expect(page.getByRole('status')).toContainText('Đã ghi nhận Start.');
-    await page
-      .getByRole('link', {
-        name: 'Về lần chạy / kiểm tra trạng thái',
-        exact: true,
-      })
-      .click();
+    const runLink = page.getByRole('link', {name:'Về lần chạy / kiểm tra trạng thái',exact:true});
+    const runPath = await runLink.getAttribute('href');
+    expect(runPath).toMatch(new RegExp('^/workspace/'+org+'/execution-runs/[0-9a-f-]{36}$'));
+    await runLink.click();
+    await expect(page).toHaveURL(new RegExp('/execution-runs/[0-9a-f-]{36}$'));
     if (name === 'Graph A') {
-      const runPath = new URL(page.url()).pathname;
       await page.goto(
         `/workspace/${org}/teams/${team}/missions/${mission}/execution-controls`,
       );

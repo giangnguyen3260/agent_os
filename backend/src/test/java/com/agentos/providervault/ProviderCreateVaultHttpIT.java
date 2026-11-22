@@ -1174,6 +1174,28 @@ values(?,?,?,?,0,1,1,?,?,?,?,?,?,?,?,?,'ACCESSIBLE','MODEL_DISCOVERY')
             live != null);
       } catch (Exception | AssertionError failure) {
         if (failures.get() != null) failure.addSuppressed(failures.get());
+        if (graph) {
+          var states =
+              jdbc.query(
+                  "select"
+                      + " r.status,coalesce(d.state,'NONE'),coalesce(a.status,'NONE'),coalesce(b.status,'NONE')"
+                      + " from execution_runs r left join execution_start_dispatch d on"
+                      + " d.run_id=r.id left join execution_attempts a on a.run_id=r.id left join"
+                      + " execution_budget_reservations b on b.run_id=r.id where"
+                      + " r.organization_id=? and r.mission_id=? order by r.id limit 8",
+                  (rs, n) ->
+                      rs.getString(1)
+                          + "/"
+                          + rs.getString(2)
+                          + "/"
+                          + rs.getString(3)
+                          + "/"
+                          + rs.getString(4),
+                  org,
+                  mission);
+          failure.addSuppressed(
+              new AssertionError("GRAPH_RUNTIME_DIAGNOSTIC states=" + String.join(",", states)));
+        }
         throw failure;
       }
       assertThat(failures.get()).isNull();
