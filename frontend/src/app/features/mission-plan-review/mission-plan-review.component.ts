@@ -136,6 +136,18 @@ const reasons: Record<string, string> = {
       Xem toàn bộ Task, Agent phụ trách và thứ tự phụ thuộc hiện tại. Kế hoạch
       chỉ xác nhận cấu hình; chưa cho phép thực thi.
     </p>
+    <a
+      [routerLink]="[
+        '/workspace',
+        org,
+        'teams',
+        team,
+        'missions',
+        mission,
+        'execution-controls',
+      ]"
+      >Điều khiển thực thi Mission</a
+    >
     <p role="status">{{ busy() ? 'Đang kiểm tra…' : message() }}</p>
     <button (click)="load()" [disabled]="busy()">Tải lại cấu hình</button>
     @if (receipt()) {

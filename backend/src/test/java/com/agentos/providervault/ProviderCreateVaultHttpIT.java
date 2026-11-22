@@ -87,6 +87,7 @@ import org.springframework.test.context.DynamicPropertySource;
       "agentos.mission-graph-completion.enabled=true",
       "agentos.execution.dependency-context.enabled=true",
       "agentos.mission-plan-proposal.enabled=true",
+      "agentos.mission-execution-controls.enabled=true",
       "agentos.execution.openai.enabled=true",
       "agentos.execution.openai.poll-enabled=false",
       "agentos.execution.openai.model=fixture-model-01",
@@ -1015,6 +1016,7 @@ values(?,?,?,?,0,1,1,?,?,?,?,?,?,?,?,?,'ACCESSIBLE','MODEL_DISCOVERY')
     }
     var sent = new AtomicInteger();
     var dependencyContextMatched = new java.util.concurrent.atomic.AtomicBoolean(true);
+    var inFlightPauseMatched = new java.util.concurrent.atomic.AtomicBoolean(false);
     var authorized = new java.util.concurrent.atomic.AtomicBoolean(true);
     var committed = new java.util.concurrent.atomic.AtomicBoolean(true);
     var provider =
@@ -1077,6 +1079,27 @@ values(?,?,?,?,0,1,1,?,?,?,?,?,?,?,?,?,'ACCESSIBLE','MODEL_DISCOVERY')
                   messages.get(0).path("content").asText().contains("untrusted reference data");
             }
             dependencyContextMatched.compareAndSet(true, matched && titles.equals(expected));
+          }
+          if (graph && taskTitle.equals("Graph A")) {
+            long untilPause = System.nanoTime() + TimeUnit.SECONDS.toNanos(25);
+            while (System.nanoTime() < untilPause) {
+              if (jdbc.queryForObject(
+                      "select count(*) from mission_execution_controls where organization_id=? and"
+                          + " mission_id=? and state='PAUSE_REQUESTED'",
+                      Integer.class,
+                      org,
+                      mission)
+                  == 1) {
+                inFlightPauseMatched.set(true);
+                break;
+              }
+              try {
+                Thread.sleep(25);
+              } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                break;
+              }
+            }
           }
           String output =
               taskTitle.equals("Graph D")
@@ -1156,6 +1179,17 @@ values(?,?,?,?,0,1,1,?,?,?,?,?,?,?,?,?,'ACCESSIBLE','MODEL_DISCOVERY')
       assertThat(failures.get()).isNull();
       if (graph) {
         assertThat(sent.get()).isEqualTo(4);
+        assertThat(inFlightPauseMatched.get())
+            .as("Handed-off provider result remains settleable after public PAUSE")
+            .isTrue();
+        assertThat(
+                jdbc.queryForObject(
+                    "select count(*) from mission_execution_control_receipts where"
+                        + " organization_id=? and mission_id=? and action in ('PAUSE','RESUME')",
+                    Long.class,
+                    org,
+                    mission))
+            .isEqualTo(2L);
         assertThat(dependencyContextMatched.get())
             .as("Provider receives exact direct predecessor outputs as data")
             .isTrue();
@@ -2094,7 +2128,7 @@ values(?,?,?,?,0,1,1,?,?,?,?,?,?,?,?,?,'ACCESSIBLE','MODEL_DISCOVERY')
           "grant select,insert on public.mission_graph_completion_receipts to vault_browser_web");
       statement.execute(
           "grant select,insert on"
-              + " public.execution_dependency_contexts,public.mission_plan_proposal_receipts,public.mission_plan_proposal_tasks,public.task_dependencies"
+              + " public.execution_dependency_contexts,public.mission_execution_control_receipts,public.execution_pause_unsent_releases,public.mission_plan_proposal_receipts,public.mission_plan_proposal_tasks,public.task_dependencies"
               + " to vault_browser_web");
       statement.execute(
           "grant select,insert on"

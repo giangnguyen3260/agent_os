@@ -93,6 +93,64 @@ test('accepted diamond graph admits all Runs and releases dependencies after exa
         exact: true,
       })
       .click();
+    if (name === 'Graph A') {
+      const runPath = new URL(page.url()).pathname;
+      await page.goto(
+        `/workspace/${org}/teams/${team}/missions/${mission}/execution-controls`,
+      );
+      await expect(
+        page.getByRole('button', {name: 'Tạm dừng thực thi', exact: true}),
+      ).toBeEnabled();
+      await page
+        .getByRole('button', {name: 'Tạm dừng thực thi', exact: true})
+        .click();
+      await page
+        .getByLabel(
+          'Tôi xác nhận trạng thái hiện tại và tác động của lệnh này.',
+        )
+        .check();
+      await page
+        .getByRole('button', {name: 'Gửi lệnh đã xác nhận', exact: true})
+        .click();
+      await expect(
+        page
+          .getByRole('status')
+          .filter({hasText: 'Đã ghi nhận Tạm dừng thực thi'}),
+      ).toBeVisible();
+      await expect
+        .poll(
+          async () => {
+            const refresh = page.getByRole('button', {
+              name: 'Kiểm tra trạng thái hiện tại',
+              exact: true,
+            });
+            if (await refresh.isEnabled().catch(() => false))
+              await refresh.click();
+            return page
+              .getByRole('button', {name: 'Tiếp tục thực thi', exact: true})
+              .isVisible();
+          },
+          {timeout: 15000},
+        )
+        .toBe(true);
+      await page
+        .getByRole('button', {name: 'Tiếp tục thực thi', exact: true})
+        .click();
+      await page
+        .getByLabel(
+          'Tôi xác nhận trạng thái hiện tại và tác động của lệnh này.',
+        )
+        .check();
+      await page
+        .getByRole('button', {name: 'Gửi lệnh đã xác nhận', exact: true})
+        .click();
+      await expect(
+        page
+          .getByRole('status')
+          .filter({hasText: 'Đã ghi nhận Tiếp tục thực thi'}),
+      ).toBeVisible();
+      await page.goto(runPath);
+    }
     const review = page.getByRole('link', {
       name: 'Duyệt kết quả thực thi',
       exact: true,

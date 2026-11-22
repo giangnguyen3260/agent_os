@@ -1,0 +1,78 @@
+# Governed Mission execution controls v1
+
+Date: 2026-11-22. Proposed public control boundary over the existing runtime store; implementation and test evidence remain separate.
+
+## Scope and lifecycle
+
+An authenticated ADMIN can explicitly PAUSE, RESUME, REQUEST_CANCEL or ACK_CANCEL a full-graph-admitted Mission in RUNNING or WAITING_APPROVAL. All operations require current active organization/Team, validated pinned accepted graph/configuration, complete exact admitted Task/Run mapping and current authority. Unsupported legacy Missions (one-Task graph-admitted Missions remain supported), extra out-of-plan scope and stale configuration fail closed. A default-off `agentos.mission-execution-controls.enabled` capability controls this public API/UI, without disabling enforcement of persisted control states in runtime guards.
+
+PAUSE changes OPEN to PAUSE_REQUESTED; RESUME changes PAUSE_REQUESTED to OPEN. The control commands themselves do not mutate active Attempt/claim/budget evidence. The narrowly defined worker disposition below may restore a proven-unsent paused Run. PAUSE fences new Start/claim/model authorization/handoff using the current existing control checks. It is not confirmation that previously handed-off work stopped. A committed handoff may finish or become uncertain after pause. RESUME permits future explicit Starts and allows already queued, previously authorized Starts to continue. It creates no new Start and never re-enqueues a proven-unsent released dispatch; that case needs a fresh explicit Start.
+
+REQUEST_CANCEL is allowed from OPEN or PAUSE_REQUESTED and irreversibly enters CANCEL_REQUESTED. Eligible unfinished Runs become CANCELLING using the existing store. ACK_CANCEL is a separate reviewed action after all readiness checks; it changes corresponding unfinished Tasks/Runs to CANCELLED and Mission to CANCELLED. Already COMPLETED/CANCELLED Tasks/Runs stay unchanged, and accepted output/usage/accounting history is retained. CANCEL_REQUESTED has no resume/undo transition. CANCELLED is terminal and read-only except historical receipt access.
+
+## Important runtime restriction
+
+The existing cancellation store is not safe as a public arbitrary in-flight abort: it changes active Run/Attempt status to CANCELLING, while `OpenAiExecutionFlow.finish` and `uncertain` first require a currently RUNNING Run/Attempt lease. A status change can prevent normal result settlement and leave HELD resources. V1 must prevent that state rather than expose an unimplemented recovery workflow.
+
+Therefore REQUEST_CANCEL is admitted only at a quiescent boundary: no CLAIMED or UNKNOWN dispatch, no live claim, no nonterminal Attempt (including CREATED/RUNNING/WAITING/UNKNOWN/CANCELLING), and no unsettled budget reservation anywhere in the complete Mission history. Historical Attempts must be SUCCEEDED/FAILED/CANCELLED and every reservation SETTLED. An expired claim does not prove a provider send did not occur; nonterminal Attempt/dispatch/budget evidence still blocks. A handed-off action with complete terminal Attempt, FINISHED dispatch and settled accounting may be historical evidence; any unresolved handed-off action blocks cancellation.
+
+PAUSE remains available while cancellation is blocked, so an ADMIN can fence new work and inspect in-flight/uncertain evidence. This feature does not invent settlement, reconciliation, lease expiry, paid-call recovery, or forced release. UI must explain that unresolved work requires separately verified recovery; elapsed time alone does not make ACK safe.
+
+## Queued Starts and unused work
+
+REQUEST_CANCEL may include QUEUED dispatches only if they are provably unused under organization-first locking and deterministic Run/dispatch locks. Require no Attempt attributable to that dispatch, authorization, handoff, usage or budget reservation; unknown association or missing immutable request evidence fails closed. A CLAIMED dispatch is never reclassified as unused simply because handed_off_at is null.
+
+Retire every such QUEUED dispatch atomically to FINISHED in the REQUEST_CANCEL transaction before entering cancellation. Preserve immutable request/context and original Start receipt; do not delete dispatches or rewrite historical acknowledgment. Record the retired dispatch identities and unused-evidence disposition in the control snapshot/audit/receipt. Runtime must no longer claim them. Old Start replay may return its original dispatch but must not make it runnable again. Roll back retirement if cancellation, receipt or audit fails.
+
+Do not rely on the worker poller to drain the queue before ACK: polling may be disabled or unavailable. Rejecting every QUEUED Start without a public retirement path would strand the intended cancellation workflow and is not the delivered v1 behavior.
+
+For PAUSE, the poller selects only OPEN controls: paused QUEUED dispatches remain intact and cannot claim. RESUME does not create a replacement dispatch or resend a finished/unknown one; an existing never-claimed QUEUED dispatch can become eligible for its original single claim after resume. A worker that selected a job before pause must recheck the current control when handling claim denial and retain the queued job if pause is the reason, rather than route it through generic rejection. No poll is required for REQUEST_CANCEL to retire unused queued work.
+
+Pause between worker claim/authorization or authorization/handoff may cause a known-unsent failure. Only when `sent=false`, current control is PAUSE_REQUESTED, the exact current dispatch/Run/Attempt/token/fence still matches, no handoff or usage exists, and zero settlement is proven may the worker atomically settle its HELD reservation to zero (if present), invalidate that claim, finish the original dispatch, mark the Attempt FAILED with its terminal outcome slot, and restore Run CREATED/Task READY at a strictly newer bounded revision. Preserve the original dispatch/request/context/Start receipt and record a distinct paused-unsent disposition. A fresh explicit preflight/Start after resume creates the next Attempt; historical replay never does. Failed proof, expired or superseded ownership and revision overflow fail closed without rewriting newer state. Known-sent, ambiguous-handoff and UNKNOWN outcomes retain existing accounting/recovery behavior. Never fabricate zero usage for a possible send.
+
+To prevent a rapid PAUSE→RESUME from bypassing this paused-only worker restoration and stranding an unsent FAILED/BLOCKED Run, RESUME must block while any CLAIMED dispatch remains. The paused worker drains its proven-unsent claim, or a committed handoff finishes through its existing path, before resume can win. Expose this drain blocker in the UI. An alternative implementation needs equally strong persisted pause-cause proof; current OPEN state alone cannot establish that a transient pause did not cause the failure.
+
+## ACK_CANCEL prerequisites
+
+ACK requires CANCEL_REQUESTED and the same current graph/configuration/full mapping validation as other new commands. Every Run is CANCELLING, COMPLETED or CANCELLED. Every Attempt in full history is terminal; no live claim exists; every budget reservation is SETTLED; every dispatch is FINISHED. Missing/extra scope, UNKNOWN dispatches or reservations, HELD money, expired-but-unresolved Attempts, and inconsistent Task/Run status pairs block acknowledgment. All expected cancellable Tasks must map one-to-one to CANCELLING Runs. Do not cancel unrelated Tasks, silently drop graph edges, create outputs, change accepted history or interpret zero rows as readiness.
+
+Revalidate immediately before lifecycle writes under the shared organization lock. Reserve Run revision headroom for every CANCELLING-to-CANCELLED increment; guard every affected Run update with explicit revision bounds and verify row counts. ACK must not overflow or partially cancel scope. CANCELLING Runs created by this feature need no active Attempt reconciliation, because REQUEST_CANCEL admitted only terminal/absent Attempts.
+
+## Revisions, snapshots and commands
+
+Use a side-effect-free ADMIN GET assessment with current control revision/state, Mission status, pinned plan/source digest, complete bounded mapping and current Run/Task revisions, dispatch states and handoff evidence, Attempt statuses, active/expired claims and all unsettled budgets. Do not expose credential values or raw output/request aggregates. Show in-flight, unused-queued, settled and unknown work explicitly; empty lists must not hide query truncation. Existing graph bounds remain 1..200 Tasks/1000 edges. Bound additional history read sizes and return explicit blockers on overflow, never partial readiness.
+
+Assessment returns per-action eligibility/blockers and action-specific SHA-256 fingerprints. Include domain/schema version, scope, selected admitted revision/configuration digest, exact complete relevant runtime/accounting evidence, expected control state/revision, requested action, and precise unused queue disposition. A fresh command cannot use a fingerprint for another action or mutable state. A clock-sensitive active-claim classification must be revalidated; do not hash the current clock so otherwise equal snapshots remain deterministic.
+
+POST takes a strict action enum, canonical UUID idempotency key and expected fingerprint. Reject duplicate/unknown fields, coercions, malformed UUID/hash and trailing input. Use session CSRF and fresh account/credential/membership ADMIN checks. Acquire locks in existing organization-first lifecycle order, re-read exact snapshot and validate action eligibility, then CAS control revision and action state, affected Runs/Tasks and queue disposition in one transaction with receipt/audit. Provider transports are never invoked.
+
+Control revision needs future terminal headroom. PAUSE/RESUME must leave at least two increments for REQUEST_CANCEL and ACK: current revision <= MAX-3, resulting revision <= MAX-2. REQUEST_CANCEL requires current <= MAX-2 and results <= MAX-1. ACK permits current <= MAX-1 and may result MAX only with terminal CANCELLED Mission. REQUEST_CANCEL also reserves two increments for every affected unfinished Run (request and ack): Run revision <= MAX-2. Completed/CANCELLED historical Runs need no increment. Guard existing store SQL against overflow; preflight checks alone are not an SQL invariant. Terminal MAX snapshots and historical receipts remain readable. No public same-state no-op increments or bypass of CANCEL_REQUESTED through a new key.
+
+## Receipts and historical replay
+
+Introduce a migration with immutable scoped control command receipts, unique organization/actor/idempotency key, command SHA, action, before/after control state/revision, canonical reviewed snapshot and snapshot SHA, original response and SHA, affected Run/Task revisions and retired dispatch evidence. Scoped foreign keys must bind the Mission and any normalized mappings to the same organization/Team. Audit attributes the human action and hashes/identities without raw private payloads.
+
+Exact actor/key/command historical replay follows current authority and stored receipt integrity validation before mutable lifecycle/configuration/headroom gates. It returns the stored response after later resume/cancellation/completion and never resets controls, recreates queue work, changes revisions, makes provider calls or repeats lifecycle writes. Changed action/fingerprint/scope under the same key conflicts. Different keys racing the same fingerprint have one winner. Feature-disabled routing may deny access; it must not weaken persisted control fences.
+
+GET receipt read requires current ADMIN and validates stored scope/digests/mapping independently of current lifecycle. It represents a historical command acknowledgment, not a claim that a paused Mission has no provider work or that an old OPEN receipt is current authority.
+
+## UI and validation
+
+Expose controls on admitted Mission workspace with current state/revision, concise per-action blockers and explicit confirmation of the exact reviewed action. Refresh authority and assessment before enabling confirmation; expire stale previews and invalidate on focus/configuration changes. Preserve an ambiguous pending command only in memory and retry exactly the same body/key. Treat definitive authorization/conflict errors separately from uncertain transport outcomes. Reload current state after success; retain links to immutable command receipt and relevant Run recovery evidence.
+
+Explain PAUSE as fencing future work, RESUME as permitting explicit Starts, REQUEST_CANCEL as irreversible quiescent cancellation request, and ACK_CANCEL as verified terminal closure. Do not label PAUSE as provider cancellation, use CANCEL as a budget refund, offer automatic retries, or conceal UNKNOWN/HELD work. Never mutate or terminate provider processes from the browser.
+
+Definition of done:
+
+- Pause/resume with no work, queued work, active pre-handoff and committed handoff; no new provider send after a winning fence, existing committed handoff may settle, and resume never resends an old receipt.
+- Actual Start/claim/authorize/handoff races serialize with commands. Tests inspect persisted rows and transport counts, including paused-and-resumed authorization control-revision mismatch.
+- Quiescent graph cancellation retires unused queued dispatches without polling; BLOCKED/READY/IN_REVIEW terminal-Attempt Runs cancel safely, completed outputs remain immutable, and distinct REQUEST_CANCEL/ACK confirmations close all required scope atomically.
+- CLAIMED, unresolved handoff, live/expired unresolved claims, nonterminal Attempts, HELD/UNKNOWN reservations, UNKNOWN/unfinished dispatches, legacy/stale/extra graph scope and history overflow block the appropriate cancel/ack action with no partial writes.
+- Control and Run MAX boundaries, immutable receipt replay after terminal lifecycle, same/different-key races, revoked/disabled actor, CSRF/strict-wire denial, actual DB receipt/audit failure rollback and retained original Start replay are covered.
+- Native PostgreSQL validates actual constraints/transactions; mocked browser validates action wording, blockers, exact pending retry, current authority, malformed snapshot/receipt and mobile review. Controlled backend/provider fixture verifies no extra send during controls and cancellation of unused queued work with polling disabled. Real paid-provider execution and publication remain outside this feature.
+
+## Implemented evidence bounds
+
+Each preview fingerprint binds a canonical metadata manifest of exact dispatches, Attempts, claim/fence/lease timestamps at full database precision, reservations, authorizations/handoffs, recorded usage, outcome reconciliations and hashes of stored request bodies. No raw request/output/credential enters this manifest. The immutable reviewed snapshot, canonical fingerprint source and metadata manifest are stored together with SHA-256 in the control receipt transaction and validated on historical read/replay. A scoped current-ADMIN receipt/snapshot reread exposes the reviewed state without applying it again.
+
+V1 bounds: 200 graph Runs, 200 queued dispatches, 2000 historical rows per manifest category, 512 KiB canonical metadata and 2 MiB expanded receipt snapshot. Exceeding a bound returns a safe conflict; it neither applies part of a command nor assumes missing history is settled. Pause leaves room for Resume plus Request/ACK cancellation; Resume leaves room for Request/ACK; cancellation requires two remaining nonterminal Run revisions. Inconsistent Task/Run state pairs reject all new control changes until reconciled.
