@@ -630,6 +630,8 @@ where b.organization_id=? and b.opens_at<=current_timestamp and b.closes_at>curr
             """
 select d.organization_id,d.id,d.run_id,d.actor_id,d.actor_credential_version,q.connection_id,q.credential_revision,q.model_id,q.request_body,q.request_sha256,q.max_output_tokens,q.maximum_microusd,q.input_rate,q.output_rate
 from execution_start_dispatch d join execution_openai_requests q on q.dispatch_id=d.id
+join execution_runs r on r.id=d.run_id
+join mission_execution_controls c on c.organization_id=r.organization_id and c.team_id=r.team_id and c.mission_id=r.mission_id and c.state='OPEN'
 where d.state='QUEUED' order by d.created_at,d.id limit 1
 """,
             (rs, n) ->
@@ -726,6 +728,15 @@ where d.state='QUEUED' order by d.created_at,d.id limit 1
           s -> {
             jdbc.queryForList(
                 "select id from organizations where id=? for update", UUID.class, job.org());
+            if (jdbc.queryForObject(
+                    "select count(*) from mission_execution_controls c join execution_runs r on"
+                        + " r.organization_id=c.organization_id and r.team_id=c.team_id and"
+                        + " r.mission_id=c.mission_id where r.organization_id=? and r.id=? and"
+                        + " c.state='PAUSE_REQUESTED'",
+                    Long.class,
+                    job.org(),
+                    job.run())
+                > 0) return;
             if (jdbc.update(
                     "update execution_start_dispatch set state='FINISHED' where id=? and"
                         + " state='QUEUED'",
@@ -781,6 +792,9 @@ where d.state='QUEUED' order by d.created_at,d.id limit 1
       tx.executeWithoutResult(
           s -> {
             claims.requireCurrent(token);
+            if (!sent
+                && new ExecutionPausedDispatchStore(jdbc, claims, budgets)
+                    .releaseUnsent(token, job.dispatch())) return;
             if (sent) budgets.markUnknown(job.org(), job.run(), job.dispatch());
             else if (!jdbc.queryForList(
                     "select action_id from execution_budget_reservations where run_id=? and"

@@ -34,6 +34,7 @@ on:
       - frontend/tests/e2e/provider-model-discovery-live.spec.mjs
       - frontend/tests/e2e/provider-openai-execution-live.spec.mjs
       - frontend/tests/e2e/provider-graph-admission-live.spec.mjs
+      - frontend/src/app/features/mission-execution-controls/**
       - frontend/src/app/features/mission-plan-proposal/**
       - backend/src/main/java/com/agentos/mission/**
       - frontend/src/app/features/mission-plan-review/**
