@@ -44,7 +44,8 @@ public class MissionGraphCompletionService {
       String manifestSha256,
       List<String> blockers,
       Action action,
-      String fingerprint) {}
+      String fingerprint,
+      ExecutionReviewService.Accounting accounting) {}
 
   public record Receipt(
       UUID organizationId,
@@ -229,7 +230,8 @@ public class MissionGraphCompletionService {
         manifest,
         List.copyOf(blockers),
         action,
-        fingerprint);
+        fingerprint,
+        new RecordedAccountingStore(jdbc).mission(org, team, mission));
   }
 
   @Transactional

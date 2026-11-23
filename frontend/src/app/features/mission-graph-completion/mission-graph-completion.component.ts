@@ -23,7 +23,16 @@ interface Output {
   requestSha256: string;
   provenanceSha256: string;
 }
+interface Accounting {
+  settledMicrousd: string;
+  heldMicrousd: string;
+  unknownMicrousd: string;
+  unresolvedReservations: string;
+  inputTokens: string;
+  outputTokens: string;
+}
 interface Snapshot {
+  accounting?: Accounting;
   organizationId: string;
   teamId: string;
   missionId: string;
@@ -101,6 +110,21 @@ const revision = (x: unknown): x is string =>
         Kế hoạch {{ s.planRevision }} · {{ s.outputs.length }} /
         {{ s.taskCount }} đầu ra hợp lệ
       </p>
+      @if (s.accounting; as cost) {
+        <h2>Chi phí toàn Mission đã ghi nhận</h2>
+        <p>Đã đối soát: {{ usd(cost.settledMicrousd) }} USD</p>
+        <p>Đang giữ chỗ: {{ usd(cost.heldMicrousd) }} USD</p>
+        <p>Giữ cho kết quả UNKNOWN: {{ usd(cost.unknownMicrousd) }} USD</p>
+        <p>Khoản chưa đối soát: {{ cost.unresolvedReservations }}</p>
+        <p>
+          Input token: {{ cost.inputTokens }} · Output token:
+          {{ cost.outputTokens }}
+        </p>
+        <p>
+          Bao gồm toàn bộ lịch sử Run của Mission; khoản chưa đối soát chưa phải
+          chi phí cuối cùng.
+        </p>
+      }
       @if (s.blockers.length) {
         <p>
           Chưa đủ điều kiện: toàn bộ Task trong kế hoạch phải có đầu ra ACCEPT
@@ -157,6 +181,10 @@ const revision = (x: unknown): x is string =>
   </main>`,
 })
 export class MissionGraphCompletionComponent {
+  usd(value: string): string {
+    const n = BigInt(value);
+    return `${n / 1000000n}.${(n % 1000000n).toString().padStart(6, '0')}`;
+  }
   downloadUrl(o: Output): string {
     return `/api/v1/organizations/${this.org}/teams/${this.team}/missions/${this.mission}/graph-completion/outputs/${o.runId}/download?attemptId=${o.attemptId}&outputSha256=${o.outputSha256}`;
   }
@@ -256,6 +284,22 @@ export class MissionGraphCompletionComponent {
   private valid(s: Snapshot) {
     return (
       !!s &&
+      (s.accounting === undefined ||
+        (!!s.accounting &&
+          [
+            'settledMicrousd',
+            'heldMicrousd',
+            'unknownMicrousd',
+            'unresolvedReservations',
+            'inputTokens',
+            'outputTokens',
+          ].every(
+            k =>
+              typeof s.accounting![k as keyof Accounting] === 'string' &&
+              /^(0|[1-9][0-9]{0,99})$/.test(
+                s.accounting![k as keyof Accounting],
+              ),
+          ))) &&
       s.organizationId === this.org &&
       s.teamId === this.team &&
       s.missionId === this.mission &&

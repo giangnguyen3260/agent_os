@@ -25,6 +25,8 @@ on:
       - compose.vault.yaml
       - docker/vault/**
       - scripts/check-vault-local.sh
+      - scripts/vault-restart-readiness.sh
+      - scripts/test-vault-restart-readiness.py
       - .github/workflows/vault-local.yml
       - frontend/src/app/features/provider-connections/**
       - frontend/tests/e2e/provider-create-live.spec.mjs
@@ -72,5 +74,7 @@ jobs:
           docker pull hashicorp/vault:2.1.2
           image=$(docker image inspect hashicorp/vault:2.1.2 --format '{{index .RepoDigests 0}}')
           echo "AGENTOS_VAULT_IMAGE=$image" >> "$GITHUB_ENV"
+      - name: Restart readiness probe checks
+        run: python3 scripts/test-vault-restart-readiness.py
       - name: Real disposable Vault integration
         run: bash scripts/check-vault-local.sh

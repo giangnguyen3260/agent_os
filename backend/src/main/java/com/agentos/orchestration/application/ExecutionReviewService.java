@@ -100,34 +100,7 @@ public class ExecutionReviewService {
   }
 
   private Accounting accounting(UUID run) {
-    var costs =
-        jdbc.queryForMap(
-            "select coalesce(sum(case when status='SETTLED' then cast(actual_microusd as numeric)"
-                + " else 0 end),0) as settled,coalesce(sum(case when status='HELD' then"
-                + " cast(reserved_microusd as numeric) else 0 end),0) as held,coalesce(sum(case"
-                + " when status='UNKNOWN' then cast(reserved_microusd as numeric) else 0 end),0) as"
-                + " unknown_amount,count(case when status<>'SETTLED' then 1 end) as unresolved from"
-                + " execution_budget_reservations where run_id=?",
-            run);
-    var usage =
-        jdbc.queryForMap(
-            "select coalesce(sum(cast(input_tokens as numeric)),0) as"
-                + " input,coalesce(sum(cast(output_tokens as numeric)),0) as output from"
-                + " execution_model_usage where run_id=?",
-            run);
-    return new Accounting(
-        integer(costs.get("settled")),
-        integer(costs.get("held")),
-        integer(costs.get("unknown_amount")),
-        integer(costs.get("unresolved")),
-        integer(usage.get("input")),
-        integer(usage.get("output")));
-  }
-
-  private String integer(Object n) {
-    var value = new java.math.BigDecimal(n.toString()).toBigIntegerExact();
-    if (value.signum() < 0) throw new IllegalStateException("Accounting unavailable");
-    return value.toString();
+    return new RecordedAccountingStore(jdbc).run(run);
   }
 
   @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
