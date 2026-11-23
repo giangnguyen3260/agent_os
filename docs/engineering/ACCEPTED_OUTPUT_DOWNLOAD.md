@@ -1,0 +1,7 @@
+# Accepted output downloads
+
+23 November 2026. An authenticated current ADMIN can download one exact graph-plan accepted Run/Attempt output from the graph completion screen. The GET route appends `/download` to the existing scoped output URL and requires the exact attemptId/outputSha256. It delegates to the same fresh accepted/settled evidence verifier as output inspection; it grants no new read scope and writes no lifecycle/provider state.
+
+Response is bounded by the existing262144-byte verified output limit, encoded as UTF-8 text/plain, attachment with server-owned UUID filename, no-store and nosniff. The response includes X-AgentOS-Output-SHA256. Task titles and model text never enter the filename or headers. The browser link uses native authenticated navigation, and authorization/provenance are rechecked at request time, including after a stale page or role revocation. No presigned/public URL, cache, ZIP, model invocation or generic artifact capability is introduced.
+
+Local validation:13 graph completion integration cases passed, including the new HTTP download test for exact bytes/headers, wrong Attempt, content tamper and fresh MEMBER denial. The same new test is inherited by the explicitly selected required MissionGraphCompletionPostgresIT suite. Browser coverage checks exact scoped identity in the download link alongside retained graph completion/output cases. Native matching-head results remain pending CI at publication. Stacked on PR127 head7f3b6dd60a91759e48426e036723844d5dee59fa, whose six workflows passed. No merge or deployment.

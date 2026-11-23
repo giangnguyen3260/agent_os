@@ -121,6 +121,7 @@ const revision = (x: unknown): x is string =>
           <p>
             Output: <code>{{ o.outputSha256 }}</code>
           </p>
+          <a [href]="downloadUrl(o)" download>Tải output đã ACCEPT (.txt)</a>
           <button (click)="readOutput(o)" [disabled]="busy()">
             Xem output đã ACCEPT
           </button>
@@ -156,6 +157,9 @@ const revision = (x: unknown): x is string =>
   </main>`,
 })
 export class MissionGraphCompletionComponent {
+  downloadUrl(o: Output): string {
+    return `/api/v1/organizations/${this.org}/teams/${this.team}/missions/${this.mission}/graph-completion/outputs/${o.runId}/download?attemptId=${o.attemptId}&outputSha256=${o.outputSha256}`;
+  }
   private readonly http = inject(HttpClient);
   private readonly auth = inject(AuthService);
   private readonly route = inject(ActivatedRoute);

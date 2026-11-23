@@ -609,4 +609,51 @@ class MissionGraphCompletionIntegrationTest {
     assertThat(current(s).status()).isEqualTo("COMPLETED");
     assertThat(current(s).blockers()).isEmpty();
   }
+
+  @Test
+  void downloadRequiresExactFreshAcceptedEvidenceAndCurrentAdmin() throws Exception {
+    var s = completed();
+    var item = current(s).outputs().getFirst();
+    String path =
+        "/api/v1/organizations/"
+            + s.org()
+            + "/teams/"
+            + s.team()
+            + "/missions/"
+            + s.mission()
+            + "/graph-completion/outputs/"
+            + item.runId()
+            + "/download";
+    var auth = authentication(new UsernamePasswordAuthenticationToken(s.human(), null, List.of()));
+    var request =
+        org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(path)
+            .param("attemptId", item.attemptId().toString())
+            .param("outputSha256", item.outputSha256())
+            .with(auth);
+    var response = mvc.perform(request).andExpect(status().isOk()).andReturn().getResponse();
+    assertThat(response.getContentAsByteArray())
+        .isEqualTo("Verified output".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    assertThat(response.getHeader("Cache-Control")).isEqualTo("no-store");
+    assertThat(response.getHeader("X-Content-Type-Options")).isEqualTo("nosniff");
+    assertThat(response.getHeader("X-AgentOS-Output-SHA256")).isEqualTo(item.outputSha256());
+    assertThat(response.getHeader("Content-Type"))
+        .contains("text/plain")
+        .containsIgnoringCase("utf-8");
+    assertThat(response.getHeader("Content-Disposition"))
+        .isEqualTo(
+            "attachment; filename=\"accepted-" + item.runId() + "-" + item.attemptId() + ".txt\"");
+    mvc.perform(
+            org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(path)
+                .with(auth)
+                .param("attemptId", UUID.randomUUID().toString())
+                .param("outputSha256", item.outputSha256()))
+        .andExpect(status().isConflict());
+    jdbc.update(
+        "update execution_verified_output_content set content='changed' where run_id=?",
+        item.runId());
+    mvc.perform(request).andExpect(status().isConflict());
+    jdbc.update(
+        "update organization_memberships set role='MEMBER' where account_id=?", s.human().id());
+    mvc.perform(request).andExpect(status().isForbidden());
+  }
 }
