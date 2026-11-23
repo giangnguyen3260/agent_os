@@ -20,7 +20,15 @@ interface Accounting {
   inputTokens: string;
   outputTokens: string;
 }
+interface Dispatch {
+  id: string;
+  state: string;
+  sourceRevision: string;
+  createdAt: string;
+  handedOff: boolean;
+}
 interface Run {
+  dispatches?: Dispatch[];
   accounting?: Accounting;
   id: string;
   teamId: string;
@@ -108,6 +116,46 @@ interface Run {
             Số liệu từ ledger và usage đã ghi nhận; khoản chưa đối soát chưa
             phải chi phí cuối cùng.
           </p>
+        }
+        @if (run.dispatches; as commands) {
+          <h2>100 lệnh Start gần nhất</h2>
+          <p>
+            FINISHED biểu thị lệnh đã kết thúc xử lý; xem trạng thái Attempt và
+            output để biết kết quả.
+          </p>
+          @for (d of commands; track d.id) {
+            <article>
+              <p>
+                {{ d.id }} · {{ d.state }} · Phiên bản nguồn
+                {{ d.sourceRevision }}
+              </p>
+              <p>
+                {{ d.createdAt }} ·
+                {{
+                  d.handedOff
+                    ? 'Đã ghi nhận handoff tới provider'
+                    : 'Chưa ghi nhận handoff tới provider'
+                }}
+              </p>
+              @if (d.state === 'QUEUED') {
+                <p>
+                  Đang chờ worker nhận lệnh; kiểm tra điều khiển thực thi
+                  Mission.
+                </p>
+              }
+              @if (d.state === 'CLAIMED') {
+                <p>Worker đã nhận lệnh; chờ kết quả hoặc đối soát.</p>
+              }
+              @if (d.state === 'UNKNOWN') {
+                <p>
+                  Kết quả request chưa rõ. Cần đối soát trước khi quyết định
+                  chạy lại.
+                </p>
+              }
+            </article>
+          } @empty {
+            <p>Chưa có lệnh Start được ghi nhận.</p>
+          }
         }
         <h2>100 attempt gần nhất</h2>
         <ul>
@@ -210,6 +258,25 @@ export class ExecutionRunComponent {
       if (!active()) return;
       if (
         !data ||
+        (data.dispatches !== undefined &&
+          (!Array.isArray(data.dispatches) ||
+            data.dispatches.length > 100 ||
+            new Set(data.dispatches.map(d => d.id)).size !==
+              data.dispatches.length ||
+            data.dispatches.some(
+              d =>
+                !d ||
+                !uuid(d.id) ||
+                !['QUEUED', 'CLAIMED', 'UNKNOWN', 'FINISHED'].includes(
+                  d.state,
+                ) ||
+                typeof d.sourceRevision !== 'string' ||
+                !/^(0|[1-9][0-9]{0,18})$/.test(d.sourceRevision) ||
+                BigInt(d.sourceRevision) > 9223372036854775807n ||
+                typeof d.createdAt !== 'string' ||
+                !Number.isFinite(Date.parse(d.createdAt)) ||
+                typeof d.handedOff !== 'boolean',
+            ))) ||
         (data.accounting !== undefined &&
           (!data.accounting ||
             ![
