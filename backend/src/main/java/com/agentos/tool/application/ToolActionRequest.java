@@ -13,4 +13,9 @@ public record ToolActionRequest(
     String capability,
     String actionType,
     Map<String, Object> payload,
-    String idempotencyKey) {}
+    String idempotencyKey) {
+  @Override
+  public String toString() {
+    return "ToolActionRequest[redacted]";
+  }
+}

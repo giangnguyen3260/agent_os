@@ -1,0 +1,31 @@
+# Scoped text.metrics v1 — first local Tool runtime boundary
+
+This opt-in slice implements a pinned built-in tool and human grant management, not autonomous Skill execution or model-directed Tool calling. Enable `agentos.tools.text-metrics.enabled=true` together with the existing graph admission features to assemble the positive gateway. Default configuration retains StubToolGateway; the request-only ToolGateway API always rejects, including when the positive adapter is assembled. No HTTP endpoint accepts a lease or executes this tool. Connecting the trusted worker to propose/approve/invoke tools remains a separate milestone.
+
+## Operation and authority
+
+Tool ID `91000000-0000-4000-8000-000000000001`, code catalog `text.metrics`, immutable version 1, capability `text:inspect`, action `INSPECT`. Payload is exactly one String field `text`, valid UTF-8, at most 8192 encoded bytes. No URLs, executable catalog text, external service, filesystem, arbitrary operation or raw output. Results contain tool/version, input SHA256, UTF-8 byte count, Unicode code point count and line count. Empty text has zero lines; otherwise lines equal one plus LF count, including a trailing empty line. CR has no special line semantics.
+
+The package-scoped transactional overload accepts only the trusted server's current ExecutionClaimStore.Token. It rechecks Run/Attempt/worker/fence/lease, graph-admission flag, exact pinned configuration and accepted prerequisite proofs, organization/Team/Agent ACTIVE, Mission/Task/Run RUNNING, matching configured owner and OPEN control. Scope supplied in a ToolActionRequest must match the authoritative Run. Requested Skills/Tools text never grants authority. Unsupported actions and request-only calls deny generically; request toString is redacted.
+
+Each new call requires exactly one current unrevoked, unexpired version-1 grant for this organization/Team/Mission/Agent. Organization-first serialization orders execution with grant mutation and pause. Grant expiry and lease are checked again before recording the calculation. Revocation or regrant blocks replay under old grant identity. Scope and immutable key alone confer no authority.
+
+## Resource and effect evidence
+
+A new call reserves 1 microUSD temporarily through the existing four-scope budget/capacity store, then settles actual expense to zero. This is a capacity admission convention for a free local operation, not a model charge or token measurement. It requires configured budgets and capacity even if local compute is free; it can compete with other admitted work. No model-usage row is synthesized.
+
+Calculation, resource settlement and text_tool_effects evidence commit in one short transaction or all roll back. Effect rows retain exact claim/grant/reservation identity, request/input hashes, counts and recorded time, never raw text. Exact same-key replay rechecks current runtime/grant authority, verifies saved counts against the exact input and returns without a second admission. Changed request/claim/grant under a reused key denies. Concurrent same-key calls serialize on the organization lock. No outbound effects or UNKNOWN tool effects are created by this purely local transaction. A lost response can be retried only by the trusted worker with the same exact request and current authority.
+
+## Human management API and UI
+
+GET/POST `/api/v1/organizations/{org}/teams/{team}/missions/{mission}/text-tool-grants/{agent}`. Every read requires fresh credential-version-matching current ADMIN and exact scoped Mission/Agent. Writes require ADMIN, CSRF, and strict JSON `{idempotencyKey,operation,expectedFingerprint}`. ISSUE and REVOKE only; unknown, duplicate, omitted, null, coerced or trailing fields reject. No arbitrary TTL, version or capability input.
+
+ISSUE requires ACTIVE organization/Team/Agent and Mission CREATED/PLANNING/READY/RUNNING, no live grant and the exact current fingerprint. It creates a fixed one-hour grant. REVOKE permanently stamps the selected unrevoked grant, including after expiry or parent inactivity. Fresh context/fingerprint is required. Grant rows retain issuer/revoker/times; separate hash-verified management receipts retain operation, actor/key, scope, grant and recorded time. Same exact request replays historical receipt after fresh ADMIN check without requiring current eligible scope. Reusing a key for another command conflicts. Receipt is not current effective authority.
+
+The Mission plan's accepted Task owner links to the scoped grant page. The page shows the fixed tool, scope, expiry and explicit confirmation before ISSUE/REVOKE. Current authority is refreshed on focus; account/route changes and denial erase private context. Ambiguous replies retain the exact command/key for manual retry; first definitive rejection reloads and requires fresh confirmation. A rejection following an ambiguous send does not prove the earlier operation failed, so the pending command remains. No browser storage or automatic mutations. The page warns before leaving an unresolved command. General Agent Permissions and Activation Review remain unavailable for broad Tool/Skill authority; this narrow built-in grant is not a general activation grant.
+
+## Validation and remaining integration
+
+H2/service/MockMvc coverage includes exact metrics, empty text, request-only denial, grant scope and authority, strict wire, revoked/expired grants, stale/wrong lease, disabled graph guard, bounded Unicode payload, missing capacity, effect insert rollback, corrupted management/effect replay, concurrent identical calls and concurrent revoke/execute serialization. Cases are inherited by the required isolated PostgreSQL MissionGraphCompletionPostgresIT suite. Browser fixtures cover issue/revoke, explicit confirmation, exact retry after lost reply, focus denial, unsupported version, stale first rejection and three responsive widths. These are mocked browser tests, not a live worker demonstration.
+
+Still required for the broader milestone: trusted live worker invocation and reviewed Tool proposals/approval continuation, receipt/history exposure after runtime completion, real-backend UI acceptance and independent paid-provider acceptance. No generic Skills catalog/assignment, arbitrary Tool grants, network tools, merge or deployment is established by this slice.

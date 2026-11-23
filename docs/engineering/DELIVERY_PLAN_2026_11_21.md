@@ -1,4 +1,4 @@
-# AgentOS delivery checkpoint — 23 November 2026
+# AgentOS delivery checkpoint — 24 November 2026
 
 PM/BA checkpoint, Asia/Ho_Chi_Minh. Source identities and matching CI are authoritative. All listed PRs remain Draft/unmerged; no deployment or paid-provider acceptance is established. PR count is not a completion percentage.
 
@@ -24,17 +24,17 @@ PR123's first head failed a mobile test that dispatched synthetic focus before t
 
 The existing loop now demonstrates configured full graph → human plan acceptance → explicit admission → manual Run Starts → exact prerequisite acceptance/release → full Mission closure. Model-proposed planning and passing previous outputs into new requests are separate capabilities; ordering alone is not content collaboration.
 
-## Active candidate: complete Mission result bundle
+## Active candidate: scoped text Tool authority and runtime
 
-PR131 scoped Run Start history completed all six workflows on `c30de1c508f0618179fac15329f560684daac16f`. Its ADMIN-only bounded command history is read-only and does not authorize retries.
+PR131 Run command history (`c30de1c508f0618179fac15329f560684daac16f`) and PR132 complete Mission ZIP download (`9d4952355c4e0cbf630e4b29e7a19c65e49f408c`) both completed all six workflows. Both remain Draft/unmerged.
 
-The current candidate adds a ZIP download for a COMPLETED Mission with its exact reviewed manifest and all current accepted outputs. Fresh scoped authority and SHA verification precede an atomic bounded download; see [contract](MISSION_RESULT_BUNDLE.md). Local and matching-head CI evidence must be recorded separately. All PRs remain Draft/unmerged.
+Current candidate implements the fixed local text.metrics v1 runtime adapter, Mission/Agent-scoped one-hour ADMIN grant/revoke API and UI, exact current-lease/graph/control checks, four-scope capacity admission with zero actual charge, and atomic hash-verified effect/replay evidence. Default/request-only gateway remains closed. See [contract](SCOPED_TEXT_TOOL.md). Live worker proposals, approval continuation and invocation are not yet connected; Skills remain unavailable. Matching-head native CI evidence must be recorded separately from local tests.
 
 ## Remaining milestones
 
-1. Complete matching-head validation/publication of the current Mission result-bundle candidate and retain exact source/evidence. Keep stacked integration, merge and deployment as separate gates.
+1. Complete matching-head validation/publication of the current bounded Tool candidate and retain exact source/evidence. Keep stacked integration, merge and deployment as separate gates.
 2. Expand planning beyond reviewed source-output import only where needed: planner setup/schema guidance and correction workflows, without overwriting manual Tasks. Configured-plan review/acceptance already exists; autonomous planning and live paid-provider planning remain unverified.
-3. Implement one bounded harmless Skill/Tool through the closed Tool Gateway, with exact scoped permissions/approval continuation/effect receipts and unknown-outcome handling. No implicit tool authority from model text.
+3. Complete live worker proposal/approval continuation and invocation for the first bounded Tool, on top of the current scoped text.metrics candidate. Skills/assignment remain separate. No implicit tool authority from model text.
 4. Extend recovery beyond current safe controls: public governed operator reconciliation for UNKNOWN effects/accounting and in-flight cancellation. Quiescent public cancellation does not establish a complete recovery flow.
 5. Expand verified results, authorized downloads, execution Trace and actual ledger/token/cost visibility; distinguish recorded data from running operations.
 6. Implement scoped versioned Memory/Knowledge context and sharing/retention/isolation before broader search/vector features.
