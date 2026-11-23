@@ -690,4 +690,26 @@ class MissionGraphCompletionIntegrationTest {
     assertThatThrownBy(() -> reviewReads.run(s.org(), run, s.human()))
         .isInstanceOf(AccessDeniedException.class);
   }
+
+  @Test
+  void missionAccountingIncludesAllRunsButExcludesOtherMissions() throws Exception {
+    var s = completed();
+    completed();
+    var initial = current(s).accounting();
+    assertThat(initial.settledMicrousd()).isEqualTo("8");
+    assertThat(initial.inputTokens()).isEqualTo("4");
+    assertThat(initial.outputTokens()).isEqualTo("4");
+    var target = current(s).outputs().getFirst().runId();
+    jdbc.update(
+        "update execution_budget_reservations set status='UNKNOWN',actual_microusd=null where"
+            + " run_id=?",
+        target);
+    var pending = current(s).accounting();
+    assertThat(pending.settledMicrousd()).isEqualTo("6");
+    assertThat(pending.unknownMicrousd()).isEqualTo("10");
+    assertThat(pending.unresolvedReservations()).isEqualTo("1");
+    jdbc.update(
+        "update organization_memberships set role='MEMBER' where account_id=?", s.human().id());
+    assertThatThrownBy(() -> current(s)).isInstanceOf(AccessDeniedException.class);
+  }
 }

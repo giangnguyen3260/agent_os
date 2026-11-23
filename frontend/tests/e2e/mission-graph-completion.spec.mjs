@@ -62,7 +62,8 @@ async function mock(page, options = {}) {
           state.status = c.action === 'SUBMIT_REVIEW' ? 'REVIEW' : 'COMPLETED';
           state.revision = String(Number(state.revision) + 1);
           data = {
-            organizationId: org,
+            accounting: state.accounting,
+          organizationId: org,
             teamId: team,
             missionId: mission,
             planRevision: '1',
@@ -81,6 +82,7 @@ async function mock(page, options = {}) {
         }
       } else
         data = {
+          accounting: state.accounting,
           organizationId: org,
           teamId: team,
           missionId: mission,
@@ -196,4 +198,12 @@ test('download link pins exact output identity without a lifecycle command',asyn
   const link=page.getByRole('link',{name:'Tải output đã ACCEPT (.txt)',exact:true}).first();
   await expect(link).toHaveAttribute('href',`/api/v1/organizations/${org}/teams/${team}/missions/${mission}/graph-completion/outputs/77000000-0000-4000-8000-000000000001/download?attemptId=78000000-0000-4000-8000-000000000001&outputSha256=${outputSha256}`);
   expect(state.commands).toHaveLength(0);
+});
+
+test('mission totals keep unknown reserves distinct and exact',async({page})=>{
+ await mock(page,{accounting:{settledMicrousd:'9007199254740993',heldMicrousd:'10',unknownMicrousd:'1000000',unresolvedReservations:'1',inputTokens:'40',outputTokens:'10'}});await page.goto(path);
+ await expect(page.getByText('Đã đối soát: 9007199254.740993 USD',{exact:true})).toBeVisible();await expect(page.getByText('Giữ cho kết quả UNKNOWN: 1.000000 USD',{exact:true})).toBeVisible();
+});
+test('malformed mission accounting prevents confirmation',async({page})=>{
+ await mock(page,{accounting:{settledMicrousd:'NaN'}});await page.goto(path);await expect(page.getByRole('heading',{name:'Chi phí toàn Mission đã ghi nhận',exact:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'Đưa Mission vào review',exact:true})).toHaveCount(0);
 });
