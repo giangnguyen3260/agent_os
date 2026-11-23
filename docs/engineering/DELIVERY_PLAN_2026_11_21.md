@@ -24,15 +24,15 @@ PR123's first head failed a mobile test that dispatched synthetic focus before t
 
 The existing loop now demonstrates configured full graph → human plan acceptance → explicit admission → manual Run Starts → exact prerequisite acceptance/release → full Mission closure. Model-proposed planning and passing previous outputs into new requests are separate capabilities; ordering alone is not content collaboration.
 
-## Active candidate: scoped Run command history
+## Active candidate: complete Mission result bundle
 
-Current implementation adds a bounded current-ADMIN history of persisted Start dispatches to Run details, distinguishing queued/claimed/unknown/finished commands and recorded provider handoff. It exposes no payloads or retry authority. Local16 backend and18 browser cases passed; matching-head native/CI outcomes remain pending until published/observed. See [contract](RUN_DISPATCH_HISTORY.md).
+PR131 scoped Run Start history completed all six workflows on `c30de1c508f0618179fac15329f560684daac16f`. Its ADMIN-only bounded command history is read-only and does not authorize retries.
 
-PR130 completed all six workflows on its corrected head. Run/Mission accounting and accepted text download are available at their stated read-only scope. Broader UNKNOWN resolution, positive Tool/Skill execution, scoped Memory and integration/release gates remain outstanding. All listed PRs remain Draft/unmerged.
+The current candidate adds a ZIP download for a COMPLETED Mission with its exact reviewed manifest and all current accepted outputs. Fresh scoped authority and SHA verification precede an atomic bounded download; see [contract](MISSION_RESULT_BUNDLE.md). Local and matching-head CI evidence must be recorded separately. All PRs remain Draft/unmerged.
 
 ## Remaining milestones
 
-1. Complete matching-head validation/publication of the current scoped Run-history candidate and retain exact source/evidence. Keep stacked integration, merge and deployment as separate gates.
+1. Complete matching-head validation/publication of the current Mission result-bundle candidate and retain exact source/evidence. Keep stacked integration, merge and deployment as separate gates.
 2. Expand planning beyond reviewed source-output import only where needed: planner setup/schema guidance and correction workflows, without overwriting manual Tasks. Configured-plan review/acceptance already exists; autonomous planning and live paid-provider planning remain unverified.
 3. Implement one bounded harmless Skill/Tool through the closed Tool Gateway, with exact scoped permissions/approval continuation/effect receipts and unknown-outcome handling. No implicit tool authority from model text.
 4. Extend recovery beyond current safe controls: public governed operator reconciliation for UNKNOWN effects/accounting and in-flight cancellation. Quiescent public cancellation does not establish a complete recovery flow.

@@ -402,6 +402,62 @@ public class MissionGraphCompletionService {
     return new Content(run, attempt, expectedSha, content);
   }
 
+  public record Bundle(byte[] bytes, String sha256) {
+    @Override
+    public String toString() {
+      return "MissionResultBundle[redacted]";
+    }
+  }
+
+  @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+  public Bundle bundle(
+      UUID org, UUID team, UUID mission, HumanIdentity actor, String expectedManifest) {
+    var snapshot = current(org, team, mission, actor);
+    if (!"COMPLETED".equals(snapshot.status())
+        || !snapshot.blockers().isEmpty()
+        || expectedManifest == null
+        || !expectedManifest.equals(snapshot.manifestSha256())) throw new Conflict();
+    String manifest = manifest(org, team, mission, snapshot.planRevision(), snapshot.outputs());
+    if (!sha(manifest).equals(expectedManifest)) throw new Conflict();
+    var contents = new java.util.LinkedHashMap<String, byte[]>();
+    byte[] manifestBytes = manifest.getBytes(StandardCharsets.UTF_8);
+    long size = manifestBytes.length;
+    if (size > 1048576) throw new Conflict();
+    contents.put("manifest.json", manifestBytes);
+    for (var item : snapshot.outputs()) {
+      String text =
+          jdbc.queryForObject(
+              "select content from execution_verified_output_content where run_id=? and"
+                  + " attempt_id=? and output_sha256=?",
+              String.class,
+              item.runId(),
+              item.attemptId(),
+              item.outputSha256());
+      if (text == null || !StandardCharsets.UTF_8.newEncoder().canEncode(text))
+        throw new Conflict();
+      byte[] bytes = text.getBytes(StandardCharsets.UTF_8);
+      if (bytes.length > 262144 || !sha(text).equals(item.outputSha256())) throw new Conflict();
+      size += bytes.length;
+      if (size > 8388608) throw new Conflict();
+      contents.put("outputs/" + item.runId() + "-" + item.attemptId() + ".txt", bytes);
+    }
+    try (var buffer = new java.io.ByteArrayOutputStream();
+        var zip = new java.util.zip.ZipOutputStream(buffer, StandardCharsets.UTF_8)) {
+      for (var entry : contents.entrySet()) {
+        var path = new java.util.zip.ZipEntry(entry.getKey());
+        path.setTime(0);
+        zip.putNextEntry(path);
+        zip.write(entry.getValue());
+        zip.closeEntry();
+      }
+      zip.finish();
+      byte[] bytes = buffer.toByteArray();
+      return new Bundle(bytes, AcceptedRunOutputEvidence.sha(bytes));
+    } catch (java.io.IOException e) {
+      throw new Conflict();
+    }
+  }
+
   private long count(String table, UUID org, UUID team, UUID mission) {
     return jdbc.queryForObject(
         "select count(*) from " + table + " where organization_id=? and team_id=? and mission_id=?",
