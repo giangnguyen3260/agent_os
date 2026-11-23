@@ -174,6 +174,21 @@ const reasons: Record<string, string> = {
               <article>
                 <h3>{{ t.title }}</h3>
                 <p>Agent: {{ t.ownerName }}</p>
+                @if (t.ownerId) {
+                  <a
+                    [routerLink]="[
+                      '/workspace',
+                      org,
+                      'teams',
+                      team,
+                      'missions',
+                      mission,
+                      'text-tool-grants',
+                      t.ownerId,
+                    ]"
+                    >Quyền text.metrics của Agent trong Mission</a
+                  >
+                }
                 <p>
                   Phụ thuộc:
                   @for (id of dependencies(snapshot, t.id); track id) {

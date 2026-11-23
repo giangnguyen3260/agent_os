@@ -1,6 +1,6 @@
 # Skills and Tools authority
 
-Agent Studio stores requested Skills and Tools as text. These fields provide description only. Agent Permissions reports effective authority as unavailable because the backend has no authoritative Skill or Tool catalog and grant source. Activation Review keeps its existing `TOOL_AUTHORIZATION` check at `UNAVAILABLE`. The Tool Gateway rejects all calls at its application boundary, including requests with populated scope, action and idempotency fields. AgentOS has no registered Skill execution path.
+Agent Studio stores requested Skills and Tools as text. These fields provide description only. Agent Permissions reports effective authority as unavailable because the backend has no authoritative Skill or Tool catalog and grant source. Activation Review keeps its existing `TOOL_AUTHORIZATION` check at `UNAVAILABLE`. The default Tool Gateway and the request-only API reject all calls, including requests with populated scope, action and idempotency fields. The opt-in trusted runtime adapter now supports only the pinned local text.metrics v1 operation with current lease and a dedicated scoped grant; see [bounded contract](SCOPED_TEXT_TOOL.md). It is not connected to live model-directed invocation. AgentOS has no registered Skill execution path.
 
 ## Authority required before enabling execution
 
@@ -9,4 +9,4 @@ Agent Studio stores requested Skills and Tools as text. These fields provide des
 - The gateway must verify the Agent and Team, accepted plan, current Run/Attempt claim and resource reservation under the [runtime authority contract](RUNTIME_LIFECYCLE_AUTHORITY_CONTRACT.md) before dispatch. An idempotency key identifies a request for replay handling. It provides no authority. Revocation blocks new calls, while an already dispatched action follows the runtime reconciliation rules.
 - Verify the first supported action with scoped fixtures covering an exact grant, sibling-scope denial, revoked grant, stale claim and replay. Keep raw payloads and credentials out of denial messages and audit metadata.
 
-The first supported Skill version, harmless Tool action and resource scope are still product decisions. The current backend exposes no grant mutation or positive execution path for either capability.
+The first bounded Tool is text.metrics v1 with Mission/Agent-specific one-hour grants. Its dedicated ADMIN grant API and trusted lease-only runtime adapter do not authorize other Tools or Skills. The first supported Skill version and live worker proposal/approval integration remain outstanding.

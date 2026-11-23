@@ -6,6 +6,10 @@ import com.agentos.tool.application.ToolResult;
 import org.springframework.stereotype.Component;
 
 @Component
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(
+    name = "agentos.tools.text-metrics.enabled",
+    havingValue = "false",
+    matchIfMissing = true)
 public class StubToolGateway implements ToolGateway {
 
   @Override

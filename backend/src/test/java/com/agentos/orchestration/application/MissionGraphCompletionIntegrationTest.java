@@ -27,7 +27,8 @@ import org.springframework.test.web.servlet.MockMvc;
       "agentos.mission-plan-acceptance.enabled=true",
       "agentos.mission-graph-admission.enabled=true",
       "agentos.mission-graph-completion.enabled=true",
-      "agentos.mission-completion.enabled=true"
+      "agentos.mission-completion.enabled=true",
+      "agentos.tools.text-metrics.enabled=true"
     })
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
@@ -821,5 +822,422 @@ class MissionGraphCompletionIntegrationTest {
                 .with(auth)
                 .param("manifestSha256", snapshot.manifestSha256()))
         .andExpect(status().isForbidden());
+  }
+
+  @Autowired ScopedTextToolGateway textTools;
+  @Autowired TextToolGrantService toolGrants;
+  @Autowired ExecutionClaimStore toolClaims;
+  @Autowired MissionExecutionControlStore toolControls;
+
+  TextToolGrantService.Scope toolScope(Scope s) {
+    return new TextToolGrantService.Scope(s.org(), s.team(), s.mission(), s.agent());
+  }
+
+  TextToolGrantService.Receipt grantTool(Scope s) {
+    return toolGrants.apply(
+        toolScope(s),
+        s.human(),
+        UUID.randomUUID(),
+        TextToolGrantService.Operation.ISSUE,
+        toolGrants.current(toolScope(s), s.human()).fingerprint());
+  }
+
+  ExecutionClaimStore.Token toolRun(Scope s) {
+    UUID task = task(s);
+    acceptPlan(s);
+    admit(s, UUID.randomUUID(), view(s));
+    UUID run = run(s, task), attempt = UUID.randomUUID();
+    jdbc.update("update tasks set status='RUNNING' where id=?", task);
+    jdbc.update("update execution_runs set status='RUNNING',revision=revision+1 where id=?", run);
+    jdbc.update(
+        "insert into execution_attempts(id,run_id,attempt_number,status,outcome_slot)"
+            + " values(?,?,1,'RUNNING',0)",
+        attempt,
+        run);
+    var open = java.time.OffsetDateTime.now().minusHours(1);
+    var close = open.plusHours(2);
+    var subjects =
+        java.util.Map.of(
+            "ORGANIZATION", s.org(), "TEAM", s.team(), "MISSION", s.mission(), "AGENT", s.agent());
+    for (var e : subjects.entrySet()) {
+      jdbc.update(
+          "insert into"
+              + " execution_budget_buckets(id,organization_id,scope,subject_id,opens_at,closes_at,limit_microusd)"
+              + " values(?,?,?,?,?,?,100)",
+          UUID.randomUUID(),
+          s.org(),
+          e.getKey(),
+          e.getValue(),
+          open,
+          close);
+      jdbc.update(
+          "insert into"
+              + " execution_capacity_limits(organization_id,scope,subject_id,max_concurrent,max_admissions,window_seconds)"
+              + " values(?,?,?,5,100,60)",
+          s.org(),
+          e.getKey(),
+          e.getValue());
+    }
+    return new org.springframework.transaction.support.TransactionTemplate(manager)
+        .execute(
+            tx ->
+                toolClaims.issueFresh(
+                    s.org(),
+                    run,
+                    attempt,
+                    UUID.randomUUID(),
+                    java.time.OffsetDateTime.now().plusMinutes(5),
+                    java.time.OffsetDateTime.now().plusMinutes(10)));
+  }
+
+  com.agentos.tool.application.ToolActionRequest toolRequest(
+      Scope s, ExecutionClaimStore.Token t, UUID key, String text) {
+    UUID task =
+        jdbc.queryForObject("select task_id from execution_runs where id=?", UUID.class, t.run());
+    return new com.agentos.tool.application.ToolActionRequest(
+        s.org(),
+        s.mission(),
+        task,
+        t.run(),
+        s.agent(),
+        TextToolGrantService.TOOL_ID,
+        "text:inspect",
+        "INSPECT",
+        java.util.Map.of("text", text),
+        key.toString());
+  }
+
+  @Test
+  void scopedTextToolComputesOnceWithZeroChargeAndRedactedEvidence() {
+    var s = fixture();
+    var t = toolRun(s);
+    grantTool(s);
+    var r = toolRequest(s, t, UUID.randomUUID(), "A😀\n");
+    assertThatThrownBy(() -> textTools.execute(r)).isInstanceOf(IllegalStateException.class);
+    var result = textTools.execute(t, r);
+    assertThat(result.status()).isEqualTo("SUCCEEDED");
+    assertThat(result.output())
+        .containsEntry("utf8Bytes", 6)
+        .containsEntry("codePoints", 3)
+        .containsEntry("lines", 2);
+    assertThat(textTools.execute(t, r)).isEqualTo(result);
+    assertThat(
+            jdbc.queryForObject(
+                "select count(*) from text_tool_effects where run_id=?", Integer.class, t.run()))
+        .isEqualTo(1);
+    assertThat(
+            jdbc.queryForObject(
+                "select count(*) from execution_budget_reservations where run_id=?",
+                Integer.class,
+                t.run()))
+        .isEqualTo(1);
+    assertThat(
+            jdbc.queryForObject(
+                "select actual_microusd from execution_budget_reservations where run_id=?",
+                Long.class,
+                t.run()))
+        .isZero();
+    assertThat(
+            jdbc.queryForList(
+                "select held_microusd from execution_budget_buckets where organization_id=?",
+                Long.class,
+                s.org()))
+        .containsOnly(0L);
+    assertThat(r.toString()).doesNotContain("😀");
+    assertThatThrownBy(
+            () ->
+                textTools.execute(
+                    t, toolRequest(s, t, UUID.fromString(r.idempotencyKey()), "different")))
+        .isInstanceOf(IllegalStateException.class);
+    assertThat(textTools.execute(t, toolRequest(s, t, UUID.randomUUID(), "")).output())
+        .containsEntry("lines", 0);
+  }
+
+  @Test
+  void textToolRequiresExactCurrentLeaseGrantScopeControlAndPayload() {
+    var s = fixture();
+    var t = toolRun(s);
+    var r = toolRequest(s, t, UUID.randomUUID(), "private");
+    assertThatThrownBy(() -> textTools.execute(t, r)).isInstanceOf(IllegalStateException.class);
+    grantTool(s);
+    var wrong =
+        new ExecutionClaimStore.Token(
+            t.organization(), t.run(), t.attempt(), UUID.randomUUID(), t.fence());
+    assertThatThrownBy(() -> textTools.execute(wrong, r)).isInstanceOf(IllegalStateException.class);
+    var fence =
+        new ExecutionClaimStore.Token(
+            t.organization(), t.run(), t.attempt(), t.worker(), t.fence() + 1);
+    assertThatThrownBy(() -> textTools.execute(fence, r)).isInstanceOf(IllegalStateException.class);
+    var bad =
+        new com.agentos.tool.application.ToolActionRequest(
+            r.organizationId(),
+            UUID.randomUUID(),
+            r.taskId(),
+            r.executionRunId(),
+            r.agentId(),
+            r.toolId(),
+            r.capability(),
+            r.actionType(),
+            r.payload(),
+            r.idempotencyKey());
+    assertThatThrownBy(() -> textTools.execute(t, bad)).isInstanceOf(IllegalStateException.class);
+    assertThatThrownBy(
+            () -> textTools.execute(t, toolRequest(s, t, UUID.randomUUID(), "é".repeat(4097))))
+        .isInstanceOf(IllegalStateException.class);
+    assertThatThrownBy(() -> textTools.execute(t, toolRequest(s, t, UUID.randomUUID(), "\uD800")))
+        .isInstanceOf(IllegalStateException.class);
+    jdbc.update(
+        "update mission_execution_controls set state='PAUSE_REQUESTED' where organization_id=?",
+        s.org());
+    assertThatThrownBy(() -> textTools.execute(t, r)).isInstanceOf(IllegalStateException.class);
+    jdbc.update(
+        "update mission_execution_controls set state='OPEN' where organization_id=?", s.org());
+    var c = toolGrants.current(toolScope(s), s.human());
+    toolGrants.apply(
+        toolScope(s),
+        s.human(),
+        UUID.randomUUID(),
+        TextToolGrantService.Operation.REVOKE,
+        c.fingerprint());
+    assertThatThrownBy(() -> textTools.execute(t, r)).isInstanceOf(IllegalStateException.class);
+    assertThat(
+            jdbc.queryForObject(
+                "select count(*) from text_tool_effects where run_id=?", Integer.class, t.run()))
+        .isZero();
+  }
+
+  @Test
+  void textToolCapacityAndPostReservationFailureRollBackEveryEffect() {
+    var s = fixture();
+    var t = toolRun(s);
+    grantTool(s);
+    var r = toolRequest(s, t, UUID.randomUUID(), "private");
+    jdbc.update(
+        "delete from execution_capacity_limits where organization_id=? and scope='AGENT'", s.org());
+    assertThatThrownBy(() -> textTools.execute(t, r)).isInstanceOf(IllegalStateException.class);
+    jdbc.update(
+        "insert into"
+            + " execution_capacity_limits(organization_id,scope,subject_id,max_concurrent,max_admissions,window_seconds)"
+            + " values(?,'AGENT',?,5,100,60)",
+        s.org(),
+        s.agent());
+    jdbc.execute(
+        "alter table text_tool_effects add constraint fail_text_tool_test check (run_id <> '"
+            + t.run()
+            + "')");
+    try {
+      assertThatThrownBy(() -> textTools.execute(t, r))
+          .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+    } finally {
+      jdbc.execute("alter table text_tool_effects drop constraint fail_text_tool_test");
+    }
+    assertThat(
+            jdbc.queryForObject(
+                "select count(*) from execution_budget_reservations where run_id=?",
+                Integer.class,
+                t.run()))
+        .isZero();
+    assertThat(
+            jdbc.queryForList(
+                "select held_microusd from execution_budget_buckets where organization_id=?",
+                Long.class,
+                s.org()))
+        .containsOnly(0L);
+  }
+
+  @Test
+  void textToolGrantCommandsAreScopedIdempotentAndAdminOnly() throws Exception {
+    var s = fixture();
+    var scope = toolScope(s);
+    var c = toolGrants.current(scope, s.human());
+    UUID key = UUID.randomUUID();
+    var result =
+        toolGrants.apply(
+            scope, s.human(), key, TextToolGrantService.Operation.ISSUE, c.fingerprint());
+    assertThat(
+            toolGrants.apply(
+                scope, s.human(), key, TextToolGrantService.Operation.ISSUE, c.fingerprint()))
+        .isEqualTo(result);
+    assertThatThrownBy(
+            () ->
+                toolGrants.apply(
+                    scope, s.human(), key, TextToolGrantService.Operation.REVOKE, c.fingerprint()))
+        .isInstanceOf(TextToolGrantService.Conflict.class);
+    assertThatThrownBy(
+            () ->
+                toolGrants.current(
+                    new TextToolGrantService.Scope(
+                        s.org(), UUID.randomUUID(), s.mission(), s.agent()),
+                    s.human()))
+        .isInstanceOf(TextToolGrantService.Conflict.class);
+    String path =
+        "/api/v1/organizations/"
+            + s.org()
+            + "/teams/"
+            + s.team()
+            + "/missions/"
+            + s.mission()
+            + "/text-tool-grants/"
+            + s.agent();
+    var auth = authentication(new UsernamePasswordAuthenticationToken(s.human(), null, List.of()));
+    mvc.perform(
+            org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(path)
+                .with(auth))
+        .andExpect(status().isOk());
+    for (String body :
+        List.of(
+            "null",
+            "{}",
+            "{\"idempotencyKey\":\""
+                + UUID.randomUUID()
+                + "\",\"operation\":\"ISSUE\",\"expectedFingerprint\":\""
+                + c.fingerprint()
+                + "\",\"extra\":true}",
+            "{\"idempotencyKey\":\""
+                + UUID.randomUUID()
+                + "\",\"operation\":\"ISSUE\",\"operation\":\"REVOKE\",\"expectedFingerprint\":\""
+                + c.fingerprint()
+                + "\"}"))
+      mvc.perform(
+              org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(path)
+                  .with(auth)
+                  .with(
+                      org.springframework.security.test.web.servlet.request
+                          .SecurityMockMvcRequestPostProcessors.csrf())
+                  .contentType("application/json")
+                  .content(body))
+          .andExpect(status().isBadRequest());
+    jdbc.update(
+        "update organization_memberships set role='MEMBER' where account_id=?", s.human().id());
+    mvc.perform(
+            org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(path)
+                .with(auth))
+        .andExpect(status().isForbidden());
+    assertThatThrownBy(
+            () ->
+                toolGrants.apply(
+                    scope, s.human(), key, TextToolGrantService.Operation.ISSUE, c.fingerprint()))
+        .isInstanceOf(AccessDeniedException.class);
+  }
+
+  @Test
+  void textToolRejectsDisabledGraphExpiredLeaseAndCorruptReplay() {
+    var s = fixture();
+    var t = toolRun(s);
+    grantTool(s);
+    var r = toolRequest(s, t, UUID.randomUUID(), "verified");
+    org.springframework.test.util.ReflectionTestUtils.setField(
+        textTools, "graphAdmissionEnabled", false);
+    try {
+      assertThatThrownBy(() -> textTools.execute(t, r)).isInstanceOf(IllegalStateException.class);
+    } finally {
+      org.springframework.test.util.ReflectionTestUtils.setField(
+          textTools, "graphAdmissionEnabled", true);
+    }
+    textTools.execute(t, r);
+    jdbc.update("update text_tool_effects set code_points=999 where run_id=?", t.run());
+    assertThatThrownBy(() -> textTools.execute(t, r)).isInstanceOf(IllegalStateException.class);
+    jdbc.update(
+        "update execution_claims set issued_at=?,expires_at=? where run_id=?",
+        java.time.OffsetDateTime.now().minusHours(2),
+        java.time.OffsetDateTime.now().minusHours(1),
+        t.run());
+    assertThatThrownBy(() -> textTools.execute(t, toolRequest(s, t, UUID.randomUUID(), "new")))
+        .isInstanceOf(IllegalStateException.class);
+  }
+
+  @Test
+  void textToolRejectsExpiredGrantAndTamperedManagementReceipt() {
+    var s = fixture();
+    var t = toolRun(s);
+    var before = toolGrants.current(toolScope(s), s.human());
+    UUID key = UUID.randomUUID();
+    var grant =
+        toolGrants.apply(
+            toolScope(s),
+            s.human(),
+            key,
+            TextToolGrantService.Operation.ISSUE,
+            before.fingerprint());
+    jdbc.update(
+        "update text_tool_grant_receipts set result_json='{}' where organization_id=?", s.org());
+    assertThatThrownBy(
+            () ->
+                toolGrants.apply(
+                    toolScope(s),
+                    s.human(),
+                    key,
+                    TextToolGrantService.Operation.ISSUE,
+                    before.fingerprint()))
+        .isInstanceOf(TextToolGrantService.Conflict.class);
+    jdbc.update(
+        "update text_tool_grants set issued_at=?,expires_at=? where id=?",
+        java.time.OffsetDateTime.now().minusHours(2),
+        java.time.OffsetDateTime.now().minusHours(1),
+        grant.grantId());
+    assertThatThrownBy(() -> textTools.execute(t, toolRequest(s, t, UUID.randomUUID(), "new")))
+        .isInstanceOf(IllegalStateException.class);
+  }
+
+  @Test
+  void concurrentIdenticalToolCallsConsumeOneReservation() throws Exception {
+    var s = fixture();
+    var t = toolRun(s);
+    grantTool(s);
+    var r = toolRequest(s, t, UUID.randomUUID(), "same");
+    try (var pool = java.util.concurrent.Executors.newFixedThreadPool(2)) {
+      var one = pool.submit(() -> textTools.execute(t, r));
+      var two = pool.submit(() -> textTools.execute(t, r));
+      assertThat(one.get(10, java.util.concurrent.TimeUnit.SECONDS))
+          .isEqualTo(two.get(10, java.util.concurrent.TimeUnit.SECONDS));
+    }
+    assertThat(
+            jdbc.queryForObject(
+                "select count(*) from text_tool_effects where run_id=?", Integer.class, t.run()))
+        .isEqualTo(1);
+    assertThat(
+            jdbc.queryForObject(
+                "select count(*) from execution_budget_reservations where run_id=?",
+                Integer.class,
+                t.run()))
+        .isEqualTo(1);
+  }
+
+  @Test
+  void toolRevocationSerializesWithExecutionAndBlocksSubsequentCalls() throws Exception {
+    var s = fixture();
+    var t = toolRun(s);
+    grantTool(s);
+    var c = toolGrants.current(toolScope(s), s.human());
+    var r = toolRequest(s, t, UUID.randomUUID(), "race");
+    try (var pool = java.util.concurrent.Executors.newFixedThreadPool(2)) {
+      var call =
+          pool.submit(
+              () -> {
+                try {
+                  textTools.execute(t, r);
+                  return true;
+                } catch (IllegalStateException e) {
+                  return false;
+                }
+              });
+      var revoke =
+          pool.submit(
+              () ->
+                  toolGrants.apply(
+                      toolScope(s),
+                      s.human(),
+                      UUID.randomUUID(),
+                      TextToolGrantService.Operation.REVOKE,
+                      c.fingerprint()));
+      revoke.get(10, java.util.concurrent.TimeUnit.SECONDS);
+      boolean ran = call.get(10, java.util.concurrent.TimeUnit.SECONDS);
+      assertThat(
+              jdbc.queryForObject(
+                  "select count(*) from text_tool_effects where run_id=?", Integer.class, t.run()))
+          .isEqualTo(ran ? 1 : 0);
+    }
+    assertThatThrownBy(() -> textTools.execute(t, toolRequest(s, t, UUID.randomUUID(), "after")))
+        .isInstanceOf(IllegalStateException.class);
   }
 }
