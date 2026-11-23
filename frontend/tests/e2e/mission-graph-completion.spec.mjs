@@ -92,7 +92,7 @@ async function mock(page, options = {}) {
           taskCount: 2,
           outputs,
           manifestSha256: 'f'.repeat(64),
-          blockers: [],
+          blockers: state.blockers ?? [],
           action:
             state.status === 'COMPLETED'
               ? null
@@ -206,4 +206,21 @@ test('mission totals keep unknown reserves distinct and exact',async({page})=>{
 });
 test('malformed mission accounting prevents confirmation',async({page})=>{
  await mock(page,{accounting:{settledMicrousd:'NaN'}});await page.goto(path);await expect(page.getByRole('heading',{name:'Chi phí toàn Mission đã ghi nhận',exact:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'Đưa Mission vào review',exact:true})).toHaveCount(0);
+});
+
+test('bundle link requires completed unblocked Mission and pins its manifest', async ({page}) => {
+  const state = await mock(page);
+  await page.goto(path);
+  const link = page.getByRole('link', {name: 'Tải toàn bộ kết quả (.zip)', exact: true});
+  await expect(link).toHaveCount(0);
+  state.status = 'COMPLETED';
+  await page.reload();
+  await expect(link).toHaveAttribute('href', `/api/v1/organizations/${org}/teams/${team}/missions/${mission}/graph-completion/bundle?manifestSha256=${'f'.repeat(64)}`);
+  expect(state.commands).toHaveLength(0);
+  state.blockers = ['OUTPUT_CHANGED'];
+  await page.reload();
+  await expect(link).toHaveCount(0);
+  state.denied = true;
+  await page.reload();
+  await expect(link).toHaveCount(0);
 });

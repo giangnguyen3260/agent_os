@@ -747,4 +747,79 @@ class MissionGraphCompletionIntegrationTest {
     assertThatThrownBy(() -> reviewReads.run(s.org(), run, s.human()))
         .isInstanceOf(AccessDeniedException.class);
   }
+
+  @Test
+  void completedBundlePinsFullManifestAndAllAcceptedOutputs() throws Exception {
+    var s = completed();
+    assertThatThrownBy(
+            () ->
+                completion.bundle(
+                    s.org(), s.team(), s.mission(), s.human(), current(s).manifestSha256()))
+        .isInstanceOf(MissionGraphCompletionService.Conflict.class);
+    apply(s, UUID.randomUUID(), current(s));
+    apply(s, UUID.randomUUID(), current(s));
+    var snapshot = current(s);
+    var bundle =
+        completion.bundle(s.org(), s.team(), s.mission(), s.human(), snapshot.manifestSha256());
+    var entries = new java.util.HashMap<String, byte[]>();
+    try (var zip =
+        new java.util.zip.ZipInputStream(
+            new java.io.ByteArrayInputStream(bundle.bytes()),
+            java.nio.charset.StandardCharsets.UTF_8)) {
+      java.util.zip.ZipEntry entry;
+      while ((entry = zip.getNextEntry()) != null) {
+        assertThat(entry.getName()).doesNotContain("..");
+        entries.put(entry.getName(), zip.readAllBytes());
+      }
+    }
+    assertThat(entries).hasSize(5);
+    assertThat(AcceptedRunOutputEvidence.sha(entries.get("manifest.json")))
+        .isEqualTo(snapshot.manifestSha256());
+    for (var output : snapshot.outputs())
+      assertThat(
+              AcceptedRunOutputEvidence.sha(
+                  entries.get("outputs/" + output.runId() + "-" + output.attemptId() + ".txt")))
+          .isEqualTo(output.outputSha256());
+    String path =
+        "/api/v1/organizations/"
+            + s.org()
+            + "/teams/"
+            + s.team()
+            + "/missions/"
+            + s.mission()
+            + "/graph-completion/bundle";
+    var auth = authentication(new UsernamePasswordAuthenticationToken(s.human(), null, List.of()));
+    var result =
+        mvc.perform(
+                org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(path)
+                    .with(auth)
+                    .param("manifestSha256", snapshot.manifestSha256()))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse();
+    assertThat(result.getHeader("Content-Type")).isEqualTo("application/zip");
+    assertThat(result.getHeader("Cache-Control")).isEqualTo("no-store");
+    assertThat(result.getHeader("X-AgentOS-Bundle-SHA256"))
+        .isEqualTo(AcceptedRunOutputEvidence.sha(result.getContentAsByteArray()));
+    assertThat(result.getHeader("X-Content-Type-Options")).isEqualTo("nosniff");
+    assertThat(result.getHeader("X-AgentOS-Manifest-SHA256")).isEqualTo(snapshot.manifestSha256());
+    assertThatThrownBy(
+            () -> completion.bundle(s.org(), s.team(), s.mission(), s.human(), "f".repeat(64)))
+        .isInstanceOf(MissionGraphCompletionService.Conflict.class);
+    jdbc.update(
+        "update execution_verified_output_content set content='changed' where run_id=?",
+        snapshot.outputs().getFirst().runId());
+    assertThatThrownBy(
+            () ->
+                completion.bundle(
+                    s.org(), s.team(), s.mission(), s.human(), snapshot.manifestSha256()))
+        .isInstanceOf(MissionGraphCompletionService.Conflict.class);
+    jdbc.update(
+        "update organization_memberships set role='MEMBER' where account_id=?", s.human().id());
+    mvc.perform(
+            org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(path)
+                .with(auth)
+                .param("manifestSha256", snapshot.manifestSha256()))
+        .andExpect(status().isForbidden());
+  }
 }

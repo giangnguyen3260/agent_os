@@ -109,6 +109,25 @@ public class MissionGraphCompletionController {
         .body(bytes);
   }
 
+  @GetMapping("/bundle")
+  public ResponseEntity<byte[]> bundle(
+      @PathVariable UUID organizationId,
+      @PathVariable UUID teamId,
+      @PathVariable UUID missionId,
+      @AuthenticationPrincipal HumanIdentity actor,
+      @org.springframework.web.bind.annotation.RequestParam String manifestSha256) {
+    var bundle = service.bundle(organizationId, teamId, missionId, actor, manifestSha256);
+    return ResponseEntity.ok()
+        .header("Cache-Control", "no-store")
+        .header("X-Content-Type-Options", "nosniff")
+        .header("Content-Disposition", "attachment; filename=\"mission-" + missionId + ".zip\"")
+        .header("X-AgentOS-Bundle-SHA256", bundle.sha256())
+        .header("X-AgentOS-Manifest-SHA256", manifestSha256)
+        .contentType(org.springframework.http.MediaType.parseMediaType("application/zip"))
+        .contentLength(bundle.bytes().length)
+        .body(bundle.bytes());
+  }
+
   @ExceptionHandler({
     MissionGraphCompletionService.Conflict.class,
     com.agentos.orchestration.application.MissionGraphAdmissionService.Conflict.class,

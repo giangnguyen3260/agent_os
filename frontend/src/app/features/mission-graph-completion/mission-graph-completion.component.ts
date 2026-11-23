@@ -151,6 +151,12 @@ const revision = (x: unknown): x is string =>
           </button>
         </article>
       }
+      @if (s.status === 'COMPLETED' && s.manifestSha256 && !s.blockers.length) {
+        <a [href]="bundleUrl(s.manifestSha256)" download
+          >Tải toàn bộ kết quả (.zip)</a
+        >
+        <p>Gồm bản kê SHA và output đã ACCEPT. Giới hạn tổng nội dung 8 MiB.</p>
+      }
       @if (s.manifestSha256) {
         <p>
           Mã bản kê: <code>{{ s.manifestSha256 }}</code>
@@ -184,6 +190,9 @@ export class MissionGraphCompletionComponent {
   usd(value: string): string {
     const n = BigInt(value);
     return `${n / 1000000n}.${(n % 1000000n).toString().padStart(6, '0')}`;
+  }
+  bundleUrl(sha: string): string {
+    return `/api/v1/organizations/${this.org}/teams/${this.team}/missions/${this.mission}/graph-completion/bundle?manifestSha256=${sha}`;
   }
   downloadUrl(o: Output): string {
     return `/api/v1/organizations/${this.org}/teams/${this.team}/missions/${this.mission}/graph-completion/outputs/${o.runId}/download?attemptId=${o.attemptId}&outputSha256=${o.outputSha256}`;
