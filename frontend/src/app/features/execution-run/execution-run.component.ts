@@ -12,7 +12,16 @@ import {ActivatedRoute, RouterLink} from '@angular/router';
 import {firstValueFrom, timeout} from 'rxjs';
 import {AuthService} from '../../core/auth/auth.service';
 import {uuid} from '../teams/team.service';
+interface Accounting {
+  settledMicrousd: string;
+  heldMicrousd: string;
+  unknownMicrousd: string;
+  unresolvedReservations: string;
+  inputTokens: string;
+  outputTokens: string;
+}
 interface Run {
+  accounting?: Accounting;
   id: string;
   teamId: string;
   missionId: string;
@@ -85,6 +94,21 @@ interface Run {
         @if (run.status === 'COMPLETED') {
           <p>Kết quả của lần chạy đã được chấp nhận.</p>
         }
+        @if (run.accounting; as cost) {
+          <h2>Chi phí và token đã ghi nhận</h2>
+          <p>Đã đối soát: {{ usd(cost.settledMicrousd) }} USD</p>
+          <p>Đang giữ chỗ: {{ usd(cost.heldMicrousd) }} USD</p>
+          <p>Giữ cho kết quả UNKNOWN: {{ usd(cost.unknownMicrousd) }} USD</p>
+          <p>Khoản chưa đối soát: {{ cost.unresolvedReservations }}</p>
+          <p>
+            Input token: {{ cost.inputTokens }} · Output token:
+            {{ cost.outputTokens }}
+          </p>
+          <p>
+            Số liệu từ ledger và usage đã ghi nhận; khoản chưa đối soát chưa
+            phải chi phí cuối cùng.
+          </p>
+        }
         <h2>100 attempt gần nhất</h2>
         <ul>
           @for (attempt of run.attempts; track attempt.id) {
@@ -101,6 +125,10 @@ interface Run {
   `,
 })
 export class ExecutionRunComponent {
+  usd(value: string): string {
+    const n = BigInt(value);
+    return `${n / 1000000n}.${(n % 1000000n).toString().padStart(6, '0')}`;
+  }
   private readonly http = inject(HttpClient);
   private readonly auth = inject(AuthService);
   private readonly route = inject(ActivatedRoute);
@@ -182,6 +210,22 @@ export class ExecutionRunComponent {
       if (!active()) return;
       if (
         !data ||
+        (data.accounting !== undefined &&
+          (!data.accounting ||
+            ![
+              'settledMicrousd',
+              'heldMicrousd',
+              'unknownMicrousd',
+              'unresolvedReservations',
+              'inputTokens',
+              'outputTokens',
+            ].every(
+              key =>
+                typeof data.accounting![key as keyof Accounting] === 'string' &&
+                /^(0|[1-9][0-9]{0,99})$/.test(
+                  data.accounting![key as keyof Accounting],
+                ),
+            ))) ||
         !uuid(data.id) ||
         !uuid(data.teamId) ||
         !uuid(data.missionId) ||

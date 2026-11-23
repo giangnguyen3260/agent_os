@@ -36,6 +36,14 @@ public class ExecutionReviewService {
 
   public record Attempt(UUID id, int number, String status) {}
 
+  public record Accounting(
+      String settledMicrousd,
+      String heldMicrousd,
+      String unknownMicrousd,
+      String unresolvedReservations,
+      String inputTokens,
+      String outputTokens) {}
+
   public record RunDetail(
       UUID id,
       UUID teamId,
@@ -44,7 +52,8 @@ public class ExecutionReviewService {
       String status,
       String revision,
       String waitReason,
-      java.util.List<Attempt> attempts) {}
+      java.util.List<Attempt> attempts,
+      Accounting accounting) {}
 
   @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
   public RunDetail run(UUID organization, UUID run, HumanIdentity reviewer) {
@@ -64,7 +73,8 @@ public class ExecutionReviewService {
                     rs.getString(5),
                     rs.getString(6),
                     rs.getString(7),
-                    java.util.List.of()),
+                    java.util.List.of(),
+                    null),
             organization,
             run);
     if (rows.isEmpty()) throw new EntityNotFoundException("Execution run not found");
@@ -85,7 +95,39 @@ public class ExecutionReviewService {
         r.status(),
         r.revision(),
         r.waitReason(),
-        attempts);
+        attempts,
+        accounting(run));
+  }
+
+  private Accounting accounting(UUID run) {
+    var costs =
+        jdbc.queryForMap(
+            "select coalesce(sum(case when status='SETTLED' then cast(actual_microusd as numeric)"
+                + " else 0 end),0) as settled,coalesce(sum(case when status='HELD' then"
+                + " cast(reserved_microusd as numeric) else 0 end),0) as held,coalesce(sum(case"
+                + " when status='UNKNOWN' then cast(reserved_microusd as numeric) else 0 end),0) as"
+                + " unknown_amount,count(case when status<>'SETTLED' then 1 end) as unresolved from"
+                + " execution_budget_reservations where run_id=?",
+            run);
+    var usage =
+        jdbc.queryForMap(
+            "select coalesce(sum(cast(input_tokens as numeric)),0) as"
+                + " input,coalesce(sum(cast(output_tokens as numeric)),0) as output from"
+                + " execution_model_usage where run_id=?",
+            run);
+    return new Accounting(
+        integer(costs.get("settled")),
+        integer(costs.get("held")),
+        integer(costs.get("unknown_amount")),
+        integer(costs.get("unresolved")),
+        integer(usage.get("input")),
+        integer(usage.get("output")));
+  }
+
+  private String integer(Object n) {
+    var value = new java.math.BigDecimal(n.toString()).toBigIntegerExact();
+    if (value.signum() < 0) throw new IllegalStateException("Accounting unavailable");
+    return value.toString();
   }
 
   @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
