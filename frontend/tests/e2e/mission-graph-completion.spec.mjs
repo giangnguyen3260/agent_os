@@ -190,3 +190,10 @@ test('tampered accepted output is never rendered as verified text', async ({
   ).toBeVisible();
   await expect(page.getByLabel('Nội dung output đã ACCEPT')).toHaveCount(0);
 });
+
+test('download link pins exact output identity without a lifecycle command',async({page})=>{
+  const state=await mock(page);await page.goto(path);
+  const link=page.getByRole('link',{name:'Tải output đã ACCEPT (.txt)',exact:true}).first();
+  await expect(link).toHaveAttribute('href',`/api/v1/organizations/${org}/teams/${team}/missions/${mission}/graph-completion/outputs/77000000-0000-4000-8000-000000000001/download?attemptId=78000000-0000-4000-8000-000000000001&outputSha256=${outputSha256}`);
+  expect(state.commands).toHaveLength(0);
+});

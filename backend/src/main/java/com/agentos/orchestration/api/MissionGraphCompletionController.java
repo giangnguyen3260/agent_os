@@ -83,6 +83,32 @@ public class MissionGraphCompletionController {
                     organizationId, teamId, missionId, actor, runId, attemptId, outputSha256)));
   }
 
+  @GetMapping("/outputs/{runId}/download")
+  public ResponseEntity<byte[]> download(
+      @PathVariable UUID organizationId,
+      @PathVariable UUID teamId,
+      @PathVariable UUID missionId,
+      @PathVariable UUID runId,
+      @AuthenticationPrincipal HumanIdentity actor,
+      @org.springframework.web.bind.annotation.RequestParam UUID attemptId,
+      @org.springframework.web.bind.annotation.RequestParam String outputSha256) {
+    var output =
+        service.output(organizationId, teamId, missionId, actor, runId, attemptId, outputSha256);
+    byte[] bytes = output.content().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+    return ResponseEntity.ok()
+        .header("Cache-Control", "no-store")
+        .header("X-Content-Type-Options", "nosniff")
+        .header(
+            "Content-Disposition",
+            "attachment; filename=\"accepted-" + runId + "-" + attemptId + ".txt\"")
+        .header("X-AgentOS-Output-SHA256", output.outputSha256())
+        .contentType(
+            new org.springframework.http.MediaType(
+                "text", "plain", java.nio.charset.StandardCharsets.UTF_8))
+        .contentLength(bytes.length)
+        .body(bytes);
+  }
+
   @ExceptionHandler({
     MissionGraphCompletionService.Conflict.class,
     com.agentos.orchestration.application.MissionGraphAdmissionService.Conflict.class,
