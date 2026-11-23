@@ -656,4 +656,38 @@ class MissionGraphCompletionIntegrationTest {
         "update organization_memberships set role='MEMBER' where account_id=?", s.human().id());
     mvc.perform(request).andExpect(status().isForbidden());
   }
+
+  @Autowired ExecutionReviewService reviewReads;
+
+  @Test
+  void accountingUsesFullRecordedLedgerAndKeepsUnknownSeparate() throws Exception {
+    var s = completed();
+    var run =
+        run(
+            s,
+            jdbc.queryForObject(
+                "select task_id from execution_runs where mission_id=? order by id limit 1",
+                UUID.class,
+                s.mission()));
+    var before = reviewReads.run(s.org(), run, s.human()).accounting();
+    assertThat(before.settledMicrousd()).isEqualTo("2");
+    assertThat(before.inputTokens()).isEqualTo("1");
+    assertThat(before.outputTokens()).isEqualTo("1");
+    jdbc.update(
+        "update execution_budget_reservations set status='UNKNOWN',actual_microusd=null where"
+            + " run_id=?",
+        run);
+    var unknown = reviewReads.run(s.org(), run, s.human()).accounting();
+    assertThat(unknown.settledMicrousd()).isEqualTo("0");
+    assertThat(unknown.unknownMicrousd()).isEqualTo("10");
+    assertThat(unknown.unresolvedReservations()).isEqualTo("1");
+    jdbc.update("update execution_budget_reservations set status='HELD' where run_id=?", run);
+    var held = reviewReads.run(s.org(), run, s.human()).accounting();
+    assertThat(held.heldMicrousd()).isEqualTo("10");
+    assertThat(held.unknownMicrousd()).isEqualTo("0");
+    jdbc.update(
+        "update organization_memberships set role='MEMBER' where account_id=?", s.human().id());
+    assertThatThrownBy(() -> reviewReads.run(s.org(), run, s.human()))
+        .isInstanceOf(AccessDeniedException.class);
+  }
 }
