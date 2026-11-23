@@ -44,6 +44,9 @@ public class ExecutionReviewService {
       String inputTokens,
       String outputTokens) {}
 
+  public record Dispatch(
+      UUID id, String state, String sourceRevision, String createdAt, boolean handedOff) {}
+
   public record RunDetail(
       UUID id,
       UUID teamId,
@@ -53,7 +56,8 @@ public class ExecutionReviewService {
       String revision,
       String waitReason,
       java.util.List<Attempt> attempts,
-      Accounting accounting) {}
+      Accounting accounting,
+      java.util.List<Dispatch> dispatches) {}
 
   @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
   public RunDetail run(UUID organization, UUID run, HumanIdentity reviewer) {
@@ -74,7 +78,8 @@ public class ExecutionReviewService {
                     rs.getString(6),
                     rs.getString(7),
                     java.util.List.of(),
-                    null),
+                    null,
+                    java.util.List.of()),
             organization,
             run);
     if (rows.isEmpty()) throw new EntityNotFoundException("Execution run not found");
@@ -96,7 +101,26 @@ public class ExecutionReviewService {
         r.revision(),
         r.waitReason(),
         attempts,
-        accounting(run));
+        accounting(run),
+        dispatches(organization, run));
+  }
+
+  private java.util.List<Dispatch> dispatches(UUID org, UUID run) {
+    return jdbc.query(
+        "select d.id,d.state,d.source_run_revision,d.created_at,exists(select 1 from"
+            + " execution_model_authorizations a where a.organization_id=d.organization_id and"
+            + " a.run_id=d.run_id and a.action_id=d.id and a.handed_off_at is not null) as"
+            + " handed_off from execution_start_dispatch d where d.organization_id=? and d.run_id=?"
+            + " order by d.created_at desc,d.id desc limit 100",
+        (rs, n) ->
+            new Dispatch(
+                rs.getObject(1, UUID.class),
+                rs.getString(2),
+                rs.getString(3),
+                rs.getObject(4, java.time.OffsetDateTime.class).toInstant().toString(),
+                rs.getBoolean(5)),
+        org,
+        run);
   }
 
   private Accounting accounting(UUID run) {

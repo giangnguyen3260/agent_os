@@ -712,4 +712,39 @@ class MissionGraphCompletionIntegrationTest {
         "update organization_memberships set role='MEMBER' where account_id=?", s.human().id());
     assertThatThrownBy(() -> current(s)).isInstanceOf(AccessDeniedException.class);
   }
+
+  @Test
+  void dispatchHistoryIsScopedBoundedAndDoesNotInferSuccessFromFinished() throws Exception {
+    var s = completed();
+    var run = current(s).outputs().getFirst().runId();
+    var before = reviewReads.run(s.org(), run, s.human()).dispatches();
+    assertThat(before).hasSize(1);
+    assertThat(before.getFirst().state()).isEqualTo("FINISHED");
+    assertThat(before.getFirst().handedOff()).isTrue();
+    for (int i = 0; i < 103; i++)
+      jdbc.update(
+          "insert into"
+              + " execution_start_dispatch(id,organization_id,run_id,source_run_revision,actor_id,idempotency_key,actor_credential_version,state)"
+              + " values(?,?,?,?,?,?,0,?)",
+          UUID.randomUUID(),
+          s.org(),
+          run,
+          100 + i,
+          s.human().id(),
+          UUID.randomUUID(),
+          i % 2 == 0 ? "UNKNOWN" : "QUEUED");
+    var history = reviewReads.run(s.org(), run, s.human()).dispatches();
+    assertThat(history).hasSize(100);
+    assertThat(history).anyMatch(d -> d.state().equals("UNKNOWN"));
+    var other = completed();
+    assertThat(
+            reviewReads
+                .run(other.org(), current(other).outputs().getFirst().runId(), other.human())
+                .dispatches())
+        .hasSize(1);
+    jdbc.update(
+        "update organization_memberships set role='MEMBER' where account_id=?", s.human().id());
+    assertThatThrownBy(() -> reviewReads.run(s.org(), run, s.human()))
+        .isInstanceOf(AccessDeniedException.class);
+  }
 }

@@ -18,20 +18,21 @@ PM/BA checkpoint, Asia/Ho_Chi_Minh. Source identities and matching CI are author
 | 128 | Scoped exact accepted output text downloads | `2755634650b67b0f3bd5c465687db2368957bea0`; six successful workflows |
 | 129 | Recorded Run costs, HELD/UNKNOWN reserves and usage | `7d4082a69e5448a6ed764c39c17b2723a6029acb`; six successful workflows |
 
+| 130 | Full-history Mission ledger/token projection and bounded Vault restart read readiness | `4d4adfbe35b35ae6745d34dc8a1c4fafc3f81368`; all six workflows passed after documented restart correction |
 
 PR123's first head failed a mobile test that dispatched synthetic focus before the mandatory current-state reload finished. Corrected tests wait for the completed operation; all assertions remain. That correction passed 45 repeated local cases and matching-head CI. Earlier Vault startup HTTP500 attempts were retried once on unchanged heads; only successful matching-head results are recorded above.
 
 The existing loop now demonstrates configured full graph → human plan acceptance → explicit admission → manual Run Starts → exact prerequisite acceptance/release → full Mission closure. Model-proposed planning and passing previous outputs into new requests are separate capabilities; ordering alone is not content collaboration.
 
-## Active candidate: Mission accounting and Vault readiness
+## Active candidate: scoped Run command history
 
-PR130 adds scoped full-history Mission accounting, sharing the Run projection and preserving existing closure rules. Local15 backend and27 browser cases passed. Initial head7ef7b1a77897ecf722b6154bc7ec634e68abb79f passed five workflows but failed Vault persistence read after restart with HTTP500, before feature acceptance. Current work fixes the CI restart readiness boundary with bounded read-only retries; existing credential-content/version and downstream native/browser assertions remain. Do not mark PR130 fully validated until matching-head Vault succeeds.
+Current implementation adds a bounded current-ADMIN history of persisted Start dispatches to Run details, distinguishing queued/claimed/unknown/finished commands and recorded provider handoff. It exposes no payloads or retry authority. Local16 backend and18 browser cases passed; matching-head native/CI outcomes remain pending until published/observed. See [contract](RUN_DISPATCH_HISTORY.md).
 
-PR127 controls, PR128 downloads and PR129 Run accounting have completed their stated validation scope, all Draft/unmerged. In-flight/UNKNOWN operator reconciliation, positive Tool execution and scoped Memory remain outstanding. Paid-provider acceptance is still separate.
+PR130 completed all six workflows on its corrected head. Run/Mission accounting and accepted text download are available at their stated read-only scope. Broader UNKNOWN resolution, positive Tool/Skill execution, scoped Memory and integration/release gates remain outstanding. All listed PRs remain Draft/unmerged.
 
 ## Remaining milestones
 
-1. Complete matching-head validation/publication of the current Mission-accounting/readiness candidate and retain exact source/evidence. Keep stacked integration, merge and deployment as separate gates.
+1. Complete matching-head validation/publication of the current scoped Run-history candidate and retain exact source/evidence. Keep stacked integration, merge and deployment as separate gates.
 2. Expand planning beyond reviewed source-output import only where needed: planner setup/schema guidance and correction workflows, without overwriting manual Tasks. Configured-plan review/acceptance already exists; autonomous planning and live paid-provider planning remain unverified.
 3. Implement one bounded harmless Skill/Tool through the closed Tool Gateway, with exact scoped permissions/approval continuation/effect receipts and unknown-outcome handling. No implicit tool authority from model text.
 4. Extend recovery beyond current safe controls: public governed operator reconciliation for UNKNOWN effects/accounting and in-flight cancellation. Quiescent public cancellation does not establish a complete recovery flow.
