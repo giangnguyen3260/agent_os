@@ -43,12 +43,18 @@ interface Command {
     <p role="status">{{ message() }}</p>
     @if (preview(); as p) {
       <section>
-        <h2>Nội dung sẽ phân tích</h2>
+        <h2>
+          {{
+            recovered()
+              ? 'Nội dung đã duyệt trong biên nhận'
+              : 'Nội dung sẽ phân tích'
+          }}
+        </h2>
         <p>Run: {{ p.runId }} · Phiên bản {{ p.revision }}</p>
         <p>Quyền Tool: {{ p.grantId }}</p>
         <pre aria-label="Nội dung Tool">{{ p.text }}</pre>
         <p>SHA đầu vào: {{ p.inputSha256 }}</p>
-        @if (!pending() && !saved()) {
+        @if (!pending() && !saved() && !recovered()) {
           <label
             ><input
               type="checkbox"
@@ -68,9 +74,18 @@ interface Command {
         Lệnh duyệt chưa xác định kết quả. Giữ nguyên mã lệnh; không Start trước
         khi xác minh.
       </p>
+      <button (click)="recover()" [disabled]="busy()">
+        Kiểm tra biên nhận đã gửi
+      </button>
       <button (click)="send()" [disabled]="busy()">
         Gửi lại đúng lệnh duyệt
       </button>
+    }
+    @if (recovered()) {
+      <p>
+        Đã tìm thấy biên nhận duyệt lịch sử. Về chi tiết Run để kiểm tra trạng
+        thái; biên nhận không cấp quyền thực thi hiện tại.
+      </p>
     }
     @if (saved()) {
       <p>
@@ -124,6 +139,7 @@ export class WorkerToolApprovalComponent {
   readonly confirmed = signal(false);
   readonly busy = signal(false);
   readonly saved = signal(false);
+  readonly recovered = signal(false);
   readonly pending = signal<Command | null>(null);
   readonly message = signal('');
   private captured: Preview | null = null;
@@ -159,6 +175,7 @@ export class WorkerToolApprovalComponent {
     this.preview.set(null);
     this.confirmed.set(false);
     this.saved.set(false);
+    this.recovered.set(false);
   }
   private base() {
     return `/api/v1/organizations/${this.org}/execution-runs/${this.run}/text-tool-approval`;
@@ -281,6 +298,62 @@ export class WorkerToolApprovalComponent {
     });
     this.confirmed.set(false);
     void this.send();
+  }
+  async recover() {
+    const command = this.pending(),
+      captured = this.captured;
+    if (!command || !captured || this.busy()) return;
+    const e = ++this.epoch,
+      a = this.auth.user()?.id;
+    this.erase();
+    this.busy.set(true);
+    try {
+      await this.authorize();
+      if (!this.active(e, a)) return;
+      const {data} = await firstValueFrom(
+        this.http
+          .get<{
+            data: Preview | null;
+          }>(this.base() + '/receipts/' + command.idempotencyKey)
+          .pipe(timeout(15000)),
+      );
+      if (!this.active(e, a)) return;
+      if (data === null) {
+        this.message.set(
+          'Chưa tìm thấy biên nhận; kết quả lệnh vẫn chưa xác định.',
+        );
+        return;
+      }
+      const valid = await this.valid(data);
+      if (!this.active(e, a)) return;
+      if (
+        !valid ||
+        Object.keys(captured).some(
+          k => data[k as keyof Preview] !== captured[k as keyof Preview],
+        )
+      )
+        throw new Error('receipt');
+      this.pending.set(null);
+      this.captured = null;
+      this.preview.set(data);
+      this.recovered.set(true);
+      this.message.set('Đã khôi phục biên nhận lịch sử.');
+    } catch (error) {
+      if (this.active(e, a)) {
+        if (this.denied(error)) {
+          this.pending.set(null);
+          this.captured = null;
+          this.message.set(
+            'Cần quyền ADMIN hiện hành. Lệnh đã gửi có thể đã được ghi nhận.',
+          );
+        } else
+          this.message.set(
+            'Không xác minh được biên nhận; giữ nguyên lệnh chưa xác định.',
+          );
+      }
+    } finally {
+      if (this.active(e, a)) this.busy.set(false);
+    }
   }
   async send() {
     const c = this.pending(),

@@ -1370,4 +1370,34 @@ class MissionGraphCompletionIntegrationTest {
                 .content(body))
         .andExpect(status().isOk());
   }
+
+  @Test
+  void workerApprovalReceiptSurvivesStartAndRevocationButRequiresCurrentAdmin() {
+    var s = fixture();
+    UUID task = task(s);
+    acceptPlan(s);
+    admit(s, UUID.randomUUID(), view(s));
+    grantTool(s);
+    UUID run = run(s, task), key = UUID.randomUUID();
+    var p = workerTools.preview(s.org(), run, s.human());
+    workerTools.approve(s.org(), run, s.human(), key, p.fingerprint());
+    jdbc.update("update execution_runs set status='RUNNING',revision=revision+1 where id=?", run);
+    var c = toolGrants.current(toolScope(s), s.human());
+    toolGrants.apply(
+        toolScope(s),
+        s.human(),
+        UUID.randomUUID(),
+        TextToolGrantService.Operation.REVOKE,
+        c.fingerprint());
+    assertThat(workerTools.receipt(s.org(), run, s.human(), key)).isEqualTo(p);
+    assertThat(workerTools.receipt(s.org(), run, s.human(), UUID.randomUUID())).isNull();
+    assertThat(workerTools.receipt(s.org(), UUID.randomUUID(), s.human(), key)).isNull();
+    jdbc.update("update worker_text_tool_approvals set input_text='tampered' where run_id=?", run);
+    assertThatThrownBy(() -> workerTools.receipt(s.org(), run, s.human(), key))
+        .isInstanceOf(TextToolGrantService.Conflict.class);
+    jdbc.update(
+        "update organization_memberships set role='MEMBER' where account_id=?", s.human().id());
+    assertThatThrownBy(() -> workerTools.receipt(s.org(), run, s.human(), key))
+        .isInstanceOf(AccessDeniedException.class);
+  }
 }

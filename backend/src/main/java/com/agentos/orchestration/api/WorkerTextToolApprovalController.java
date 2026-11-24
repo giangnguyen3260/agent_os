@@ -40,6 +40,17 @@ public class WorkerTextToolApprovalController {
         .body(ApiResponse.ok(service.preview(org, run, actor)));
   }
 
+  @GetMapping("/receipts/{key}")
+  public ResponseEntity<ApiResponse<ApprovedWorkerTextTool.Preview>> receipt(
+      @PathVariable UUID org,
+      @PathVariable UUID run,
+      @PathVariable UUID key,
+      @AuthenticationPrincipal HumanIdentity actor) {
+    return ResponseEntity.ok()
+        .header("Cache-Control", "no-store")
+        .body(ApiResponse.ok(service.receipt(org, run, actor, key)));
+  }
+
   @PostMapping
   public ResponseEntity<ApiResponse<ApprovedWorkerTextTool.Preview>> approve(
       @PathVariable UUID org,
