@@ -9,8 +9,8 @@ const runUrl = `/workspace/${org}/execution-runs/${run}`;
 const api = `/api/v1/organizations/${org}`;
 const taskApi = `${api}/teams/${team}/missions/${mission}/tasks/${task}`;
 const output = 'Verified model output';
-async function fixture(page, {ambiguous = false, role = 'ADMIN'} = {}) {
-  let state = 'READY',
+async function fixture(page, {ambiguous = false, role = 'ADMIN', toolApprovalFingerprint,runReady=false} = {}) {
+  let state = runReady?'CREATED':'READY',
     revision = 0,
     attemptNumber = 0;
   const starts = [],
@@ -39,6 +39,7 @@ async function fixture(page, {ambiguous = false, role = 'ADMIN'} = {}) {
           maxOutputTokens: 100,
           maximumMicrousd: '17508',
           fingerprint: 'a'.repeat(64),
+          toolApprovalFingerprint,
         };
       else {
         expect(r.headers()['x-csrf-token']).toBe('fixture');
@@ -222,3 +223,6 @@ test('MEMBER cannot fetch the Start proposal or send a command', async ({
   expect(requests).toEqual([]);
   expect(tracked.starts).toEqual([]);
 });
+
+test('Run Start preview explicitly shows approved Tool fingerprint without starting',async({page})=>{await fixture(page,{runReady:true,toolApprovalFingerprint:'f'.repeat(64)});await page.goto(runUrl+'/start');await expect(page.getByRole('heading',{name:'Tool đã chọn trước model',exact:true})).toBeVisible();await expect(page.getByText('Fingerprint bản duyệt: '+ 'f'.repeat(64),{exact:true})).toBeVisible();});
+test('malformed selected Tool fingerprint prevents private preflight rendering',async({page})=>{await fixture(page,{runReady:true,toolApprovalFingerprint:'bad'});await page.goto(runUrl+'/start');await expect(page.getByText('Không xác nhận được điều kiện Start. Cần quyền ADMIN và Run READY hợp lệ; hãy tải lại.',{exact:true})).toBeVisible();await expect(page.getByLabel('Request đề xuất')).toHaveCount(0);});

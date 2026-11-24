@@ -13,6 +13,7 @@ import {firstValueFrom, timeout} from 'rxjs';
 import {AuthService} from '../../core/auth/auth.service';
 import {uuid} from '../teams/team.service';
 interface Preflight {
+  toolApprovalFingerprint?: string | null;
   runId?: string;
   taskId?: string;
   revision: string;
@@ -68,6 +69,20 @@ interface Pending {
       </p>
     }
     <p role="status">{{ busy() ? 'Đang xử lý…' : message() }}</p>
+    @if (data(); as p) {
+      @if (p.toolApprovalFingerprint) {
+        <section>
+          <h2>Tool đã chọn trước model</h2>
+          <p>
+            text.metrics v1 trên nội dung đã duyệt. Chi phí Tool thực tế 0; giữ
+            tạm 1 microUSD để kiểm tra năng lực.
+          </p>
+          <p>Fingerprint bản duyệt: {{ p.toolApprovalFingerprint }}</p>
+        </section>
+      } @else {
+        <p>Không chọn Tool tiền xử lý cho lần Start này.</p>
+      }
+    }
     @if (saved()) {
       <p>
         Đã ghi nhận lệnh Start. Worker sẽ kiểm tra điều kiện hiện hành trước khi
@@ -214,6 +229,10 @@ export class ExecutionStartComponent {
       if (!this.active(g, a)) return;
       if (
         !data ||
+        (data.toolApprovalFingerprint !== undefined &&
+          data.toolApprovalFingerprint !== null &&
+          (typeof data.toolApprovalFingerprint !== 'string' ||
+            !/^[0-9a-f]{64}$/.test(data.toolApprovalFingerprint))) ||
         (this.task ? data.taskId !== this.task : data.runId !== this.run) ||
         !uuid(data.connectionId) ||
         !uuid(data.ownerAgentId) ||
