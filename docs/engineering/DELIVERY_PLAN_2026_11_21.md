@@ -24,11 +24,13 @@ PR123's first head failed a mobile test that dispatched synthetic focus before t
 
 The existing loop now demonstrates configured full graph → human plan acceptance → explicit admission → manual Run Starts → exact prerequisite acceptance/release → full Mission closure. Model-proposed planning and passing previous outputs into new requests are separate capabilities; ordering alone is not content collaboration.
 
-## Active candidate: scoped text Tool authority and runtime
+## Active candidate: recorded Tool evidence on Run details
 
 PR131 Run command history (`c30de1c508f0618179fac15329f560684daac16f`) and PR132 complete Mission ZIP download (`9d4952355c4e0cbf630e4b29e7a19c65e49f408c`) both completed all six workflows. Both remain Draft/unmerged.
 
-Current candidate implements the fixed local text.metrics v1 runtime adapter, Mission/Agent-scoped one-hour ADMIN grant/revoke API and UI, exact current-lease/graph/control checks, four-scope capacity admission with zero actual charge, and atomic hash-verified effect/replay evidence. Default/request-only gateway remains closed. See [contract](SCOPED_TEXT_TOOL.md). Live worker proposals, approval continuation and invocation are not yet connected; Skills remain unavailable. Matching-head native CI evidence must be recorded separately from local tests.
+PR133 scoped text.metrics Tool authority/runtime (`f624e3449df8b29cfcf634b539330d79160b8483`) completed all six workflows. It remains Draft/unmerged and live worker invocation is not connected.
+
+Current candidate exposes bounded scoped recorded Tool effects on Run details so reviewers can inspect tool/version, input hash, counts and zero-cost settlement without exposing raw input or worker claims. See [contract](RUN_TOOL_EVIDENCE.md). This is historical read evidence; model proposal/approval and live worker invocation remain outstanding. Matching-head CI must be recorded separately from local checks.
 
 ## Remaining milestones
 

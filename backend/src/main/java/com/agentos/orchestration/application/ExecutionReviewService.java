@@ -47,6 +47,18 @@ public class ExecutionReviewService {
   public record Dispatch(
       UUID id, String state, String sourceRevision, String createdAt, boolean handedOff) {}
 
+  public record ToolEffect(
+      UUID id,
+      UUID attemptId,
+      String tool,
+      int version,
+      String inputSha256,
+      int utf8Bytes,
+      int codePoints,
+      int lines,
+      String recordedAt,
+      String actualMicrousd) {}
+
   public record RunDetail(
       UUID id,
       UUID teamId,
@@ -57,7 +69,8 @@ public class ExecutionReviewService {
       String waitReason,
       java.util.List<Attempt> attempts,
       Accounting accounting,
-      java.util.List<Dispatch> dispatches) {}
+      java.util.List<Dispatch> dispatches,
+      java.util.List<ToolEffect> toolEffects) {}
 
   @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
   public RunDetail run(UUID organization, UUID run, HumanIdentity reviewer) {
@@ -79,6 +92,7 @@ public class ExecutionReviewService {
                     rs.getString(7),
                     java.util.List.of(),
                     null,
+                    java.util.List.of(),
                     java.util.List.of()),
             organization,
             run);
@@ -102,7 +116,45 @@ public class ExecutionReviewService {
         r.waitReason(),
         attempts,
         accounting(run),
-        dispatches(organization, run));
+        dispatches(organization, run),
+        toolEffects(organization, run));
+  }
+
+  private java.util.List<ToolEffect> toolEffects(UUID org, UUID run) {
+    return jdbc.query(
+        "select"
+            + " e.action_id,e.attempt_id,e.input_sha256,e.utf8_bytes,e.code_points,e.lines,e.recorded_at,b.actual_microusd"
+            + " from text_tool_effects e join text_tool_grants g on"
+            + " g.organization_id=e.organization_id and g.id=e.grant_id join"
+            + " execution_budget_reservations b on b.run_id=e.run_id and b.action_id=e.action_id"
+            + " and b.attempt_id=e.attempt_id and b.fence=e.fence where e.organization_id=? and"
+            + " e.run_id=? and g.tool_version=1 and b.status='SETTLED' and b.actual_microusd=0"
+            + " order by e.recorded_at desc,e.action_id desc limit 100",
+        (rs, n) -> {
+          String sha = rs.getString(3);
+          int bytes = rs.getInt(4), points = rs.getInt(5), lines = rs.getInt(6);
+          if (sha == null
+              || !sha.matches("[0-9a-f]{64}")
+              || bytes < 0
+              || bytes > 8192
+              || points < 0
+              || points > bytes
+              || lines < 0
+              || lines > points + 1) throw new Conflict();
+          return new ToolEffect(
+              rs.getObject(1, UUID.class),
+              rs.getObject(2, UUID.class),
+              "text.metrics",
+              1,
+              sha,
+              bytes,
+              points,
+              lines,
+              rs.getObject(7, java.time.OffsetDateTime.class).toInstant().toString(),
+              rs.getString(8));
+        },
+        org,
+        run);
   }
 
   private java.util.List<Dispatch> dispatches(UUID org, UUID run) {
