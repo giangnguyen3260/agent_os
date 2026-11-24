@@ -1,0 +1,11 @@
+# Recorded Tool effects on Run details
+
+Run details now include `toolEffects`: at most 100 persisted text.metrics v1 effects ordered recorded time and action UUID descending. Each item identifies the action/Attempt, fixed tool/version, input SHA256, recorded UTF-8 bytes/Unicode code points/lines, timestamp and settled actual microUSD. Reads retain current enabled credential-version-matching ADMIN and organization/Run scope inside the existing repeatable-read transaction.
+
+Only effects joined to their exact Attempt/fence reservation with SETTLED actual cost zero and a version-1 scoped grant are projected. Historical effects remain visible after grant revocation; a historical row cannot authorize a new action. Raw input, idempotency key, worker locator/fence, issuer identity and grant management payload are not exposed. Metrics are recorded database evidence, not a fresh recomputation or independent cryptographic verification of stored input. Invalid SHA/count bounds reject the read.
+
+The UI labels these separately from accepted output, validates the supported tool/version/counts and removes data on authority loss. A local Tool success is not Run success or output ACCEPT. Older mocked clients may omit the optional field; current backend always returns a bounded list, including empty.
+
+Validation: scoped historical read after revoke, current ADMIN revocation and foreign organization denial, no input text in returned DTO, malformed browser metrics rejection and focus privacy on three viewport sizes. Database assertions are inherited by native PostgreSQL acceptance. This read-only slice does not connect model Tool proposals or trusted worker invocation, add mutations, migration or provider calls. Those remain the next runtime milestone.
+
+The first PR134 head passed five workflows but failed the real Vault browser suite: its dedicated restricted web login was not provisioned SELECT on the two newly read Tool tables. The corrected fixture grants SELECT only and asserts SELECT present with INSERT/UPDATE/DELETE absent for both tables before browser startup. Existing runtime and credential writer permissions are unchanged. Native least-privilege/browser proof requires the corrected-head CI run; local compile is not a substitute.

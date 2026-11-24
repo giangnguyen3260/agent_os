@@ -27,7 +27,20 @@ interface Dispatch {
   createdAt: string;
   handedOff: boolean;
 }
+interface ToolEffect {
+  id: string;
+  attemptId: string;
+  tool: string;
+  version: number;
+  inputSha256: string;
+  utf8Bytes: number;
+  codePoints: number;
+  lines: number;
+  recordedAt: string;
+  actualMicrousd: string;
+}
 interface Run {
+  toolEffects?: ToolEffect[];
   dispatches?: Dispatch[];
   accounting?: Accounting;
   id: string;
@@ -116,6 +129,27 @@ interface Run {
             Số liệu từ ledger và usage đã ghi nhận; khoản chưa đối soát chưa
             phải chi phí cuối cùng.
           </p>
+        }
+        @if (run.toolEffects; as effects) {
+          <h2>100 kết quả Tool gần nhất</h2>
+          <p>
+            Số liệu đã ghi nhận; kết quả Tool không thay thế ACCEPT output của
+            Run.
+          </p>
+          @for (e of effects; track e.id) {
+            <article>
+              <p>{{ e.tool }} v{{ e.version }} · Attempt {{ e.attemptId }}</p>
+              <p>SHA đầu vào: {{ e.inputSha256 }}</p>
+              <p>
+                {{ e.utf8Bytes }} byte UTF-8 · {{ e.codePoints }} ký tự Unicode
+                · {{ e.lines }} dòng
+              </p>
+              <p>{{ e.recordedAt }} · Chi phí đã đối soát: 0 USD</p>
+            </article>
+          }
+          @if (effects.length === 0) {
+            <p>Chưa có kết quả Tool đã ghi nhận.</p>
+          }
         }
         @if (run.dispatches; as commands) {
           <h2>100 lệnh Start gần nhất</h2>
@@ -258,6 +292,32 @@ export class ExecutionRunComponent {
       if (!active()) return;
       if (
         !data ||
+        (data.toolEffects !== undefined &&
+          (!Array.isArray(data.toolEffects) ||
+            data.toolEffects.length > 100 ||
+            new Set(data.toolEffects.map(e => e?.id)).size !==
+              data.toolEffects.length ||
+            data.toolEffects.some(
+              e =>
+                !e ||
+                !uuid(e.id) ||
+                !uuid(e.attemptId) ||
+                e.tool !== 'text.metrics' ||
+                e.version !== 1 ||
+                typeof e.inputSha256 !== 'string' ||
+                !/^[0-9a-f]{64}$/.test(e.inputSha256) ||
+                ![e.utf8Bytes, e.codePoints, e.lines].every(
+                  Number.isSafeInteger,
+                ) ||
+                e.utf8Bytes < 0 ||
+                e.utf8Bytes > 8192 ||
+                e.codePoints < 0 ||
+                e.codePoints > e.utf8Bytes ||
+                e.lines < 0 ||
+                e.lines > e.codePoints + 1 ||
+                e.actualMicrousd !== '0' ||
+                !Number.isFinite(Date.parse(e.recordedAt)),
+            ))) ||
         (data.dispatches !== undefined &&
           (!Array.isArray(data.dispatches) ||
             data.dispatches.length > 100 ||

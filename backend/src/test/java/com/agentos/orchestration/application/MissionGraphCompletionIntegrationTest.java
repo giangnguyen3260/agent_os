@@ -1240,4 +1240,36 @@ class MissionGraphCompletionIntegrationTest {
     assertThatThrownBy(() -> textTools.execute(t, toolRequest(s, t, UUID.randomUUID(), "after")))
         .isInstanceOf(IllegalStateException.class);
   }
+
+  @Autowired ExecutionReviewService toolEvidenceReview;
+
+  @Test
+  void toolEvidenceReadIsScopedHistoricalAndContainsNoInputText() {
+    var s = fixture();
+    var t = toolRun(s);
+    grantTool(s);
+    var r = toolRequest(s, t, UUID.randomUUID(), "private text");
+    textTools.execute(t, r);
+    var detail = toolEvidenceReview.run(s.org(), t.run(), s.human());
+    assertThat(detail.toolEffects()).hasSize(1);
+    var effect = detail.toolEffects().getFirst();
+    assertThat(effect.tool()).isEqualTo("text.metrics");
+    assertThat(effect.utf8Bytes()).isEqualTo(12);
+    assertThat(effect.actualMicrousd()).isEqualTo("0");
+    assertThat(detail.toolEffects().toString()).doesNotContain("private text");
+    var c = toolGrants.current(toolScope(s), s.human());
+    toolGrants.apply(
+        toolScope(s),
+        s.human(),
+        UUID.randomUUID(),
+        TextToolGrantService.Operation.REVOKE,
+        c.fingerprint());
+    assertThat(toolEvidenceReview.run(s.org(), t.run(), s.human()).toolEffects()).hasSize(1);
+    assertThatThrownBy(() -> toolEvidenceReview.run(UUID.randomUUID(), t.run(), s.human()))
+        .isInstanceOf(AccessDeniedException.class);
+    jdbc.update(
+        "update organization_memberships set role='MEMBER' where account_id=?", s.human().id());
+    assertThatThrownBy(() -> toolEvidenceReview.run(s.org(), t.run(), s.human()))
+        .isInstanceOf(AccessDeniedException.class);
+  }
 }
