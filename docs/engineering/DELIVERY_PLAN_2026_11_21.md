@@ -24,7 +24,7 @@ PR123's first head failed a mobile test that dispatched synthetic focus before t
 
 The existing loop now demonstrates configured full graph → human plan acceptance → explicit admission → manual Run Starts → exact prerequisite acceptance/release → full Mission closure. Model-proposed planning and passing previous outputs into new requests are separate capabilities; ordering alone is not content collaboration.
 
-## Active candidate: committed lost-reply Vault recovery
+## Active candidate: Start Tool selection binding
 
 PR131 Run command history (`c30de1c508f0618179fac15329f560684daac16f`) and PR132 complete Mission ZIP download (`9d4952355c4e0cbf630e4b29e7a19c65e49f408c`) both completed all six workflows. Both remain Draft/unmerged.
 
@@ -40,7 +40,9 @@ PR137 corrected head `d3640effcfafd5ede2626f29dde12e8da8eee108` passed all six w
 
 PR138 (`a44b5b67e8e554f0a07a0558ce811d54c8bfa279`) passed all six workflows. Its receipt API has native recovery/scope/privacy coverage; the prior live browser selected a normal successful approval.
 
-Current candidate extends the required Vault graph acceptance to discard a real committed approval response, recover through GET without a second POST, then separately Start and retain the full approved Tool/worker/native evidence assertions. See [contract](TOOL_RECEIPT_VAULT_RECOVERY.md). Matching-head real-backend evidence remains pending CI.
+PR139 (`d3306ed7cdf9d7b0a6a97d12772b61b11d4d991d`) passed all three triggered workflows (Quality/Vault/Docker). The real-backend controlled-provider browser discarded a committed approval reply and recovered it through GET without another approval POST, then retained the approved Tool/worker graph assertions.
+
+Current candidate binds the exact approved Tool selection into new Run Start fingerprints and shows that selection in the preflight UI. No approval preserves existing fingerprint compatibility; stored Start receipt replay remains immutable. See [contract](START_TOOL_SELECTION_BINDING.md). Matching-head native/Vault validation is pending.
 
 ## Remaining milestones
 

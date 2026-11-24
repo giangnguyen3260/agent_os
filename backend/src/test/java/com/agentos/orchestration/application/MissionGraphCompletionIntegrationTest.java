@@ -1400,4 +1400,23 @@ class MissionGraphCompletionIntegrationTest {
     assertThatThrownBy(() -> workerTools.receipt(s.org(), run, s.human(), key))
         .isInstanceOf(AccessDeniedException.class);
   }
+
+  @Test
+  void startFingerprintBindsOnlyExactRunRevisionToolSelection() {
+    var s = fixture();
+    UUID task = task(s);
+    acceptPlan(s);
+    admit(s, UUID.randomUUID(), view(s));
+    grantTool(s);
+    UUID run = run(s, task);
+    var selected = new WorkerToolSelection(jdbc);
+    String base = "a".repeat(64);
+    assertThat(selected.bind(s.org(), run, 0, base)).isEqualTo(base);
+    var preview = workerTools.preview(s.org(), run, s.human());
+    workerTools.approve(s.org(), run, s.human(), UUID.randomUUID(), preview.fingerprint());
+    assertThat(selected.current(s.org(), run, 0)).isEqualTo(preview.fingerprint());
+    assertThat(selected.bind(s.org(), run, 0, base)).isNotEqualTo(base);
+    assertThat(selected.bind(s.org(), run, 1, base)).isEqualTo(base);
+    assertThat(selected.bind(s.org(), UUID.randomUUID(), 0, base)).isEqualTo(base);
+  }
 }

@@ -49,7 +49,8 @@ public final class OpenAiExecutionFlow {
       String maximumMicrousd,
       String fingerprint,
       String dependencyContextSha256,
-      int dependencyCount) {
+      int dependencyCount,
+      String toolApprovalFingerprint) {
     @Override
     public String toString() {
       return "ExecutionPreflight[redacted]";
@@ -175,9 +176,10 @@ public final class OpenAiExecutionFlow {
               p.model(),
               settings.outputTokens(),
               Long.toString(reservation()),
-              fingerprint(rev, p),
+              new WorkerToolSelection(jdbc).bind(org, run, rev, fingerprint(rev, p)),
               p.context() == null ? null : p.context().sha256(),
-              p.context() == null ? 0 : p.context().count());
+              p.context() == null ? 0 : p.context().count(),
+              new WorkerToolSelection(jdbc).current(org, run, rev));
         });
   }
 
@@ -213,7 +215,9 @@ public final class OpenAiExecutionFlow {
             return new Started(receipt.dispatchId(), run, Long.toString(revision));
           }
           var p = prepare(org, run);
-          if (fingerprint == null || !fingerprint.equals(fingerprint(revision, p)))
+          if (fingerprint == null
+              || !fingerprint.equals(
+                  new WorkerToolSelection(jdbc).bind(org, run, revision, fingerprint(revision, p))))
             throw unavailable();
           var receipt = starts.start(org, run, revision, key, actor);
           jdbc.update(
