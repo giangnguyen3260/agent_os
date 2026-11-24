@@ -2162,8 +2162,12 @@ values(?,?,?,?,0,1,1,?,?,?,?,?,?,?,?,?,'ACCESSIBLE','MODEL_DISCOVERY')
           "grant select,insert,update on public.mission_plan_selections to vault_browser_web");
       // Run-detail projection reads historical Tool evidence; this login cannot mutate it.
       statement.execute(
-          "grant select on public.text_tool_effects,public.text_tool_grants to vault_browser_web");
-      for (String table : java.util.List.of("text_tool_effects", "text_tool_grants")) {
+          "grant select on"
+              + " public.text_tool_effects,public.text_tool_grants,public.worker_text_tool_approvals"
+              + " to vault_browser_web");
+      for (String table :
+          java.util.List.of(
+              "text_tool_effects", "text_tool_grants", "worker_text_tool_approvals")) {
         try (var privileges =
             statement.executeQuery(
                 "select has_table_privilege('vault_browser_web','public."

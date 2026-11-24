@@ -24,13 +24,15 @@ PR123's first head failed a mobile test that dispatched synthetic focus before t
 
 The existing loop now demonstrates configured full graph → human plan acceptance → explicit admission → manual Run Starts → exact prerequisite acceptance/release → full Mission closure. Model-proposed planning and passing previous outputs into new requests are separate capabilities; ordering alone is not content collaboration.
 
-## Active candidate: recorded Tool evidence on Run details
+## Active candidate: explicitly approved worker Tool hook
 
 PR131 Run command history (`c30de1c508f0618179fac15329f560684daac16f`) and PR132 complete Mission ZIP download (`9d4952355c4e0cbf630e4b29e7a19c65e49f408c`) both completed all six workflows. Both remain Draft/unmerged.
 
 PR133 scoped text.metrics Tool authority/runtime (`f624e3449df8b29cfcf634b539330d79160b8483`) completed all six workflows. It remains Draft/unmerged and live worker invocation is not connected.
 
-Current candidate exposes bounded scoped recorded Tool effects on Run details so reviewers can inspect tool/version, input hash, counts and zero-cost settlement without exposing raw input or worker claims. See [contract](RUN_TOOL_EVIDENCE.md). This is historical read evidence; model proposal/approval and live worker invocation remain outstanding. Matching-head CI must be recorded separately from local checks.
+PR134 corrected head `cf51afe3720823f9e41498c6a2ae7fd432061f25`: Vault retry attempt2 succeeded after attempt1 Maven Central429; verify other workflow outcomes separately.
+
+Current candidate connects a human-approved, source-pinned text.metrics preprocessing operation to the trusted worker before model authorization. API approval and worker execution are implemented; approval UI/history recovery and real-provider/browser acceptance remain outstanding. See [contract](APPROVED_WORKER_TEXT_TOOL.md).
 
 ## Remaining milestones
 

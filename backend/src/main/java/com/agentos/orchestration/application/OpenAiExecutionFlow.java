@@ -92,6 +92,12 @@ public final class OpenAiExecutionFlow {
       "${agentos.execution.dependency-context.enabled:false}")
   private boolean dependencyContextEnabled;
 
+  private ApprovedWorkerTextTool approvedTools;
+
+  void approvedTools(ApprovedWorkerTextTool tools) {
+    this.approvedTools = tools;
+  }
+
   private final JdbcTemplate jdbc;
   private final TransactionTemplate tx;
   private final ExecutionStartService starts;
@@ -678,6 +684,19 @@ where d.state='QUEUED' order by d.created_at,d.id limit 1
     }
     boolean[] handedOff = {false};
     try {
+      if (approvedTools != null) approvedTools.execute(token);
+      else if (Boolean.TRUE.equals(
+          tx.execute(
+              s ->
+                  jdbc.queryForObject(
+                      "select count(*)>0 from worker_text_tool_approvals where run_id=? and"
+                          + " source_revision=?",
+                      Boolean.class,
+                      job.run(),
+                      jdbc.queryForObject(
+                          "select source_run_revision from execution_start_dispatch where id=?",
+                          Long.class,
+                          job.dispatch()))))) throw unavailable();
       var actor = new HumanIdentity(job.actor(), "", "", job.actorVersion());
       var connection = connections.get(actor, job.org(), job.connection());
       if (connection == null
