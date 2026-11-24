@@ -24,7 +24,7 @@ PR123's first head failed a mobile test that dispatched synthetic focus before t
 
 The existing loop now demonstrates configured full graph → human plan acceptance → explicit admission → manual Run Starts → exact prerequisite acceptance/release → full Mission closure. Model-proposed planning and passing previous outputs into new requests are separate capabilities; ordering alone is not content collaboration.
 
-## Active candidate: Start Tool selection binding
+## Active candidate: stale Tool Start Vault gate
 
 PR131 Run command history (`c30de1c508f0618179fac15329f560684daac16f`) and PR132 complete Mission ZIP download (`9d4952355c4e0cbf630e4b29e7a19c65e49f408c`) both completed all six workflows. Both remain Draft/unmerged.
 
@@ -42,7 +42,9 @@ PR138 (`a44b5b67e8e554f0a07a0558ce811d54c8bfa279`) passed all six workflows. Its
 
 PR139 (`d3306ed7cdf9d7b0a6a97d12772b61b11d4d991d`) passed all three triggered workflows (Quality/Vault/Docker). The real-backend controlled-provider browser discarded a committed approval reply and recovered it through GET without another approval POST, then retained the approved Tool/worker graph assertions.
 
-Current candidate binds the exact approved Tool selection into new Run Start fingerprints and shows that selection in the preflight UI. No approval preserves existing fingerprint compatibility; stored Start receipt replay remains immutable. See [contract](START_TOOL_SELECTION_BINDING.md). Matching-head native/Vault validation is pending.
+PR140 (`c320384c141cb8bd5bff29e7590b654520936ca9`) has successful Quality/native, Vault, SQL foundation, guarded publication and options policy workflows; Docker was still running at the last observation. Do not report six successful workflows until observed.
+
+Current candidate extends real Vault acceptance to submit a pre-approval Start fingerprint after approval, require409 and zero runtime effects, then explicitly Start using the fresh selected-Tool preview. See [contract](STALE_TOOL_START_VAULT.md). Matching-head native proof remains pending CI.
 
 ## Remaining milestones
 
