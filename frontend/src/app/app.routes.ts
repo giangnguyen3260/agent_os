@@ -30,6 +30,15 @@ import {approvalDetailNavigationGuard} from './features/approvals/approval-navig
 
 export const routes: Routes = [
   {
+    path: 'workspace/:id/execution-runs/:runId/text-tool-approval',
+    canActivate: [authGuard],
+    canDeactivate: [(component: {canLeave(): boolean}) => component.canLeave()],
+    loadComponent: () =>
+      import(
+        './features/worker-tool-approval/worker-tool-approval.component'
+      ).then(m => m.WorkerToolApprovalComponent),
+  },
+  {
     path: 'workspace/:id/teams/:teamId/missions/:missionId/text-tool-grants/:agentId',
     canActivate: [authGuard],
     canDeactivate: [(component: {canLeave(): boolean}) => component.canLeave()],

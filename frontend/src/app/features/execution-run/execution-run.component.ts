@@ -130,6 +130,18 @@ interface Run {
             phải chi phí cuối cùng.
           </p>
         }
+        @if (run.status === 'CREATED') {
+          <a
+            [routerLink]="[
+              '/workspace',
+              org,
+              'execution-runs',
+              run.id,
+              'text-tool-approval',
+            ]"
+            >Duyệt text.metrics trước khi Start</a
+          >
+        }
         @if (run.toolEffects; as effects) {
           <h2>100 kết quả Tool gần nhất</h2>
           <p>
