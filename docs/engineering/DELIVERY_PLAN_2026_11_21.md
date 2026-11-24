@@ -24,7 +24,7 @@ PR123's first head failed a mobile test that dispatched synthetic focus before t
 
 The existing loop now demonstrates configured full graph → human plan acceptance → explicit admission → manual Run Starts → exact prerequisite acceptance/release → full Mission closure. Model-proposed planning and passing previous outputs into new requests are separate capabilities; ordering alone is not content collaboration.
 
-## Active candidate: approved Tool Vault acceptance
+## Active candidate: Tool approval receipt recovery
 
 PR131 Run command history (`c30de1c508f0618179fac15329f560684daac16f`) and PR132 complete Mission ZIP download (`9d4952355c4e0cbf630e4b29e7a19c65e49f408c`) both completed all six workflows. Both remain Draft/unmerged.
 
@@ -36,7 +36,9 @@ PR135 (`97fb187d0b93c886d16b8dc5e39cc340d16f839e`) completed all six matching-he
 
 PR136 (`d1fa92649f5616c9c2d726e13c1796cc2cefda9b`) passed all three triggered workflows (Quality, Vault and Docker). Its new approval UI had mocked browser coverage; the prior Vault run did not exercise approval selection.
 
-Current candidate extends the required controlled-provider Vault diamond browser/worker acceptance with explicit root Tool approval, pre-provider effect observation and exact native effect/hash/accounting checks. See [contract](APPROVED_TOOL_VAULT_ACCEPTANCE.md). Matching-head native CI is pending; local compilation is not execution evidence.
+PR137 corrected head `d3640effcfafd5ede2626f29dde12e8da8eee108` passed all six workflows, including the newly selected root Tool approval→worker path with native SHA/count/zero-cost checks before model handoff. This is controlled-provider acceptance, not paid OpenAI.
+
+Current candidate adds an actor/org/Run/key-scoped read-only historical receipt API and explicit ambiguous-command recovery UI. Null remains unknown; a historical receipt does not authorize Start. See [contract](TOOL_APPROVAL_RECEIPT_RECOVERY.md). Broader operator reconciliation/UNKNOWN recovery remains separate.
 
 ## Remaining milestones
 

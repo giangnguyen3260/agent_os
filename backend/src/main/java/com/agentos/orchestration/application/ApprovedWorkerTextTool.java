@@ -8,6 +8,7 @@ import java.util.UUID;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 /** Explicit human-approved local preprocessing. The worker supplies its own trusted lease. */
@@ -131,6 +132,50 @@ public class ApprovedWorkerTextTool {
         p.inputSha256(),
         p.fingerprint(),
         claims.now());
+    return p;
+  }
+
+  @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+  public Preview receipt(UUID org, UUID run, HumanIdentity actor, UUID key) {
+    authority.requireAdmin(org, actor, false);
+    var rows =
+        jdbc.query(
+            "select source_revision,grant_id,input_text,input_sha256,fingerprint from"
+                + " worker_text_tool_approvals where organization_id=? and run_id=? and actor_id=?"
+                + " and idempotency_key=?",
+            (rs, n) ->
+                new Preview(
+                    run,
+                    rs.getString(1),
+                    rs.getObject(2, UUID.class),
+                    rs.getString(3),
+                    rs.getString(4),
+                    rs.getString(5)),
+            org,
+            run,
+            actor.id(),
+            key);
+    if (rows.isEmpty()) return null;
+    var p = rows.getFirst();
+    String text = p.text();
+    if (rows.size() != 1
+        || text == null
+        || text.length() > 8192
+        || !StandardCharsets.UTF_8.newEncoder().canEncode(text)
+        || text.getBytes(StandardCharsets.UTF_8).length > 8192
+        || !TextToolGrantService.hash(text).equals(p.inputSha256())
+        || !TextToolGrantService.hash(
+                "worker.text.metrics@1|"
+                    + org
+                    + "|"
+                    + run
+                    + "|"
+                    + p.revision()
+                    + "|"
+                    + p.grantId()
+                    + "|"
+                    + p.inputSha256())
+            .equals(p.fingerprint())) throw new TextToolGrantService.Conflict();
     return p;
   }
 
