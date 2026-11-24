@@ -24,7 +24,7 @@ PR123's first head failed a mobile test that dispatched synthetic focus before t
 
 The existing loop now demonstrates configured full graph → human plan acceptance → explicit admission → manual Run Starts → exact prerequisite acceptance/release → full Mission closure. Model-proposed planning and passing previous outputs into new requests are separate capabilities; ordering alone is not content collaboration.
 
-## Active candidate: Tool approval receipt recovery
+## Active candidate: committed lost-reply Vault recovery
 
 PR131 Run command history (`c30de1c508f0618179fac15329f560684daac16f`) and PR132 complete Mission ZIP download (`9d4952355c4e0cbf630e4b29e7a19c65e49f408c`) both completed all six workflows. Both remain Draft/unmerged.
 
@@ -38,7 +38,9 @@ PR136 (`d1fa92649f5616c9c2d726e13c1796cc2cefda9b`) passed all three triggered wo
 
 PR137 corrected head `d3640effcfafd5ede2626f29dde12e8da8eee108` passed all six workflows, including the newly selected root Tool approval→worker path with native SHA/count/zero-cost checks before model handoff. This is controlled-provider acceptance, not paid OpenAI.
 
-Current candidate adds an actor/org/Run/key-scoped read-only historical receipt API and explicit ambiguous-command recovery UI. Null remains unknown; a historical receipt does not authorize Start. See [contract](TOOL_APPROVAL_RECEIPT_RECOVERY.md). Broader operator reconciliation/UNKNOWN recovery remains separate.
+PR138 (`a44b5b67e8e554f0a07a0558ce811d54c8bfa279`) passed all six workflows. Its receipt API has native recovery/scope/privacy coverage; the prior live browser selected a normal successful approval.
+
+Current candidate extends the required Vault graph acceptance to discard a real committed approval response, recover through GET without a second POST, then separately Start and retain the full approved Tool/worker/native evidence assertions. See [contract](TOOL_RECEIPT_VAULT_RECOVERY.md). Matching-head real-backend evidence remains pending CI.
 
 ## Remaining milestones
 

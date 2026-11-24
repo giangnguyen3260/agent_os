@@ -87,9 +87,37 @@ test('accepted diamond graph admits all Runs and releases dependencies after exa
       await page.goto(`/workspace/${org}/execution-runs/${id}/text-tool-approval`);
       await expect(page.getByLabel('Nội dung Tool')).toBeVisible();
       await expect(page.getByRole('button',{name:'Duyệt Tool',exact:true})).toBeDisabled();
+      const approvalUrl=`**/api/v1/organizations/${org}/execution-runs/${id}/text-tool-approval`;
+      let committedReplyDropped=false,approvalPosts=0;
+      let approvedFingerprint;
+      await page.route(approvalUrl,async route=>{
+        if(route.request().method()!=='POST')return route.continue();
+        approvalPosts++;
+        // Real backend commits before returning. Discard only this successful reply, never fabricate it.
+        const response=await route.fetch({maxRetries:0});
+        expect(response.status()).toBe(200);
+        const result=await response.json();
+        approvedFingerprint=result.data.fingerprint;
+        expect(approvedFingerprint).toMatch(/^[0-9a-f]{64}$/);
+        committedReplyDropped=true;
+        await route.abort('failed');
+      });
       await page.getByRole('checkbox').check();
       await page.getByRole('button',{name:'Duyệt Tool',exact:true}).click();
-      await page.getByRole('link',{name:'Xem trước và Start Run',exact:true}).click();
+      await expect(page.getByRole('button',{name:'Kiểm tra biên nhận đã gửi',exact:true})).toBeEnabled();
+      expect(committedReplyDropped).toBe(true);
+      const receiptResponse=page.waitForResponse(r=>r.request().method()==='GET'&&new URL(r.url()).pathname.includes(`/execution-runs/${id}/text-tool-approval/receipts/`));
+      await page.getByRole('button',{name:'Kiểm tra biên nhận đã gửi',exact:true}).click();
+      const receipt=await receiptResponse;
+      expect(receipt.status()).toBe(200);
+      expect((await receipt.json()).data.fingerprint).toBe(approvedFingerprint);
+      await expect(page.getByText('Đã khôi phục biên nhận lịch sử.',{exact:true})).toBeVisible();
+      await expect(page.getByRole('heading',{name:'Nội dung đã duyệt trong biên nhận',exact:true})).toBeVisible();
+      await expect(page.getByRole('link',{name:'Xem trước và Start Run',exact:true})).toHaveCount(0);
+      expect(approvalPosts).toBe(1);
+      await page.unroute(approvalUrl);
+      await page.getByRole('link',{name:'Về chi tiết Run',exact:true}).click();
+      await page.getByRole('link',{name:'Khởi chạy Task',exact:true}).click();
       await expect(page.getByLabel('Request đề xuất')).toContainText(name);
     }
 
