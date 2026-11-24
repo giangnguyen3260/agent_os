@@ -2160,6 +2160,32 @@ values(?,?,?,?,0,1,1,?,?,?,?,?,?,?,?,?,'ACCESSIBLE','MODEL_DISCOVERY')
               + " to vault_browser_web");
       statement.execute(
           "grant select,insert,update on public.mission_plan_selections to vault_browser_web");
+      // Run-detail projection reads historical Tool evidence; this login cannot mutate it.
+      statement.execute(
+          "grant select on public.text_tool_effects,public.text_tool_grants to vault_browser_web");
+      for (String table : java.util.List.of("text_tool_effects", "text_tool_grants")) {
+        try (var privileges =
+            statement.executeQuery(
+                "select has_table_privilege('vault_browser_web','public."
+                    + table
+                    + "','SELECT'),"
+                    + " has_table_privilege('vault_browser_web','public."
+                    + table
+                    + "','INSERT'),"
+                    + " has_table_privilege('vault_browser_web','public."
+                    + table
+                    + "','UPDATE'),"
+                    + " has_table_privilege('vault_browser_web','public."
+                    + table
+                    + "','DELETE')")) {
+          if (!privileges.next()
+              || !privileges.getBoolean(1)
+              || privileges.getBoolean(2)
+              || privileges.getBoolean(3)
+              || privileges.getBoolean(4))
+            throw new IllegalStateException("Disposable Tool evidence privilege mismatch");
+        }
+      }
       statement.execute("grant select on public.task_dependencies to vault_browser_web");
       statement.execute("grant select,insert on public.audit_events to vault_browser_web");
       statement.execute("grant insert on public.authentication_audit to vault_browser_web");
