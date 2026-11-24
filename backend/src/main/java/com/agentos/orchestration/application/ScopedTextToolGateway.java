@@ -94,11 +94,13 @@ public class ScopedTextToolGateway implements ToolGateway {
             r.taskId(),
             r.agentId());
     if (scopes.size() != 1) throw denied();
+    // requireCurrent already holds the organization mutex shared with grant issue/revoke.
+    // A grant row lock is redundant and would require UPDATE rights for this read-only authority.
     var grants =
         jdbc.queryForList(
             "select id from text_tool_grants where organization_id=? and team_id=? and mission_id=?"
                 + " and agent_id=? and tool_version=1 and revoked_at is null and expires_at>? order"
-                + " by id for update",
+                + " by id",
             UUID.class,
             token.organization(),
             scopes.getFirst(),
