@@ -24,7 +24,7 @@ PR123's first head failed a mobile test that dispatched synthetic focus before t
 
 The existing loop now demonstrates configured full graph → human plan acceptance → explicit admission → manual Run Starts → exact prerequisite acceptance/release → full Mission closure. Model-proposed planning and passing previous outputs into new requests are separate capabilities; ordering alone is not content collaboration.
 
-## Active candidate: worker Tool approval interface
+## Active candidate: approved Tool Vault acceptance
 
 PR131 Run command history (`c30de1c508f0618179fac15329f560684daac16f`) and PR132 complete Mission ZIP download (`9d4952355c4e0cbf630e4b29e7a19c65e49f408c`) both completed all six workflows. Both remain Draft/unmerged.
 
@@ -34,7 +34,9 @@ PR134 corrected head `cf51afe3720823f9e41498c6a2ae7fd432061f25`: Vault retry att
 
 PR135 (`97fb187d0b93c886d16b8dc5e39cc340d16f839e`) completed all six matching-head workflows, including native PostgreSQL and controlled-provider Vault no-approval execution. Its approved Tool path has backend coverage, not a new live approved-provider demonstration.
 
-Current candidate adds explicit preview/confirmation and exact retry UI for worker Tool approval, with a separate link to request preview/Start. See [contract](WORKER_TOOL_APPROVAL_UI.md). Historical recovery and real-backend approved Tool browser acceptance remain outstanding; no model-directed Tool/Skill authority is established.
+PR136 (`d1fa92649f5616c9c2d726e13c1796cc2cefda9b`) passed all three triggered workflows (Quality, Vault and Docker). Its new approval UI had mocked browser coverage; the prior Vault run did not exercise approval selection.
+
+Current candidate extends the required controlled-provider Vault diamond browser/worker acceptance with explicit root Tool approval, pre-provider effect observation and exact native effect/hash/accounting checks. See [contract](APPROVED_TOOL_VAULT_ACCEPTANCE.md). Matching-head native CI is pending; local compilation is not execution evidence.
 
 ## Remaining milestones
 

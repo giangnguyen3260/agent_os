@@ -84,6 +84,7 @@ import org.springframework.test.context.DynamicPropertySource;
       "agentos.mission-plan-review.enabled=true",
       "agentos.mission-plan-acceptance.enabled=true",
       "agentos.mission-graph-admission.enabled=true",
+      "agentos.tools.text-metrics.enabled=true",
       "agentos.mission-graph-completion.enabled=true",
       "agentos.execution.dependency-context.enabled=true",
       "agentos.mission-plan-proposal.enabled=true",
@@ -1014,11 +1015,26 @@ values(?,?,?,?,0,1,1,?,?,?,?,?,?,?,?,?,'ACCESSIBLE','MODEL_DISCOVERY')
           scope.getKey(),
           scope.getValue());
     }
+    if (graph) {
+      jdbc.update(
+          "insert into"
+              + " text_tool_grants(id,organization_id,team_id,mission_id,agent_id,tool_version,issued_by,issued_at,expires_at)"
+              + " values(?,?,?,?,?,1,?,?,?)",
+          UUID.randomUUID(),
+          org,
+          team,
+          mission,
+          agent,
+          actor,
+          at.minusMinutes(1),
+          at.plusHours(1));
+    }
     var sent = new AtomicInteger();
     var dependencyContextMatched = new java.util.concurrent.atomic.AtomicBoolean(true);
     var inFlightPauseMatched = new java.util.concurrent.atomic.AtomicBoolean(false);
     var authorized = new java.util.concurrent.atomic.AtomicBoolean(true);
     var committed = new java.util.concurrent.atomic.AtomicBoolean(true);
+    var toolBeforeProvider = new java.util.concurrent.atomic.AtomicBoolean(true);
     var provider =
         com.sun.net.httpserver.HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
     provider.createContext(
@@ -1081,6 +1097,16 @@ values(?,?,?,?,0,1,1,?,?,?,?,?,?,?,?,?,'ACCESSIBLE','MODEL_DISCOVERY')
             dependencyContextMatched.compareAndSet(true, matched && titles.equals(expected));
           }
           if (graph && taskTitle.equals("Graph A")) {
+            toolBeforeProvider.compareAndSet(
+                true,
+                jdbc.queryForObject(
+                        "select count(*) from text_tool_effects e join"
+                            + " execution_budget_reservations b on b.run_id=e.run_id and"
+                            + " b.action_id=e.action_id where e.organization_id=? and"
+                            + " b.status='SETTLED' and b.actual_microusd=0",
+                        Integer.class,
+                        org)
+                    == 1);
             long untilPause = System.nanoTime() + TimeUnit.SECONDS.toNanos(25);
             while (System.nanoTime() < untilPause) {
               if (jdbc.queryForObject(
@@ -1201,6 +1227,33 @@ values(?,?,?,?,0,1,1,?,?,?,?,?,?,?,?,?,'ACCESSIBLE','MODEL_DISCOVERY')
       assertThat(failures.get()).isNull();
       if (graph) {
         assertThat(sent.get()).isEqualTo(4);
+        assertThat(toolBeforeProvider.get())
+            .as("Approved Tool effect commits before provider handoff")
+            .isTrue();
+        assertThat(
+                jdbc.queryForObject(
+                    "select count(*) from worker_text_tool_approvals where organization_id=?",
+                    Integer.class,
+                    org))
+            .isEqualTo(1);
+        assertThat(
+                jdbc.queryForObject(
+                    "select count(*) from text_tool_effects where organization_id=?",
+                    Integer.class,
+                    org))
+            .isEqualTo(1);
+        assertThat(
+                jdbc.queryForObject(
+                    "select count(*) from text_tool_effects e join execution_budget_reservations b"
+                        + " on b.run_id=e.run_id and b.action_id=e.action_id join execution_runs r"
+                        + " on r.id=e.run_id join tasks t on t.id=r.task_id join"
+                        + " worker_text_tool_approvals a on a.run_id=e.run_id where"
+                        + " e.organization_id=? and b.status='SETTLED' and b.actual_microusd=0 and"
+                        + " a.input_sha256=e.input_sha256",
+                    Integer.class,
+                    org))
+            .isEqualTo(1);
+
         assertThat(inFlightPauseMatched.get())
             .as("Handed-off provider result remains settleable after public PAUSE")
             .isTrue();
@@ -1212,6 +1265,23 @@ values(?,?,?,?,0,1,1,?,?,?,?,?,?,?,?,?,'ACCESSIBLE','MODEL_DISCOVERY')
                     org,
                     mission))
             .isEqualTo(2L);
+        var toolInput =
+            jdbc.queryForMap(
+                "select t.description,e.input_sha256,e.utf8_bytes,e.code_points from"
+                    + " text_tool_effects e join execution_runs r on r.id=e.run_id join tasks t on"
+                    + " t.id=r.task_id where e.organization_id=?",
+                org);
+        String toolText = (String) toolInput.get("description");
+        assertThat(toolInput.get("input_sha256"))
+            .isEqualTo(
+                java.util.HexFormat.of()
+                    .formatHex(
+                        MessageDigest.getInstance("SHA-256")
+                            .digest(toolText.getBytes(StandardCharsets.UTF_8))));
+        assertThat(((Number) toolInput.get("utf8_bytes")).intValue())
+            .isEqualTo(toolText.getBytes(StandardCharsets.UTF_8).length);
+        assertThat(((Number) toolInput.get("code_points")).intValue())
+            .isEqualTo(toolText.codePointCount(0, toolText.length()));
         assertThat(dependencyContextMatched.get())
             .as("Provider receives exact direct predecessor outputs as data")
             .isTrue();
@@ -2160,7 +2230,12 @@ values(?,?,?,?,0,1,1,?,?,?,?,?,?,?,?,?,'ACCESSIBLE','MODEL_DISCOVERY')
               + " to vault_browser_web");
       statement.execute(
           "grant select,insert,update on public.mission_plan_selections to vault_browser_web");
-      // Run-detail projection reads historical Tool evidence; this login cannot mutate it.
+      // Explicit approval writer for this disposable acceptance login only, never production
+      // grants.
+      statement.execute(
+          "grant insert on public.worker_text_tool_approvals,public.text_tool_effects to"
+              + " vault_browser_web");
+      // Grants remain read-only; approval/effect evidence is append-only for the worker acceptance.
       statement.execute(
           "grant select on"
               + " public.text_tool_effects,public.text_tool_grants,public.worker_text_tool_approvals"
@@ -2184,7 +2259,7 @@ values(?,?,?,?,0,1,1,?,?,?,?,?,?,?,?,?,'ACCESSIBLE','MODEL_DISCOVERY')
                     + "','DELETE')")) {
           if (!privileges.next()
               || !privileges.getBoolean(1)
-              || privileges.getBoolean(2)
+              || privileges.getBoolean(2) != !table.equals("text_tool_grants")
               || privileges.getBoolean(3)
               || privileges.getBoolean(4))
             throw new IllegalStateException("Disposable Tool evidence privilege mismatch");

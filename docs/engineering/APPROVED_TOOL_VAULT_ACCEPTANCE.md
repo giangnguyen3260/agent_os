@@ -1,0 +1,9 @@
+# Approved Tool → worker acceptance gate
+
+The required controlled-provider Vault graph acceptance now enables text.metrics in its disposable application. It seeds one exact scoped grant as infrastructure setup; grant management remains separately tested. The browser follows the root Run's approval page, reviews the bounded input, explicitly acknowledges and approves, then uses the separate Start link. Remaining graph Tasks run without Tool selection.
+
+The existing TLS Vault/PostgreSQL/real-backend worker and diamond dependency/PAUSE/RESUME/ACCEPT/closure/import assertions remain. The controlled provider additionally observes one committed, zero-cost Tool effect before root model handoff. Final native queries require exactly one human approval and one Tool effect, exact input SHA/UTF-8/code-point counts from the root Task description, and exact linked SETTLED zero-charge reservation. Browser Run details must display the recorded Tool effect before output review. Four model sends, four model usage receipts and the existing total model expense remain unchanged.
+
+The disposable login combines web/worker responsibilities, so approval and effect tables gain INSERT only (in addition to SELECT); UPDATE/DELETE remain denied. Tool grants remain SELECT-only. Native has_table_privilege assertions distinguish these rights explicitly. This does not modify deployed roles or grant management privileges, and does not authorize a network Tool.
+
+Local validation: Java fixture compilation, Java formatting/import checks, JavaScript syntax and diff whitespace. Local Docker/PostgreSQL executables are unavailable; the new real-backend flow is not claimed to have passed until matching-head Vault CI succeeds. The provider is simulated, not paid OpenAI. No production behavior/migration change, merge or deployment in this test slice.
