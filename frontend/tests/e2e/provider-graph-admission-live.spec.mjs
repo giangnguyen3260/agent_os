@@ -80,6 +80,19 @@ test('accepted diamond graph admits all Runs and releases dependencies after exa
       .getByRole('link', {name: 'Xem trước và Start Run', exact: true})
       .click();
     await expect(page.getByLabel('Request đề xuất')).toContainText(name);
+    if(name==='Graph A'){
+      const startPath=new URL(page.url()).pathname;
+      const id=startPath.match(/execution-runs\/([0-9a-f-]{36})\/start$/)?.[1];
+      expect(id).toBeTruthy();
+      await page.goto(`/workspace/${org}/execution-runs/${id}/text-tool-approval`);
+      await expect(page.getByLabel('Nội dung Tool')).toBeVisible();
+      await expect(page.getByRole('button',{name:'Duyệt Tool',exact:true})).toBeDisabled();
+      await page.getByRole('checkbox').check();
+      await page.getByRole('button',{name:'Duyệt Tool',exact:true}).click();
+      await page.getByRole('link',{name:'Xem trước và Start Run',exact:true}).click();
+      await expect(page.getByLabel('Request đề xuất')).toContainText(name);
+    }
+
     if (name === 'Graph B' || name === 'Graph C') {
       await expect(page.getByLabel('Request đề xuất')).toContainText(
         'Graph A verified task output',
@@ -198,6 +211,11 @@ test('accepted diamond graph admits all Runs and releases dependencies after exa
         {timeout: 40000},
       )
       .toBe(true);
+    if(name==='Graph A'){
+      await expect(page.getByRole('heading',{name:'100 kết quả Tool gần nhất',exact:true})).toBeVisible();
+      await expect(page.getByText(/text.metrics v1/)).toBeVisible();
+      await expect(page.getByText(/Chi phí đã đối soát: 0 USD/)).toBeVisible();
+    }
     await review.click();
     if (name === 'Graph D')
       plannerRun = new URL(page.url()).pathname.match(
