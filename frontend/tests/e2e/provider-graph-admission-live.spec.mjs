@@ -1,3 +1,4 @@
+import {randomUUID} from 'node:crypto';
 import {expect, test} from '@playwright/test';
 test.skip(
   process.env.PROVIDER_GRAPH_ADMISSION_VAULT_LIVE !== 'true',
@@ -84,6 +85,12 @@ test('accepted diamond graph admits all Runs and releases dependencies after exa
       const startPath=new URL(page.url()).pathname;
       const id=startPath.match(/execution-runs\/([0-9a-f-]{36})\/start$/)?.[1];
       expect(id).toBeTruthy();
+      const startApi=`/api/v1/organizations/${org}/execution-runs/${id}/start`;
+      const oldPreviewResponse=await page.request.get(startApi);
+      expect(oldPreviewResponse.status()).toBe(200);
+      const oldPreview=(await oldPreviewResponse.json()).data;
+      expect(oldPreview.toolApprovalFingerprint).toBeNull();
+
       await page.goto(`/workspace/${org}/execution-runs/${id}/text-tool-approval`);
       await expect(page.getByLabel('Nội dung Tool')).toBeVisible();
       await expect(page.getByRole('button',{name:'Duyệt Tool',exact:true})).toBeDisabled();
@@ -115,10 +122,33 @@ test('accepted diamond graph admits all Runs and releases dependencies after exa
       await expect(page.getByRole('heading',{name:'Nội dung đã duyệt trong biên nhận',exact:true})).toBeVisible();
       await expect(page.getByRole('link',{name:'Xem trước và Start Run',exact:true})).toHaveCount(0);
       expect(approvalPosts).toBe(1);
+      const freshPreviewResponse=await page.request.get(startApi);
+      expect(freshPreviewResponse.status()).toBe(200);
+      const freshPreview=(await freshPreviewResponse.json()).data;
+      expect(freshPreview.toolApprovalFingerprint).toBe(approvedFingerprint);
+      expect(freshPreview.fingerprint).not.toBe(oldPreview.fingerprint);
+      expect(freshPreview.revision).toBe(oldPreview.revision);
+      expect(freshPreview.requestPreview).toBe(oldPreview.requestPreview);
+      const csrfResponse=await page.request.get('/api/v1/auth/csrf');
+      expect(csrfResponse.status()).toBe(200);
+      const csrf=(await csrfResponse.json()).data;
+      expect(csrf.headerName).toBe('X-CSRF-TOKEN');
+      const staleStart=await page.request.post(startApi,{headers:{[csrf.headerName]:csrf.token},data:{expectedRevision:oldPreview.revision,idempotencyKey:randomUUID(),fingerprint:oldPreview.fingerprint}});
+      expect(staleStart.status()).toBe(409);
+      const untouchedRunResponse=await page.request.get(`/api/v1/organizations/${org}/execution-runs/${id}`);
+      expect(untouchedRunResponse.status()).toBe(200);
+      const untouchedRun=(await untouchedRunResponse.json()).data;
+      expect(untouchedRun.status).toBe('CREATED');
+      expect(untouchedRun.revision).toBe(oldPreview.revision);
+      expect(untouchedRun.dispatches).toEqual([]);
+      expect(untouchedRun.attempts).toEqual([]);
+      expect(untouchedRun.toolEffects).toEqual([]);
+
       await page.unroute(approvalUrl);
       await page.getByRole('link',{name:'Về chi tiết Run',exact:true}).click();
       await page.getByRole('link',{name:'Khởi chạy Task',exact:true}).click();
       await expect(page.getByLabel('Request đề xuất')).toContainText(name);
+      await expect(page.getByRole('heading',{name:'Tool đã chọn trước model',exact:true})).toBeVisible();
     }
 
     if (name === 'Graph B' || name === 'Graph C') {
