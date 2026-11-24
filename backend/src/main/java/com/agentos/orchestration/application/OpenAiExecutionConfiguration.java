@@ -39,7 +39,8 @@ class OpenAiExecutionConfiguration {
       ExecutionReviewDecisionStore authority,
       OpenAiExecutionRuntime runtime,
       @Qualifier("openAiExecutionCancellations") ScheduledExecutorService cancellations,
-      Environment env) {
+      Environment env,
+      org.springframework.beans.factory.ObjectProvider<ApprovedWorkerTextTool> tools) {
     if (!env.getProperty("agentos.provider-model-discovery.http-enabled", Boolean.class, false)
         || !env.getProperty("agentos.execution.lease-expiry.enabled", Boolean.class, true))
       throw new IllegalArgumentException("OpenAI runtime requires model grants and lease expiry");
@@ -50,23 +51,26 @@ class OpenAiExecutionConfiguration {
             required(env, "input-rate-microusd-per-million").longValueExact(),
             required(env, "output-rate-microusd-per-million").longValueExact(),
             required(env, "maximum-microusd").longValueExact());
-    return new OpenAiExecutionFlow(
-        jdbc,
-        manager,
-        starts,
-        dispatch,
-        claims,
-        budgets,
-        models,
-        reconciliations,
-        outputs,
-        reviews,
-        authority,
-        runtime.connections(),
-        runtime.credentials(),
-        new OpenAiTextTransport(Clock.systemUTC(), cancellations),
-        settings,
-        Clock.systemUTC());
+    var flow =
+        new OpenAiExecutionFlow(
+            jdbc,
+            manager,
+            starts,
+            dispatch,
+            claims,
+            budgets,
+            models,
+            reconciliations,
+            outputs,
+            reviews,
+            authority,
+            runtime.connections(),
+            runtime.credentials(),
+            new OpenAiTextTransport(Clock.systemUTC(), cancellations),
+            settings,
+            Clock.systemUTC());
+    flow.approvedTools(tools.getIfAvailable());
+    return flow;
   }
 
   @Bean

@@ -842,11 +842,23 @@ class MissionGraphCompletionIntegrationTest {
         toolGrants.current(toolScope(s), s.human()).fingerprint());
   }
 
+  @Autowired ApprovedWorkerTextTool workerTools;
+
   ExecutionClaimStore.Token toolRun(Scope s) {
+    return toolRun(s, false);
+  }
+
+  ExecutionClaimStore.Token toolRun(Scope s, boolean approveTool) {
     UUID task = task(s);
     acceptPlan(s);
     admit(s, UUID.randomUUID(), view(s));
     UUID run = run(s, task), attempt = UUID.randomUUID();
+    if (approveTool) {
+      grantTool(s);
+      var preview = workerTools.preview(s.org(), run, s.human());
+      workerTools.approve(s.org(), run, s.human(), UUID.randomUUID(), preview.fingerprint());
+    }
+
     jdbc.update("update tasks set status='RUNNING' where id=?", task);
     jdbc.update("update execution_runs set status='RUNNING',revision=revision+1 where id=?", run);
     jdbc.update(
@@ -1271,5 +1283,91 @@ class MissionGraphCompletionIntegrationTest {
         "update organization_memberships set role='MEMBER' where account_id=?", s.human().id());
     assertThatThrownBy(() -> toolEvidenceReview.run(s.org(), t.run(), s.human()))
         .isInstanceOf(AccessDeniedException.class);
+  }
+
+  @Test
+  void approvedWorkerToolUsesPinnedInputAndActualClaimThenReplaysOnce() {
+    var s = fixture();
+    var t = toolRun(s, true);
+    long rev =
+        jdbc.queryForObject(
+            "select revision-1 from execution_runs where id=?", Long.class, t.run());
+    jdbc.update(
+        "insert into"
+            + " execution_start_dispatch(id,organization_id,run_id,source_run_revision,actor_id,idempotency_key,actor_credential_version,state)"
+            + " values(?,?,?,?,?,?,?,'CLAIMED')",
+        UUID.randomUUID(),
+        s.org(),
+        t.run(),
+        rev,
+        s.human().id(),
+        UUID.randomUUID(),
+        s.human().credentialVersion());
+    workerTools.execute(t);
+    workerTools.execute(t);
+    assertThat(
+            jdbc.queryForObject(
+                "select count(*) from text_tool_effects where run_id=?", Integer.class, t.run()))
+        .isEqualTo(1);
+    assertThat(
+            toolEvidenceReview
+                .run(s.org(), t.run(), s.human())
+                .toolEffects()
+                .getFirst()
+                .inputSha256())
+        .isEqualTo(TextToolGrantService.hash("Input"));
+    var c = toolGrants.current(toolScope(s), s.human());
+    toolGrants.apply(
+        toolScope(s),
+        s.human(),
+        UUID.randomUUID(),
+        TextToolGrantService.Operation.REVOKE,
+        c.fingerprint());
+    assertThatThrownBy(() -> workerTools.execute(t))
+        .isInstanceOf(TextToolGrantService.Conflict.class);
+  }
+
+  @Test
+  void workerToolApprovalRequiresStrictHumanCommandAndCsrf() throws Exception {
+    var s = fixture();
+    UUID task = task(s);
+    acceptPlan(s);
+    admit(s, UUID.randomUUID(), view(s));
+    grantTool(s);
+    UUID run = run(s, task);
+    var preview = workerTools.preview(s.org(), run, s.human());
+    String path =
+        "/api/v1/organizations/" + s.org() + "/execution-runs/" + run + "/text-tool-approval";
+    var auth = authentication(new UsernamePasswordAuthenticationToken(s.human(), null, List.of()));
+    String body =
+        "{\"idempotencyKey\":\""
+            + UUID.randomUUID()
+            + "\",\"expectedFingerprint\":\""
+            + preview.fingerprint()
+            + "\"}";
+    mvc.perform(
+            org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(path)
+                .with(auth)
+                .contentType("application/json")
+                .content(body))
+        .andExpect(status().isForbidden());
+    mvc.perform(
+            org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(path)
+                .with(auth)
+                .with(
+                    org.springframework.security.test.web.servlet.request
+                        .SecurityMockMvcRequestPostProcessors.csrf())
+                .contentType("application/json")
+                .content(body.replace("{", "{\"extra\":true,")))
+        .andExpect(status().isBadRequest());
+    mvc.perform(
+            org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(path)
+                .with(auth)
+                .with(
+                    org.springframework.security.test.web.servlet.request
+                        .SecurityMockMvcRequestPostProcessors.csrf())
+                .contentType("application/json")
+                .content(body))
+        .andExpect(status().isOk());
   }
 }
