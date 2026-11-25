@@ -1354,7 +1354,17 @@ values(?,?,?,?,0,1,1,?,?,?,?,?,?,?,?,?,'ACCESSIBLE','MODEL_DISCOVERY')
                     "select count(*) from execution_dependency_contexts where organization_id=?",
                     Long.class,
                     org))
-            .isEqualTo(4L);
+            .isEqualTo(5L);
+        assertThat(
+                jdbc.queryForObject(
+                    "select count(*) from execution_dependency_contexts c join"
+                        + " execution_unsent_failure_evidence e on"
+                        + " e.organization_id=c.organization_id and e.run_id=c.run_id and"
+                        + " e.dispatch_id=c.dispatch_id where c.organization_id=? and"
+                        + " c.request_sha256=e.request_sha256",
+                    Long.class,
+                    org))
+            .isEqualTo(1L);
         assertThat(authorized.get()).isTrue();
         assertThat(committed.get()).isTrue();
         assertThat(
