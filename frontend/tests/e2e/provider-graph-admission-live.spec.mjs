@@ -217,6 +217,10 @@ test('accepted diamond graph admits all Runs and releases dependencies after exa
       const preparedRun=(await prepared.json()).data;
       expect(preparedRun.status).toBe('CREATED');
       expect(preparedRun.revision).toBe('3');
+      const storedReceipt=await page.request.get(`${recoveryApi}/receipts/${recoveryCommands[0].idempotencyKey}`);
+      expect(storedReceipt.status()).toBe(200);
+      expect(storedReceipt.headers()['cache-control']).toBe('no-store');
+      expect((await storedReceipt.json()).data).toEqual({runId:recoveryRun,idempotencyKey:recoveryCommands[0].idempotencyKey,sourceRevision:'2',resultingRevision:'3'});
       expect(recoveryCommands).toHaveLength(1);
       expect(startsDuringRecovery).toBe(0);
       await page.getByRole('button',{name:'Kiểm tra điều kiện hiện tại',exact:true}).click();

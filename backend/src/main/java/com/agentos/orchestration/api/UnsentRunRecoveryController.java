@@ -35,6 +35,17 @@ public class UnsentRunRecoveryController {
         .body(ApiResponse.ok(service.preview(org, run, actor)));
   }
 
+  @GetMapping("/receipts/{key}")
+  public ResponseEntity<ApiResponse<UnsentRunRecoveryService.Receipt>> receipt(
+      @PathVariable UUID org,
+      @PathVariable UUID run,
+      @PathVariable UUID key,
+      @AuthenticationPrincipal HumanIdentity actor) {
+    return ResponseEntity.ok()
+        .header("Cache-Control", "no-store")
+        .body(ApiResponse.ok(service.receipt(org, run, actor, key)));
+  }
+
   @PostMapping
   public ResponseEntity<ApiResponse<UnsentRunRecoveryService.Receipt>> prepare(
       @PathVariable UUID org,

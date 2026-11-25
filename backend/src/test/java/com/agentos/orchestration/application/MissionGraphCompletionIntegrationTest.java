@@ -1651,4 +1651,71 @@ class MissionGraphCompletionIntegrationTest {
                 .content(body))
         .andExpect(status().isOk());
   }
+
+  @Test
+  void unsentReceiptReadSurvivesRevisionChangeWithoutMutation() throws Exception {
+    var s = fixture();
+    var t = unsentFailure(s);
+    var c = unsentRecovery.preview(s.org(), t.run(), s.human());
+    UUID key = UUID.randomUUID();
+    var receipt = unsentRecovery.prepare(s.org(), t.run(), s.human(), key, c.fingerprint());
+    jdbc.update("update execution_runs set revision=4 where id=?", t.run());
+    assertThat(unsentRecovery.receipt(s.org(), t.run(), s.human(), key)).isEqualTo(receipt);
+    assertThat(unsentRecovery.receipt(s.org(), UUID.randomUUID(), s.human(), key)).isNull();
+    assertThat(unsentRecovery.receipt(s.org(), t.run(), s.human(), UUID.randomUUID())).isNull();
+    mvc.perform(
+            org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(
+                    "/api/v1/organizations/"
+                        + s.org()
+                        + "/execution-runs/"
+                        + t.run()
+                        + "/unsent-recovery/receipts/"
+                        + key)
+                .with(
+                    authentication(
+                        new UsernamePasswordAuthenticationToken(s.human(), null, List.of()))))
+        .andExpect(status().isOk())
+        .andExpect(
+            org.springframework.test.web.servlet.result.MockMvcResultMatchers.header()
+                .string("Cache-Control", "no-store"))
+        .andExpect(
+            org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath(
+                    "$.data.sourceRevision")
+                .value("2"));
+    assertThat(
+            jdbc.queryForObject(
+                "select revision from execution_runs where id=?", Long.class, t.run()))
+        .isEqualTo(4L);
+    assertThat(
+            jdbc.queryForObject(
+                "select count(*) from execution_start_dispatch where run_id=?",
+                Integer.class,
+                t.run()))
+        .isEqualTo(1);
+    assertThat(
+            jdbc.queryForObject(
+                "select count(*) from unsent_run_recovery_receipts where run_id=?",
+                Integer.class,
+                t.run()))
+        .isEqualTo(1);
+    jdbc.update(
+        "update organization_memberships set role='MEMBER' where account_id=?", s.human().id());
+    assertThatThrownBy(() -> unsentRecovery.receipt(s.org(), t.run(), s.human(), key))
+        .isInstanceOf(AccessDeniedException.class);
+  }
+
+  @Test
+  void unsentReceiptReadRejectsCorruptHistoricalFingerprint() {
+    var s = fixture();
+    var t = unsentFailure(s);
+    var c = unsentRecovery.preview(s.org(), t.run(), s.human());
+    UUID key = UUID.randomUUID();
+    unsentRecovery.prepare(s.org(), t.run(), s.human(), key, c.fingerprint());
+    jdbc.update(
+        "update unsent_run_recovery_receipts set fingerprint=? where run_id=?",
+        "0".repeat(64),
+        t.run());
+    assertThatThrownBy(() -> unsentRecovery.receipt(s.org(), t.run(), s.human(), key))
+        .isInstanceOf(UnsentRunRecoveryService.Conflict.class);
+  }
 }
