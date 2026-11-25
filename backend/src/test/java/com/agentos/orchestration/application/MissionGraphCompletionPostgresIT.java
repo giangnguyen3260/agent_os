@@ -16,7 +16,8 @@ import org.springframework.test.context.DynamicPropertySource;
       "agentos.mission-graph-admission.enabled=true",
       "agentos.mission-graph-completion.enabled=true",
       "agentos.mission-completion.enabled=true",
-      "agentos.tools.text-metrics.enabled=true"
+      "agentos.tools.text-metrics.enabled=true",
+      "agentos.execution.unsent-recovery.enabled=true"
     })
 class MissionGraphCompletionPostgresIT extends MissionGraphCompletionIntegrationTest {
   private static final String SCHEMA =

@@ -1,4 +1,4 @@
-# AgentOS delivery checkpoint — 24 November 2026
+# AgentOS delivery checkpoint — 25 November 2026
 
 PM/BA checkpoint, Asia/Ho_Chi_Minh. Source identities and matching CI are authoritative. All listed PRs remain Draft/unmerged; no deployment or paid-provider acceptance is established. PR count is not a completion percentage.
 
@@ -24,7 +24,7 @@ PR123's first head failed a mobile test that dispatched synthetic focus before t
 
 The existing loop now demonstrates configured full graph → human plan acceptance → explicit admission → manual Run Starts → exact prerequisite acceptance/release → full Mission closure. Model-proposed planning and passing previous outputs into new requests are separate capabilities; ordering alone is not content collaboration.
 
-## Active candidate: stale Tool Start Vault gate
+## Active candidate: worker-attested unsent Run preparation
 
 PR131 Run command history (`c30de1c508f0618179fac15329f560684daac16f`) and PR132 complete Mission ZIP download (`9d4952355c4e0cbf630e4b29e7a19c65e49f408c`) both completed all six workflows. Both remain Draft/unmerged.
 
@@ -44,7 +44,9 @@ PR139 (`d3306ed7cdf9d7b0a6a97d12772b61b11d4d991d`) passed all three triggered wo
 
 PR140 (`c320384c141cb8bd5bff29e7590b654520936ca9`) has successful Quality/native, Vault, SQL foundation, guarded publication and options policy workflows; Docker was still running at the last observation. Do not report six successful workflows until observed.
 
-Current candidate extends real Vault acceptance to submit a pre-approval Start fingerprint after approval, require409 and zero runtime effects, then explicitly Start using the fresh selected-Tool preview. See [contract](STALE_TOOL_START_VAULT.md). Matching-head native proof remains pending CI.
+PR140 (`c320384c141cb8bd5bff29e7590b654520936ca9`) is now6/6 green. PR141 (`15e49f670638e15b0fd879786741f1ca9e065807`) passed all3 triggered workflows, including real stale-fingerprint409/no-effect proof followed by fresh selected-Tool Start.
+
+Current candidate begins recovery with an opt-in backend-only preparation command for a newly worker-attested definite unsent failure. It excludes UNKNOWN/unsettled/nonzero-usage/unproven states, checks revision headroom and revalidates graph/controls atomically before READY/CREATED restoration. No automatic provider effect. See [contract](UNSENT_RUN_RECOVERY.md). UI and actual worker failure acceptance remain outstanding.
 
 ## Remaining milestones
 
