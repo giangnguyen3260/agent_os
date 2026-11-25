@@ -85,18 +85,6 @@ interface Run {
           <dt>Lý do chờ</dt>
           <dd>{{ run.waitReason ?? 'Không có' }}</dd>
         </dl>
-        @if (run.status === 'BLOCKED') {
-          <a
-            [routerLink]="[
-              '/workspace',
-              org,
-              'execution-runs',
-              run.id,
-              'unsent-recovery',
-            ]"
-            >Kiểm tra khả năng chuẩn bị lại Run</a
-          >
-        }
         @if (run.status === 'CREATED') {
           <a
             [routerLink]="[

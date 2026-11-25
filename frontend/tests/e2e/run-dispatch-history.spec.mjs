@@ -11,7 +11,7 @@ async function mock(page,override={}){
 }
 
 test('shows queue claim unknown and finished as command states',async({page})=>{
- await mock(page);await expect(page.getByRole('heading',{name:'100 lệnh Start gần nhất',exact:true})).toBeVisible();await expect(page.locator('article')).toHaveCount(4);await expect(page.getByText('Kết quả request chưa rõ. Cần đối soát trước khi quyết định chạy lại.',{exact:true})).toBeVisible();await expect(page.getByText(/FINISHED biểu thị lệnh đã kết thúc xử lý/)).toBeVisible();await expect(page.getByRole('link',{name:'Khởi chạy Task',exact:true})).toHaveCount(0);
+ await mock(page);const recovery=page.getByRole('link',{name:'Kiểm tra khả năng chuẩn bị lại Run',exact:true});await expect(recovery).toHaveCount(1);await expect(recovery).toHaveAttribute('href',`/workspace/${org}/execution-runs/${run}/unsent-recovery`);await expect(page.getByRole('heading',{name:'100 lệnh Start gần nhất',exact:true})).toBeVisible();await expect(page.locator('article')).toHaveCount(4);await expect(page.getByText('Kết quả request chưa rõ. Cần đối soát trước khi quyết định chạy lại.',{exact:true})).toBeVisible();await expect(page.getByText(/FINISHED biểu thị lệnh đã kết thúc xử lý/)).toBeVisible();await expect(page.getByRole('link',{name:'Khởi chạy Task',exact:true})).toHaveCount(0);
 });
 test('unknown dispatch vocabulary fails closed',async({page})=>{
  await mock(page,{dispatches:[{id:'95190000-0000-4000-8000-000000000010',state:'SUCCESS',sourceRevision:'1',createdAt:'2026-11-23T00:00:00Z',handedOff:true}]});await expect(page.getByRole('heading',{name:'100 lệnh Start gần nhất',exact:true})).toHaveCount(0);
