@@ -28,7 +28,8 @@ import org.springframework.test.web.servlet.MockMvc;
       "agentos.mission-graph-admission.enabled=true",
       "agentos.mission-graph-completion.enabled=true",
       "agentos.mission-completion.enabled=true",
-      "agentos.tools.text-metrics.enabled=true"
+      "agentos.tools.text-metrics.enabled=true",
+      "agentos.execution.unsent-recovery.enabled=true"
     })
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
@@ -1418,5 +1419,236 @@ class MissionGraphCompletionIntegrationTest {
     assertThat(selected.bind(s.org(), run, 0, base)).isNotEqualTo(base);
     assertThat(selected.bind(s.org(), run, 1, base)).isEqualTo(base);
     assertThat(selected.bind(s.org(), UUID.randomUUID(), 0, base)).isEqualTo(base);
+  }
+
+  @Autowired UnsentRunRecoveryService unsentRecovery;
+
+  ExecutionClaimStore.Token unsentFailure(Scope s) {
+    var t = toolRun(s);
+    jdbc.update(
+        "update execution_runs set status='BLOCKED',revision=revision+1 where id=?", t.run());
+    jdbc.update(
+        "update tasks set"
+            + " status='BLOCKED',pending_reason='EXECUTION_UNAVAILABLE',waiting_since=current_timestamp,resolver='Runtime'"
+            + " where id=(select task_id from execution_runs where id=?)",
+        t.run());
+    jdbc.update(
+        "update execution_attempts set status='FAILED',outcome_slot=attempt_number where id=?",
+        t.attempt());
+    jdbc.update(
+        "update execution_claims set invalidated_at=current_timestamp where run_id=?", t.run());
+    jdbc.update(
+        "insert into"
+            + " execution_start_dispatch(id,organization_id,run_id,source_run_revision,actor_id,idempotency_key,actor_credential_version,state)"
+            + " values(?,?,?,0,?,?,?,'FINISHED')",
+        UUID.randomUUID(),
+        s.org(),
+        t.run(),
+        s.human().id(),
+        UUID.randomUUID(),
+        s.human().credentialVersion());
+    UUID
+        dispatch =
+            jdbc.queryForObject(
+                "select id from execution_start_dispatch where run_id=?", UUID.class, t.run()),
+        connection = UUID.randomUUID();
+    jdbc.update(
+        "insert into"
+            + " provider_credential_versions(organization_id,connection_id,provider,credential_revision,external_locator,external_key_version,hmac_key_version,hmac_domain_version,verifier,created_at)"
+            + " values(?,?,'OPENAI',1,'synthetic','1','1','v2','synthetic',current_timestamp)",
+        s.org(),
+        connection);
+    jdbc.update(
+        "insert into"
+            + " provider_connections(id,organization_id,provider,mode,name,state,configuration_revision,credential_revision,created_at,updated_at)"
+            + " values(?,?,'OPENAI','OPENAI_API_KEY','Fixture','ENABLED',1,1,current_timestamp,current_timestamp)",
+        connection,
+        s.org());
+    byte[] body = "{}".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+    String sha = AcceptedRunOutputEvidence.sha(body);
+    jdbc.update(
+        "insert into execution_openai_requests"
+            + " values(?,?,1,'fixture-model',?,?,?,100,10000,1000000,1000000)",
+        dispatch,
+        connection,
+        body,
+        "a".repeat(64),
+        sha);
+    jdbc.update(
+        "insert into"
+            + " execution_unsent_failure_evidence(organization_id,run_id,attempt_id,fence,dispatch_id,request_sha256)"
+            + " values(?,?,?,?,?,?)",
+        s.org(),
+        t.run(),
+        t.attempt(),
+        t.fence(),
+        dispatch,
+        sha);
+    return t;
+  }
+
+  @Test
+  void definiteUnsentFailureCanBePreparedOnceWithoutStarting() {
+    var s = fixture();
+    var t = unsentFailure(s);
+    var c = unsentRecovery.preview(s.org(), t.run(), s.human());
+    UUID key = UUID.randomUUID();
+    var receipt = unsentRecovery.prepare(s.org(), t.run(), s.human(), key, c.fingerprint());
+    assertThat(receipt.resultingRevision()).isEqualTo("3");
+    assertThat(unsentRecovery.prepare(s.org(), t.run(), s.human(), key, c.fingerprint()))
+        .isEqualTo(receipt);
+    assertThat(
+            jdbc.queryForObject(
+                "select status from execution_runs where id=?", String.class, t.run()))
+        .isEqualTo("CREATED");
+    assertThat(
+            jdbc.queryForObject(
+                "select count(*) from execution_start_dispatch where run_id=?",
+                Integer.class,
+                t.run()))
+        .isEqualTo(1);
+  }
+
+  @Test
+  void unknownAttemptAndUnsettledReservationCannotBeRecovered() {
+    var s = fixture();
+    var t = unsentFailure(s);
+    jdbc.update(
+        "update execution_attempts set status='UNKNOWN',outcome_slot=0 where id=?", t.attempt());
+    assertThatThrownBy(() -> unsentRecovery.preview(s.org(), t.run(), s.human()))
+        .isInstanceOf(UnsentRunRecoveryService.Conflict.class);
+    jdbc.update(
+        "update execution_attempts set status='FAILED',outcome_slot=attempt_number where id=?",
+        t.attempt());
+    jdbc.update(
+        "insert into"
+            + " execution_budget_reservations(run_id,action_id,attempt_id,fence,reserved_microusd,status)"
+            + " values(?,?,?,?,1,'UNKNOWN')",
+        t.run(),
+        UUID.randomUUID(),
+        t.attempt(),
+        t.fence());
+    assertThatThrownBy(() -> unsentRecovery.preview(s.org(), t.run(), s.human()))
+        .isInstanceOf(UnsentRunRecoveryService.Conflict.class);
+  }
+
+  @Test
+  void pausedRecoveryRollsBackStateAndCurrentRoleIsMandatory() {
+    var s = fixture();
+    var t = unsentFailure(s);
+    var c = unsentRecovery.preview(s.org(), t.run(), s.human());
+    jdbc.update(
+        "update mission_execution_controls set state='PAUSE_REQUESTED' where organization_id=?",
+        s.org());
+    assertThatThrownBy(
+            () ->
+                unsentRecovery.prepare(
+                    s.org(), t.run(), s.human(), UUID.randomUUID(), c.fingerprint()))
+        .isInstanceOf(IllegalStateException.class);
+    assertThat(
+            jdbc.queryForObject(
+                "select status from execution_runs where id=?", String.class, t.run()))
+        .isEqualTo("BLOCKED");
+    assertThat(
+            jdbc.queryForObject(
+                "select count(*) from unsent_run_recovery_receipts where run_id=?",
+                Integer.class,
+                t.run()))
+        .isZero();
+    jdbc.update(
+        "update organization_memberships set role='MEMBER' where account_id=?", s.human().id());
+    assertThatThrownBy(
+            () ->
+                unsentRecovery.prepare(
+                    s.org(), t.run(), s.human(), UUID.randomUUID(), c.fingerprint()))
+        .isInstanceOf(AccessDeniedException.class);
+  }
+
+  @Test
+  void unprovenFailureUnknownDispatchAndRevisionExhaustionCannotRecover() {
+    var s = fixture();
+    var t = unsentFailure(s);
+    jdbc.update("update execution_start_dispatch set state='UNKNOWN' where run_id=?", t.run());
+    assertThatThrownBy(() -> unsentRecovery.preview(s.org(), t.run(), s.human()))
+        .isInstanceOf(UnsentRunRecoveryService.Conflict.class);
+    jdbc.update("update execution_start_dispatch set state='FINISHED' where run_id=?", t.run());
+    jdbc.update("update execution_runs set revision=9223372036854775803 where id=?", t.run());
+    assertThatThrownBy(() -> unsentRecovery.preview(s.org(), t.run(), s.human()))
+        .isInstanceOf(UnsentRunRecoveryService.Conflict.class);
+    jdbc.update(
+        "update execution_start_dispatch set source_run_revision=0 where run_id=?", t.run());
+    jdbc.update("update execution_runs set revision=2 where id=?", t.run());
+    jdbc.update("delete from execution_unsent_failure_evidence where run_id=?", t.run());
+    assertThatThrownBy(() -> unsentRecovery.preview(s.org(), t.run(), s.human()))
+        .isInstanceOf(UnsentRunRecoveryService.Conflict.class);
+  }
+
+  @Test
+  void otherUnresolvedDispatchAndFailedAttemptChargesDenyPreparation() {
+    var s = fixture();
+    var t = unsentFailure(s);
+    UUID other = UUID.randomUUID();
+    jdbc.update(
+        "insert into"
+            + " execution_start_dispatch(id,organization_id,run_id,source_run_revision,actor_id,idempotency_key,actor_credential_version,state)"
+            + " values(?,?,?,1,?,?,0,'UNKNOWN')",
+        other,
+        s.org(),
+        t.run(),
+        s.human().id(),
+        UUID.randomUUID());
+    assertThatThrownBy(() -> unsentRecovery.preview(s.org(), t.run(), s.human()))
+        .isInstanceOf(UnsentRunRecoveryService.Conflict.class);
+    jdbc.update("update execution_start_dispatch set state='FINISHED' where id=?", other);
+    jdbc.update(
+        "insert into"
+            + " execution_budget_reservations(run_id,action_id,attempt_id,fence,reserved_microusd,status,actual_microusd)"
+            + " values(?,?,?,?,1,'SETTLED',1)",
+        t.run(),
+        UUID.randomUUID(),
+        t.attempt(),
+        t.fence());
+    assertThatThrownBy(() -> unsentRecovery.preview(s.org(), t.run(), s.human()))
+        .isInstanceOf(UnsentRunRecoveryService.Conflict.class);
+  }
+
+  @Test
+  void unsentPreparationHttpRequiresCsrfAndStrictBody() throws Exception {
+    var s = fixture();
+    var t = unsentFailure(s);
+    var c = unsentRecovery.preview(s.org(), t.run(), s.human());
+    String path =
+        "/api/v1/organizations/" + s.org() + "/execution-runs/" + t.run() + "/unsent-recovery";
+    String body =
+        "{\"idempotencyKey\":\""
+            + UUID.randomUUID()
+            + "\",\"expectedFingerprint\":\""
+            + c.fingerprint()
+            + "\"}";
+    var auth = authentication(new UsernamePasswordAuthenticationToken(s.human(), null, List.of()));
+    mvc.perform(
+            org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(path)
+                .with(auth)
+                .contentType("application/json")
+                .content(body))
+        .andExpect(status().isForbidden());
+    mvc.perform(
+            org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(path)
+                .with(auth)
+                .with(
+                    org.springframework.security.test.web.servlet.request
+                        .SecurityMockMvcRequestPostProcessors.csrf())
+                .contentType("application/json")
+                .content(body.replace("{", "{\"extra\":true,")))
+        .andExpect(status().isBadRequest());
+    mvc.perform(
+            org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post(path)
+                .with(auth)
+                .with(
+                    org.springframework.security.test.web.servlet.request
+                        .SecurityMockMvcRequestPostProcessors.csrf())
+                .contentType("application/json")
+                .content(body))
+        .andExpect(status().isOk());
   }
 }

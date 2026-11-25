@@ -93,6 +93,10 @@ public final class OpenAiExecutionFlow {
       "${agentos.execution.dependency-context.enabled:false}")
   private boolean dependencyContextEnabled;
 
+  @org.springframework.beans.factory.annotation.Value(
+      "${agentos.execution.unsent-recovery.enabled:false}")
+  private boolean unsentRecoveryEnabled;
+
   private ApprovedWorkerTextTool approvedTools;
 
   void approvedTools(ApprovedWorkerTextTool tools) {
@@ -827,6 +831,17 @@ where d.state='QUEUED' order by d.created_at,d.id limit 1
                     job.dispatch())
                 .isEmpty()) budgets.settleVerified(job.org(), job.run(), job.dispatch(), 0);
             block(job, token, sent);
+            if (!sent && unsentRecoveryEnabled)
+              jdbc.update(
+                  "insert into"
+                      + " execution_unsent_failure_evidence(organization_id,run_id,attempt_id,fence,dispatch_id,request_sha256)"
+                      + " values(?,?,?,?,?,?)",
+                  job.org(),
+                  job.run(),
+                  token.attempt(),
+                  token.fence(),
+                  job.dispatch(),
+                  job.sha());
             jdbc.update(
                 "update execution_start_dispatch set state=? where id=?",
                 sent ? "UNKNOWN" : "FINISHED",
