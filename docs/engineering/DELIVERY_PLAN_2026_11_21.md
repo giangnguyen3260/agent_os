@@ -24,7 +24,7 @@ PR123's first head failed a mobile test that dispatched synthetic focus before t
 
 The existing loop now demonstrates configured full graph → human plan acceptance → explicit admission → manual Run Starts → exact prerequisite acceptance/release → full Mission closure. Model-proposed planning and passing previous outputs into new requests are separate capabilities; ordering alone is not content collaboration.
 
-## Active candidate: unsent Run preparation confirmation UI
+## Active candidate: real worker unsent preparation acceptance
 
 PR131 Run command history (`c30de1c508f0618179fac15329f560684daac16f`) and PR132 complete Mission ZIP download (`9d4952355c4e0cbf630e4b29e7a19c65e49f408c`) both completed all six workflows. Both remain Draft/unmerged.
 
@@ -48,7 +48,9 @@ PR140 (`c320384c141cb8bd5bff29e7590b654520936ca9`) is now6/6 green. PR141 (`15e4
 
 PR142 (`606aa91d53a6b358364a1e0190333fd729ca8072`) passed all six workflows, including native preparation gate cases. Its positive attestation fixtures were seeded; the new worker failure path has not yet been exercised by a dedicated real-worker acceptance scenario.
 
-Current candidate adds explicit candidate review/acknowledgement, exact captured-command retry and historical preparation receipt UI for the bounded unsent recovery API. No automatic Start or UNKNOWN resolution. See [contract](UNSENT_RUN_RECOVERY_UI.md). Real worker-induced failure and restricted-role/browser acceptance remain outstanding.
+PR143 (`35da950d20b91622c3a1856ac888e20249022325`) passed Quality and Vault; Docker was still running at the last observation. Its UI had mocked recovery coverage; the prior Vault run did not deliberately create an unsent failure.
+
+Current candidate enables the recovery feature in controlled Vault acceptance, creates one actual worker pre-provider failure through a test-only grant revocation, uses public preparation UI, reapproves a new revision and separately Starts. Native proof/receipt/approval/effect/model-count assertions are retained and expanded. See [contract](UNSENT_RECOVERY_VAULT_ACCEPTANCE.md). Matching-head acceptance is pending CI.
 
 ## Remaining milestones
 
