@@ -30,6 +30,15 @@ import {approvalDetailNavigationGuard} from './features/approvals/approval-navig
 
 export const routes: Routes = [
   {
+    path: 'workspace/:id/execution-runs/:runId/unsent-recovery',
+    canActivate: [authGuard],
+    canDeactivate: [(component: {canLeave(): boolean}) => component.canLeave()],
+    loadComponent: () =>
+      import(
+        './features/unsent-run-recovery/unsent-run-recovery.component'
+      ).then(m => m.UnsentRunRecoveryComponent),
+  },
+  {
     path: 'workspace/:id/execution-runs/:runId/text-tool-approval',
     canActivate: [authGuard],
     canDeactivate: [(component: {canLeave(): boolean}) => component.canLeave()],
