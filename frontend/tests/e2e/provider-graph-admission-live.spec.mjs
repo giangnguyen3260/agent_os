@@ -187,9 +187,45 @@ test('accepted diamond graph admits all Runs and releases dependencies after exa
       },{timeout:20000}).toBe(true);
       await recoveryLink.click();
       await expect(page.getByRole('button',{name:'Xác nhận chuẩn bị lại',exact:true})).toBeDisabled();
+      const recoveryPath=new URL(page.url()).pathname;
+      const recoveryRun=recoveryPath.match(/execution-runs\/([0-9a-f-]{36})\/unsent-recovery$/)?.[1];
+      expect(recoveryRun).toBeTruthy();
+      const recoveryApi=`/api/v1/organizations/${org}/execution-runs/${recoveryRun}/unsent-recovery`;
+      const recoveryCommands=[];
+      let startsDuringRecovery=0;
+      const countStarts=request=>{
+        if(request.method()==='POST'&&new URL(request.url()).pathname.endsWith('/start'))startsDuringRecovery++;
+      };
+      page.on('request',countStarts);
+      await page.route('**'+recoveryApi,async route=>{
+        if(route.request().method()!=='POST')return route.continue();
+        recoveryCommands.push(route.request().postDataJSON());
+        // Commit in the real backend first; only its successful reply is discarded.
+        const response=await route.fetch({maxRetries:0});
+        expect(response.status()).toBe(200);
+        if(recoveryCommands.length===1)return route.abort('failed');
+        return route.fulfill({response});
+      });
       await page.getByRole('checkbox').check();
       await page.getByRole('button',{name:'Xác nhận chuẩn bị lại',exact:true}).click();
+      await expect(page.getByText('Lệnh chưa xác định kết quả. Giữ nguyên mã lệnh; không tạo lệnh mới.',{exact:true})).toBeVisible();
+      await expect(page.getByRole('heading',{name:'Biên nhận chuẩn bị lại',exact:true})).toHaveCount(0);
+      const prepared=await page.request.get(`/api/v1/organizations/${org}/execution-runs/${recoveryRun}`);
+      expect(prepared.status()).toBe(200);
+      const preparedRun=(await prepared.json()).data;
+      expect(preparedRun.status).toBe('CREATED');
+      expect(preparedRun.revision).toBe('3');
+      expect(recoveryCommands).toHaveLength(1);
+      expect(startsDuringRecovery).toBe(0);
+      await page.getByRole('button',{name:'Kiểm tra điều kiện hiện tại',exact:true}).click();
+      await expect(page.getByRole('checkbox')).toHaveCount(0);
+      await page.getByRole('button',{name:'Gửi lại đúng lệnh chuẩn bị',exact:true}).click();
       await expect(page.getByRole('heading',{name:'Biên nhận chuẩn bị lại',exact:true})).toBeVisible();
+      expect(recoveryCommands).toHaveLength(2);
+      expect(recoveryCommands[1]).toEqual(recoveryCommands[0]);
+      expect(startsDuringRecovery).toBe(0);
+      page.off('request',countStarts);
+      await page.unroute('**'+recoveryApi);
       await expect(page.getByText('Phiên bản nguồn 2 → 3',{exact:true})).toBeVisible();
       await page.getByRole('link',{name:'Về chi tiết Run',exact:true}).click();
       await page.getByRole('link',{name:'Duyệt text.metrics trước khi Start',exact:true}).click();
