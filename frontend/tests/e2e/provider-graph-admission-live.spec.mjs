@@ -177,6 +177,30 @@ test('accepted diamond graph admits all Runs and releases dependencies after exa
     expect(runPath).toMatch(new RegExp('^/workspace/'+org+'/execution-runs/[0-9a-f-]{36}$'));
     await runLink.click();
     await expect(page).toHaveURL(new RegExp('/execution-runs/[0-9a-f-]{36}$'));
+    if(name==='Graph A'){
+      const recoveryLink=page.getByRole('link',{name:'Kiểm tra khả năng chuẩn bị lại Run',exact:true});
+      await expect.poll(async()=>{
+        if(await recoveryLink.isVisible())return true;
+        const refresh=page.getByRole('button',{name:'Tải lại',exact:true});
+        if(await refresh.isEnabled().catch(()=>false))await refresh.click();
+        return recoveryLink.isVisible();
+      },{timeout:20000}).toBe(true);
+      await recoveryLink.click();
+      await expect(page.getByRole('button',{name:'Xác nhận chuẩn bị lại',exact:true})).toBeDisabled();
+      await page.getByRole('checkbox').check();
+      await page.getByRole('button',{name:'Xác nhận chuẩn bị lại',exact:true}).click();
+      await expect(page.getByRole('heading',{name:'Biên nhận chuẩn bị lại',exact:true})).toBeVisible();
+      await expect(page.getByText('Phiên bản nguồn 2 → 3',{exact:true})).toBeVisible();
+      await page.getByRole('link',{name:'Về chi tiết Run',exact:true}).click();
+      await page.getByRole('link',{name:'Duyệt text.metrics trước khi Start',exact:true}).click();
+      await page.getByRole('checkbox').check();
+      await page.getByRole('button',{name:'Duyệt Tool',exact:true}).click();
+      await page.getByRole('link',{name:'Xem trước và Start Run',exact:true}).click();
+      await expect(page.getByRole('heading',{name:'Tool đã chọn trước model',exact:true})).toBeVisible();
+      await page.getByRole('button',{name:'Xác nhận Start Task',exact:true}).click();
+      await expect(page.getByRole('status')).toContainText('Đã ghi nhận Start.');
+      await page.getByRole('link',{name:'Về lần chạy / kiểm tra trạng thái',exact:true}).click();
+    }
     if (name === 'Graph A') {
       await page.goto(
         `/workspace/${org}/teams/${team}/missions/${mission}/execution-controls`,

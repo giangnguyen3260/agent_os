@@ -85,6 +85,7 @@ import org.springframework.test.context.DynamicPropertySource;
       "agentos.mission-plan-acceptance.enabled=true",
       "agentos.mission-graph-admission.enabled=true",
       "agentos.tools.text-metrics.enabled=true",
+      "agentos.execution.unsent-recovery.enabled=true",
       "agentos.mission-graph-completion.enabled=true",
       "agentos.execution.dependency-context.enabled=true",
       "agentos.mission-plan-proposal.enabled=true",
@@ -1157,6 +1158,7 @@ values(?,?,?,?,0,1,1,?,?,?,?,?,?,?,?,?,'ACCESSIBLE','MODEL_DISCOVERY')
     var timer = Executors.newSingleThreadScheduledExecutor();
     var workers = Executors.newSingleThreadScheduledExecutor();
     var failures = new java.util.concurrent.atomic.AtomicReference<RuntimeException>();
+    var unsentFailureInjected = new java.util.concurrent.atomic.AtomicBoolean(false);
     var transportField =
         com.agentos.orchestration.application.OpenAiExecutionFlow.class.getDeclaredField(
             "transport");
@@ -1182,6 +1184,36 @@ values(?,?,?,?,0,1,1,?,?,?,?,?,?,?,?,?,'ACCESSIBLE','MODEL_DISCOVERY')
       workers.scheduleWithFixedDelay(
           () -> {
             try {
+              if (graph && !unsentFailureInjected.get()) {
+                var queued =
+                    jdbc.queryForList(
+                        "select d.id from execution_start_dispatch d join execution_runs r on"
+                            + " r.id=d.run_id join tasks t on t.id=r.task_id where"
+                            + " d.organization_id=? and d.state='QUEUED' and"
+                            + " d.source_run_revision=0 and t.title='Graph A'",
+                        UUID.class,
+                        org);
+                if (!queued.isEmpty() && unsentFailureInjected.compareAndSet(false, true)) {
+                  // Test-only fault before polling: old approval stays bound to the revoked grant.
+                  jdbc.update(
+                      "update text_tool_grants set revoked_at=current_timestamp,revoked_by=? where"
+                          + " organization_id=? and revoked_at is null",
+                      actor,
+                      org);
+                  jdbc.update(
+                      "insert into"
+                          + " text_tool_grants(id,organization_id,team_id,mission_id,agent_id,tool_version,issued_by,issued_at,expires_at)"
+                          + " values(?,?,?,?,?,1,?,?,?)",
+                      UUID.randomUUID(),
+                      org,
+                      team,
+                      mission,
+                      agent,
+                      actor,
+                      java.time.OffsetDateTime.now(),
+                      java.time.OffsetDateTime.now().plusHours(1));
+                }
+              }
               openAiExecution.poll();
             } catch (RuntimeException failure) {
               failures.compareAndSet(null, failure);
@@ -1227,6 +1259,30 @@ values(?,?,?,?,0,1,1,?,?,?,?,?,?,?,?,?,'ACCESSIBLE','MODEL_DISCOVERY')
       assertThat(failures.get()).isNull();
       if (graph) {
         assertThat(sent.get()).isEqualTo(4);
+        assertThat(unsentFailureInjected.get()).isTrue();
+        assertThat(
+                jdbc.queryForObject(
+                    "select count(*) from execution_unsent_failure_evidence where"
+                        + " organization_id=?",
+                    Integer.class,
+                    org))
+            .isEqualTo(1);
+        assertThat(
+                jdbc.queryForObject(
+                    "select count(*) from unsent_run_recovery_receipts where organization_id=?",
+                    Integer.class,
+                    org))
+            .isEqualTo(1);
+        assertThat(
+                jdbc.queryForObject(
+                    "select count(*) from execution_unsent_failure_evidence e join"
+                        + " execution_attempts a on a.run_id=e.run_id and a.id=e.attempt_id where"
+                        + " e.organization_id=? and a.status='FAILED' and not exists(select 1 from"
+                        + " execution_model_authorizations m where m.run_id=e.run_id and"
+                        + " m.attempt_id=e.attempt_id and m.handed_off_at is not null)",
+                    Integer.class,
+                    org))
+            .isEqualTo(1);
         assertThat(toolBeforeProvider.get())
             .as("Approved Tool effect commits before provider handoff")
             .isTrue();
@@ -1235,7 +1291,7 @@ values(?,?,?,?,0,1,1,?,?,?,?,?,?,?,?,?,'ACCESSIBLE','MODEL_DISCOVERY')
                     "select count(*) from worker_text_tool_approvals where organization_id=?",
                     Integer.class,
                     org))
-            .isEqualTo(1);
+            .isEqualTo(2);
         assertThat(
                 jdbc.queryForObject(
                     "select count(*) from text_tool_effects where organization_id=?",
@@ -1247,8 +1303,9 @@ values(?,?,?,?,0,1,1,?,?,?,?,?,?,?,?,?,'ACCESSIBLE','MODEL_DISCOVERY')
                     "select count(*) from text_tool_effects e join execution_budget_reservations b"
                         + " on b.run_id=e.run_id and b.action_id=e.action_id join execution_runs r"
                         + " on r.id=e.run_id join tasks t on t.id=r.task_id join"
-                        + " worker_text_tool_approvals a on a.run_id=e.run_id where"
-                        + " e.organization_id=? and b.status='SETTLED' and b.actual_microusd=0 and"
+                        + " worker_text_tool_approvals a on a.run_id=e.run_id and"
+                        + " a.idempotency_key=e.idempotency_key where e.organization_id=? and"
+                        + " b.status='SETTLED' and b.actual_microusd=0 and"
                         + " a.input_sha256=e.input_sha256",
                     Integer.class,
                     org))
@@ -1320,7 +1377,7 @@ values(?,?,?,?,0,1,1,?,?,?,?,?,?,?,?,?,'ACCESSIBLE','MODEL_DISCOVERY')
                         + " state='FINISHED'",
                     Long.class,
                     org))
-            .isEqualTo(4L);
+            .isEqualTo(5L);
         assertThat(
                 jdbc.queryForObject(
                     "select count(*) from execution_model_usage where organization_id=?",
@@ -2233,16 +2290,21 @@ values(?,?,?,?,0,1,1,?,?,?,?,?,?,?,?,?,'ACCESSIBLE','MODEL_DISCOVERY')
       // Explicit approval writer for this disposable acceptance login only, never production
       // grants.
       statement.execute(
-          "grant insert on public.worker_text_tool_approvals,public.text_tool_effects to"
-              + " vault_browser_web");
+          "grant insert on"
+              + " public.worker_text_tool_approvals,public.text_tool_effects,public.execution_unsent_failure_evidence,public.unsent_run_recovery_receipts"
+              + " to vault_browser_web");
       // Grants remain read-only; approval/effect evidence is append-only for the worker acceptance.
       statement.execute(
           "grant select on"
-              + " public.text_tool_effects,public.text_tool_grants,public.worker_text_tool_approvals"
+              + " public.text_tool_effects,public.text_tool_grants,public.worker_text_tool_approvals,public.execution_unsent_failure_evidence,public.unsent_run_recovery_receipts"
               + " to vault_browser_web");
       for (String table :
           java.util.List.of(
-              "text_tool_effects", "text_tool_grants", "worker_text_tool_approvals")) {
+              "text_tool_effects",
+              "text_tool_grants",
+              "worker_text_tool_approvals",
+              "execution_unsent_failure_evidence",
+              "unsent_run_recovery_receipts")) {
         try (var privileges =
             statement.executeQuery(
                 "select has_table_privilege('vault_browser_web','public."
