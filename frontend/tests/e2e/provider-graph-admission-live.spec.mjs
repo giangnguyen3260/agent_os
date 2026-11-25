@@ -210,6 +210,8 @@ test('accepted diamond graph admits all Runs and releases dependencies after exa
       await page.getByRole('button',{name:'Xác nhận chuẩn bị lại',exact:true}).click();
       await expect(page.getByText('Lệnh chưa xác định kết quả. Giữ nguyên mã lệnh; không tạo lệnh mới.',{exact:true})).toBeVisible();
       await expect(page.getByRole('heading',{name:'Biên nhận chuẩn bị lại',exact:true})).toHaveCount(0);
+      // Pending is rendered before transport completes; wait for the dropped reply to settle.
+      await expect(page.getByRole('button',{name:'Gửi lại đúng lệnh chuẩn bị',exact:true})).toBeEnabled();
       const prepared=await page.request.get(`/api/v1/organizations/${org}/execution-runs/${recoveryRun}`);
       expect(prepared.status()).toBe(200);
       const preparedRun=(await prepared.json()).data;
