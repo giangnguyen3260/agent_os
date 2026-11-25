@@ -5,6 +5,7 @@ import java.util.UUID;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 /** Prepares a definite pre-provider failure only; never sends, claims or resolves UNKNOWN. */
@@ -65,6 +66,33 @@ and not exists(select 1 from execution_model_authorizations m where m.run_id=r.i
   public Context preview(UUID org, UUID run, HumanIdentity actor) {
     authority.requireAdmin(org, actor, true);
     return target(org, run);
+  }
+
+  @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+  public Receipt receipt(UUID org, UUID run, HumanIdentity actor, UUID key) {
+    authority.requireAdmin(org, actor, false);
+    if (key == null) throw new IllegalArgumentException("Missing recovery key");
+    var rows =
+        jdbc.query(
+            "select source_revision,resulting_revision,fingerprint from"
+                + " unsent_run_recovery_receipts where organization_id=? and run_id=? and"
+                + " actor_id=? and idempotency_key=?",
+            (rs, n) -> new String[] {rs.getString(1), rs.getString(2), rs.getString(3)},
+            org,
+            run,
+            actor.id(),
+            key);
+    if (rows.isEmpty()) return null;
+    if (rows.size() != 1) throw new Conflict();
+    var row = rows.getFirst();
+    long source = Long.parseLong(row[0]);
+    if (source < 2
+        || source > Long.MAX_VALUE - 5
+        || !Long.toString(source).equals(row[0])
+        || !Long.toString(source + 1).equals(row[1])
+        || !TextToolGrantService.hash("unsent.recovery@1|" + org + "|" + run + "|" + source)
+            .equals(row[2])) throw new Conflict();
+    return new Receipt(run, key, row[0], row[1]);
   }
 
   @Transactional
