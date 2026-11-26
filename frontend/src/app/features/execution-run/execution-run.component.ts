@@ -75,6 +75,16 @@ interface Run {
           ]"
           >Về Task</a
         >
+        <a
+          [routerLink]="[
+            '/workspace',
+            org,
+            'execution-runs',
+            run.id,
+            'unsent-recovery',
+          ]"
+          >Tra cứu biên nhận chuẩn bị Run</a
+        >
         <dl>
           <dt>Run</dt>
           <dd>{{ run.id }}</dd>
