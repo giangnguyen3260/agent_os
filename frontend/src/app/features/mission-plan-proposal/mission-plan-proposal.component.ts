@@ -84,6 +84,33 @@ interface Receipt {
       Áp dụng chỉ tạo Task DRAFT. Sau đó bạn vẫn cần duyệt kế hoạch, tiếp nhận
       Run và Start riêng.
     </p>
+    <details>
+      <summary>Chuẩn bị đầu ra cho Task lập kế hoạch</summary>
+      <p>
+        Tạo Task lập kế hoạch với mục tiêu và kết quả cần bàn giao của Mission.
+        Yêu cầu Agent chỉ trả JSON thuần theo mẫu, không có Markdown hoặc lời
+        dẫn.
+      </p>
+      <p>
+        Dùng 1–20 Task, tối đa 100 quan hệ phụ thuộc, không có chu trình. Mỗi
+        key bắt đầu bằng chữ thường và chỉ chứa chữ thường, số hoặc dấu gạch
+        dưới, tối đa 40 ký tự. Priority: LOW, NORMAL, HIGH hoặc URGENT.
+      </p>
+      <p>
+        Title tối đa 255, description 8000 và acceptanceCriteria 4000 ký tự; nội
+        dung bắt buộc phải có và không thừa khoảng trắng ở đầu/cuối. Giới hạn
+        JSON là 64 KiB, không cắt ngắn dữ liệu để nhập.
+      </p>
+      <label
+        >Mẫu JSON đầu ra<textarea readonly [value]="plannerTemplate"></textarea>
+      </label>
+      <p>
+        Đây là mẫu để tham khảo, không phải đề xuất đã được duyệt. Sau khi Task
+        nguồn được ACCEPT và Mission nguồn đã đóng, nhập Run nguồn trong cùng
+        Team, chỉnh nội dung nếu cần, chọn Agent phụ trách và duyệt toàn bộ
+        trước khi áp dụng. Mẫu không tự ghi đè nội dung đang nhập.
+      </p>
+    </details>
     <p role="status">{{ busy() ? 'Đang kiểm tra…' : message() }}</p>
     @if (receipt(); as saved) {
       <h2>Đã nhập {{ entries(saved.taskIds).length }} Task</h2>
@@ -203,6 +230,32 @@ interface Receipt {
   </main>`,
 })
 export class MissionPlanProposalComponent {
+  readonly plannerTemplate = JSON.stringify(
+    {
+      schemaVersion: 1,
+      tasks: [
+        {
+          key: 'research',
+          title: 'Collect references',
+          description: 'Collect relevant evidence for the supplied goal.',
+          acceptanceCriteria: 'Relevant references with stated limitations.',
+          priority: 'NORMAL',
+          dependencies: [],
+        },
+        {
+          key: 'write',
+          title: 'Write the deliverable',
+          description: 'Use accepted research to produce the required output.',
+          acceptanceCriteria:
+            'Meets the Mission goal and states remaining gaps.',
+          priority: 'NORMAL',
+          dependencies: ['research'],
+        },
+      ],
+    },
+    null,
+    2,
+  );
   private readonly http = inject(HttpClient);
   private readonly route = inject(ActivatedRoute);
   private readonly auth = inject(AuthService);

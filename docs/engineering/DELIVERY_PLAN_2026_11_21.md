@@ -24,39 +24,29 @@ PR123's first head failed a mobile test that dispatched synthetic focus before t
 
 The existing loop now demonstrates configured full graph → human plan acceptance → explicit admission → manual Run Starts → exact prerequisite acceptance/release → full Mission closure. Model-proposed planning and passing previous outputs into new requests are separate capabilities; ordering alone is not content collaboration.
 
-## Active candidate: real worker unsent preparation acceptance
+## Verified continuation — 26 November 2026
 
-PR131 Run command history (`c30de1c508f0618179fac15329f560684daac16f`) and PR132 complete Mission ZIP download (`9d4952355c4e0cbf630e4b29e7a19c65e49f408c`) both completed all six workflows. Both remain Draft/unmerged.
+PR131–142 completed their documented history/results/Tool/Start-binding/unsent-recovery slices. Later exact-head checks supersede the earlier pending notes:
 
-PR133 scoped text.metrics Tool authority/runtime (`f624e3449df8b29cfcf634b539330d79160b8483`) completed all six workflows. It remains Draft/unmerged and live worker invocation is not connected.
+| PR | Head | Observed CI / behavior |
+| --- | --- | --- |
+|143|`35da950d20b91622c3a1856ac888e20249022325`|3/3; preparation UI|
+|144|`0ba063f051c2fd1c7900c7308107eda90e5efb10`|6/6; actual worker pre-provider failure, preparation2→3, new Tool approval and explicit Start/full closure|
+|145|`0c9cc08231caf6ee00259f02c6225c00aecc8f39`|3/3; committed preparation response loss and exact-command replay|
+|146|`03033cd4b77451e8247d47d0f2b54dc49d74b44a`|6/6; scoped historical receipt GET, native lookup before replay|
+|147|`619dcd8accff8d9b58cdbaee61b44da829e955d3`|2/2 triggered; manual receipt lookup UI|
+|148|`8349cef6df45a7bd65d055e24f9fb9cdfe26502b`|3/3; actual UI missing-key and committed-receipt lookup before retained replay|
+|149|`25da095fdc30d9724d1ecfb59d7b2771e291a92c`|3/3; historical lookup reachable after Run state changes|
 
-PR134 corrected head `cf51afe3720823f9e41498c6a2ae7fd432061f25`: Vault retry attempt2 succeeded after attempt1 Maven Central429; verify other workflow outcomes separately.
+All remain Draft/unmerged. Controlled provider only; paid OpenAI and deployed privilege activation remain unverified. UNKNOWN effects do not gain retry authority from definite-unsent preparation.
 
-PR135 (`97fb187d0b93c886d16b8dc5e39cc340d16f839e`) completed all six matching-head workflows, including native PostgreSQL and controlled-provider Vault no-approval execution. Its approved Tool path has backend coverage, not a new live approved-provider demonstration.
-
-PR136 (`d1fa92649f5616c9c2d726e13c1796cc2cefda9b`) passed all three triggered workflows (Quality, Vault and Docker). Its new approval UI had mocked browser coverage; the prior Vault run did not exercise approval selection.
-
-PR137 corrected head `d3640effcfafd5ede2626f29dde12e8da8eee108` passed all six workflows, including the newly selected root Tool approval→worker path with native SHA/count/zero-cost checks before model handoff. This is controlled-provider acceptance, not paid OpenAI.
-
-PR138 (`a44b5b67e8e554f0a07a0558ce811d54c8bfa279`) passed all six workflows. Its receipt API has native recovery/scope/privacy coverage; the prior live browser selected a normal successful approval.
-
-PR139 (`d3306ed7cdf9d7b0a6a97d12772b61b11d4d991d`) passed all three triggered workflows (Quality/Vault/Docker). The real-backend controlled-provider browser discarded a committed approval reply and recovered it through GET without another approval POST, then retained the approved Tool/worker graph assertions.
-
-PR140 (`c320384c141cb8bd5bff29e7590b654520936ca9`) has successful Quality/native, Vault, SQL foundation, guarded publication and options policy workflows; Docker was still running at the last observation. Do not report six successful workflows until observed.
-
-PR140 (`c320384c141cb8bd5bff29e7590b654520936ca9`) is now6/6 green. PR141 (`15e49f670638e15b0fd879786741f1ca9e065807`) passed all3 triggered workflows, including real stale-fingerprint409/no-effect proof followed by fresh selected-Tool Start.
-
-PR142 (`606aa91d53a6b358364a1e0190333fd729ca8072`) passed all six workflows, including native preparation gate cases. Its positive attestation fixtures were seeded; the new worker failure path has not yet been exercised by a dedicated real-worker acceptance scenario.
-
-PR143 (`35da950d20b91622c3a1856ac888e20249022325`) passed Quality and Vault; Docker was still running at the last observation. Its UI had mocked recovery coverage; the prior Vault run did not deliberately create an unsent failure.
-
-Current candidate enables the recovery feature in controlled Vault acceptance, creates one actual worker pre-provider failure through a test-only grant revocation, uses public preparation UI, reapproves a new revision and separately Starts. Native proof/receipt/approval/effect/model-count assertions are retained and expanded. See [contract](UNSENT_RECOVERY_VAULT_ACCEPTANCE.md). Matching-head acceptance is pending CI.
+Current local continuation adds planner output schema/sample guidance to the existing reviewed-import page. Guidance is read-only and does not call a provider, populate the correction editor, assign Agents or create Tasks. Its own validation/publication/CI must be recorded separately.
 
 ## Remaining milestones
 
-1. Complete matching-head validation/publication of the current bounded Tool candidate and retain exact source/evidence. Keep stacked integration, merge and deployment as separate gates.
+1. Complete matching-head validation/publication of planner guidance and retain exact source/evidence. Keep stacked integration, merge and deployment as separate gates.
 2. Expand planning beyond reviewed source-output import only where needed: planner setup/schema guidance and correction workflows, without overwriting manual Tasks. Configured-plan review/acceptance already exists; autonomous planning and live paid-provider planning remain unverified.
-3. Complete live worker proposal/approval continuation and invocation for the first bounded Tool, on top of the current scoped text.metrics candidate. Skills/assignment remain separate. No implicit tool authority from model text.
+3. The first bounded text.metrics Tool has human approval, selection-bound Start and actual worker acceptance. Model-requested Tool proposal/approval continuation and Skills/assignment remain separate. No implicit tool authority from model text.
 4. Extend recovery beyond current safe controls: public governed operator reconciliation for UNKNOWN effects/accounting and in-flight cancellation. Quiescent public cancellation does not establish a complete recovery flow.
 5. Expand verified results, authorized downloads, execution Trace and actual ledger/token/cost visibility; distinguish recorded data from running operations.
 6. Implement scoped versioned Memory/Knowledge context and sharing/retention/isolation before broader search/vector features.
