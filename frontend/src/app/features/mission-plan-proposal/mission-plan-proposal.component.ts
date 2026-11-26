@@ -171,6 +171,9 @@ interface Receipt {
               (ngModelChange)="edit($event)"
             ></textarea>
           </label>
+          @if (proposalIssue(); as issue) {
+            <p role="alert">{{ issue }}</p>
+          }
           <p>
             {{
               sourceText() && proposalText === sourceText()
@@ -364,10 +367,35 @@ export class MissionPlanProposalComponent {
       return [];
     }
   }
+  proposalIssue(): string {
+    if (!this.proposalText.trim()) return '';
+    if (new TextEncoder().encode(this.proposalText).length > 65536)
+      return 'JSON vượt giới hạn 64 KiB. Rút gọn nội dung, không cắt bỏ Task hoặc phụ thuộc chưa duyệt.';
+    let value: unknown;
+    try {
+      value = JSON.parse(this.proposalText);
+    } catch {
+      return 'JSON chưa hợp lệ. Kiểm tra dấu ngoặc, dấu phẩy và dấu nháy kép; bỏ Markdown hoặc lời dẫn.';
+    }
+    if (!value || typeof value !== 'object' || Array.isArray(value))
+      return 'Đề xuất phải là một object JSON có schemaVersion và tasks.';
+    const proposal = value as {schemaVersion?: unknown; tasks?: unknown};
+    if (proposal.schemaVersion !== 1) return 'schemaVersion phải là số 1.';
+    if (
+      !Array.isArray(proposal.tasks) ||
+      proposal.tasks.length < 1 ||
+      proposal.tasks.length > 20
+    )
+      return 'tasks phải chứa từ 1 đến 20 Task.';
+    if (this.rows().length !== proposal.tasks.length)
+      return 'Mỗi Task cần title dạng chuỗi và key riêng: chữ thường, số hoặc dấu gạch dưới; bắt đầu bằng chữ thường, tối đa 40 ký tự.';
+    return '';
+  }
   canReview() {
     const rows = this.rows();
     return (
       this.validSource() &&
+      !this.proposalIssue() &&
       rows.length > 0 &&
       rows.every(t => uuid(this.owners[t.key] ?? ''))
     );
