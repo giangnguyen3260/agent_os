@@ -292,3 +292,5 @@ for (const option of ['duplicatePreview', 'reverseOrder'])
       expect(state.posts).toHaveLength(0);
     },
   );
+
+test('planner guidance is read-only and never previews or applies a sample',async({page})=>{const s=await mock(page);await page.goto(path);await page.getByText('Chuẩn bị đầu ra cho Task lập kế hoạch',{exact:true}).click();const sample=page.getByLabel('Mẫu JSON đầu ra',{exact:true});await expect(sample).toHaveAttribute('readonly','');const value=JSON.parse(await sample.inputValue());expect(value.schemaVersion).toBe(1);expect(value.tasks.map(t=>t.key)).toEqual(['research','write']);expect(value.tasks[1].dependencies).toEqual(['research']);expect(s.previewPosts).toHaveLength(0);expect(s.posts).toHaveLength(0);});
