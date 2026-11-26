@@ -66,6 +66,7 @@ interface Receipt {
     }
     @if (pending()) {
       <p>Lệnh chưa xác định kết quả. Giữ nguyên mã lệnh; không tạo lệnh mới.</p>
+      <p>Mã lệnh: {{ pending()?.idempotencyKey }}</p>
       <button (click)="send()" [disabled]="busy()">
         Gửi lại đúng lệnh chuẩn bị
       </button>
@@ -82,6 +83,29 @@ interface Receipt {
         </p>
       </section>
     }
+    <section>
+      <h2>Tra cứu biên nhận đã lưu</h2>
+      <label
+        >Mã lệnh chuẩn bị
+        <input
+          [value]="lookupKey()"
+          (input)="lookupKey.set($any($event.target).value)"
+          [disabled]="busy()"
+          autocomplete="off"
+        />
+      </label>
+      <button (click)="lookup()" [disabled]="busy()">Tra cứu biên nhận</button>
+      <p>{{ lookupMessage() }}</p>
+      @if (historical(); as h) {
+        <h3>Biên nhận lịch sử</h3>
+        <p>Mã lệnh {{ h.idempotencyKey }}</p>
+        <p>Phiên bản {{ h.sourceRevision }} → {{ h.resultingRevision }}</p>
+        <p>
+          Biên nhận không xác nhận trạng thái Run hiện tại và không cấp quyền
+          Start.
+        </p>
+      }
+    </section>
     <button (click)="load()" [disabled]="busy()">
       Kiểm tra điều kiện hiện tại
     </button>
@@ -125,6 +149,9 @@ export class UnsentRunRecoveryComponent {
   readonly pending = signal<Command | null>(null);
   readonly busy = signal(false);
   readonly message = signal('');
+  readonly lookupKey = signal('');
+  readonly lookupMessage = signal('');
+  readonly historical = signal<Receipt | null>(null);
   private epoch = 0;
   private captured: Context | null = null;
   private uncertain = false;
@@ -153,6 +180,9 @@ export class UnsentRunRecoveryComponent {
     });
   }
   private erase() {
+    this.lookupKey.set('');
+    this.lookupMessage.set('');
+    this.historical.set(null);
     this.context.set(null);
     this.confirmed.set(false);
     this.receipt.set(null);
@@ -215,6 +245,62 @@ export class UnsentRunRecoveryComponent {
         'Lệnh chuẩn bị chưa rõ kết quả. Rời trang sẽ mất thông tin gửi lại lệnh.',
       )
     );
+  }
+  async lookup() {
+    if (this.busy()) return;
+    this.historical.set(null);
+    this.lookupMessage.set('');
+    const key = this.lookupKey().trim();
+    if (!uuid(key)) {
+      this.lookupMessage.set('Mã lệnh phải là UUID hợp lệ.');
+      return;
+    }
+    const e = ++this.epoch,
+      a = this.auth.user()?.id;
+    this.context.set(null);
+    this.confirmed.set(false);
+    this.receipt.set(null);
+    this.busy.set(true);
+    try {
+      await this.authorize();
+      if (!this.active(e, a)) return;
+      const {data: r} = await firstValueFrom(
+        this.http
+          .get<{data: Receipt | null}>(`${this.base()}/receipts/${key}`)
+          .pipe(timeout(15000)),
+      );
+      if (!this.active(e, a)) return;
+      if (r === null) {
+        this.lookupMessage.set(
+          'Không tìm thấy biên nhận trong phạm vi hiện tại. Kết quả lệnh chưa được xác nhận.',
+        );
+        return;
+      }
+      if (
+        !r ||
+        r.runId !== this.run ||
+        r.idempotencyKey !== key ||
+        typeof r.sourceRevision !== 'string' ||
+        !/^[1-9][0-9]{0,18}$/.test(r.sourceRevision) ||
+        BigInt(r.sourceRevision) < 2n ||
+        BigInt(r.sourceRevision) > 9223372036854775802n ||
+        r.resultingRevision !== (BigInt(r.sourceRevision) + 1n).toString()
+      )
+        throw new Error('receipt');
+      this.historical.set(r);
+    } catch (error) {
+      if (this.active(e, a)) {
+        this.lookupMessage.set(
+          'Không xác nhận được biên nhận. Kiểm tra quyền ADMIN và mã lệnh.',
+        );
+        if (this.denied(error)) {
+          this.pending.set(null);
+          this.captured = null;
+        }
+      }
+    } finally {
+      if (this.active(e, a)) this.busy.set(false);
+    }
   }
   async load() {
     const e = ++this.epoch,

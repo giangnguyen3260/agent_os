@@ -1,0 +1,7 @@
+# Historical preparation receipt lookup
+
+The preparation page displays the retained pending command key and provides an explicit key input and read-only lookup. Fresh ADMIN authorization precedes the receipt GET. Validate exact Run/key, canonical source revision with original headroom and resulting revision+1 before displaying a separate historical receipt. No POST, Start, new command key or approval is created by lookup. A null result is unconfirmed, not proof that preparation failed.
+
+Lookup clears current candidate acknowledgement and visible current receipt, while retaining any ambiguous command and captured fingerprint for exact retry. Historical lookup never grants current Start authority. Focus/route/account changes clear lookup data through the existing private-state lifecycle; response epochs fence stale results. Current authorization rejection clears retained private command data as before. Key values remain in memory and are not placed in URLs/storage.
+
+Four new cases across three viewports cover GET-only success/revocation clearing, null result without preparation, malformed key/foreign Run refusal, and preservation of an ambiguous command through lookup and exact replay. Together with retained preparation/Run cases,45 mocked browser cases pass. Build/lint/format pass. PR146 baseline passed all6workflows. This UI needs matching-head CI; intercepted API browser checks do not establish live lookup acceptance. Controlled provider only, no merge/deployment.
