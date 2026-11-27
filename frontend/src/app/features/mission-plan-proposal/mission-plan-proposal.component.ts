@@ -171,6 +171,17 @@ interface Receipt {
               (ngModelChange)="edit($event)"
             ></textarea>
           </label>
+          <button
+            (click)="restoreSource()"
+            [disabled]="
+              busy() ||
+              !!pending() ||
+              !sourceText() ||
+              proposalText === sourceText()
+            "
+          >
+            Khôi phục JSON nguồn đã ACCEPT
+          </button>
           @if (proposalIssue(); as issue) {
             <p role="alert">{{ issue }}</p>
           }
@@ -341,6 +352,26 @@ export class MissionPlanProposalComponent {
     this.proposalText = value;
     this.preview.set(null);
     this.owners = {};
+  }
+  restoreSource() {
+    const source = this.sourceText();
+    if (
+      this.busy() ||
+      this.pending() ||
+      !source ||
+      this.proposalText === source
+    )
+      return;
+    if (
+      !window.confirm(
+        'Thay bản chỉnh sửa bằng output nguồn đã ACCEPT? Bản xem trước và lựa chọn Agent sẽ bị xóa; bạn cần duyệt lại.',
+      )
+    )
+      return;
+    this.edit(source);
+    this.message.set(
+      'Đã khôi phục output nguồn. Chọn lại Agent và xem trước trước khi áp dụng.',
+    );
   }
   bind(key: string, value: string) {
     this.owners = {...this.owners, [key]: value};
