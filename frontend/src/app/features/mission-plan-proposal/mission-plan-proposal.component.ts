@@ -310,6 +310,7 @@ export class MissionPlanProposalComponent {
   private epoch = 0;
   private reviewedAt = 0;
   private pendingReview: Preview | null = null;
+  private uncertainApply = false;
   private actor: string | null = null;
   constructor() {
     this.actor = this.auth.user()?.id ?? null;
@@ -336,6 +337,7 @@ export class MissionPlanProposalComponent {
     this.preview.set(null);
     this.pending.set(null);
     this.pendingReview = null;
+    this.uncertainApply = false;
     this.receipt.set(null);
     this.sourceText.set('');
     this.sourceRun = '';
@@ -710,6 +712,7 @@ export class MissionPlanProposalComponent {
       return;
     }
     this.pendingReview = plan;
+    this.uncertainApply = false;
     this.pending.set({
       sourceRunId: plan.sourceRunId,
       proposalJson: plan.proposalJson,
@@ -723,6 +726,7 @@ export class MissionPlanProposalComponent {
     const command = this.pending();
     if (!command || this.busy()) return;
     const generation = ++this.epoch;
+    const wasUncertain = this.uncertainApply;
     this.busy.set(true);
     try {
       await this.admin();
@@ -751,6 +755,7 @@ export class MissionPlanProposalComponent {
       )
         throw new Error('Uncertain receipt');
       this.receipt.set(data);
+      this.uncertainApply = false;
       this.pending.set(null);
       this.preview.set(null);
       this.message.set(
@@ -760,11 +765,13 @@ export class MissionPlanProposalComponent {
       if (generation !== this.epoch) return;
       if (
         e instanceof HttpErrorResponse &&
-        [400, 401, 403, 409, 404].includes(e.status)
+        ([401, 403].includes(e.status) ||
+          (!wasUncertain && [400, 404, 409].includes(e.status)))
       ) {
         this.pending.set(null);
         this.fail(e);
       } else {
+        this.uncertainApply = true;
         this.preview.set(null);
         this.message.set(
           'Chưa xác định kết quả. Gửi lại đúng lệnh đang giữ để đối chiếu.',
