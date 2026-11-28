@@ -66,6 +66,7 @@ export const routes: Routes = [
   },
   {
     path: 'workspace/:id/teams/:teamId/missions/:missionId/plan-proposal',
+    canDeactivate: [(component: {canLeave(): boolean}) => component.canLeave()],
     canActivate: [authGuard],
     loadComponent: () =>
       import(
