@@ -138,6 +138,10 @@ interface Receipt {
           Kết quả áp dụng chưa xác định. Giữ nguyên lệnh để đối chiếu; không tạo
           lệnh mới.
         </p>
+        <p>Mã lệnh: {{ pending()?.idempotencyKey }}</p>
+        <button (click)="readReceipt()" [disabled]="busy()">
+          Tra cứu kết quả lệnh đang giữ
+        </button>
         <button (click)="send()" [disabled]="busy()">
           Gửi lại đúng lệnh áp dụng
         </button>
@@ -722,6 +726,72 @@ export class MissionPlanProposalComponent {
     });
     void this.send();
   }
+  private acceptReceipt(data: Receipt, command: Command) {
+    if (
+      !this.scope(data) ||
+      data.executionAuthorized !== false ||
+      data.idempotencyKey !== command.idempotencyKey ||
+      data.sourceRunId !== command.sourceRunId ||
+      data.reviewedFingerprint !== command.expectedFingerprint ||
+      !/^[0-9a-f]{64}$/.test(data.snapshotSha256) ||
+      !['AGENT_OUTPUT', 'HUMAN_CORRECTED'].includes(data.origin) ||
+      data.origin !== this.pendingReview?.origin ||
+      data.intakeVersionBefore !== this.pendingReview?.intakeVersion ||
+      !/^(0|[1-9][0-9]{0,18})$/.test(data.intakeVersionBefore) ||
+      !/^[1-9][0-9]{0,18}$/.test(data.intakeVersionAfter) ||
+      BigInt(data.intakeVersionAfter) !==
+        BigInt(data.intakeVersionBefore) + 1n ||
+      !data.taskIds ||
+      Object.keys(data.taskIds).sort().join(',') !==
+        Object.keys(command.owners).sort().join(',') ||
+      Object.values(data.taskIds).some(id => !uuid(id)) ||
+      new Set(Object.values(data.taskIds)).size !==
+        Object.keys(command.owners).length
+    )
+      throw new Error('Uncertain receipt');
+    this.receipt.set(data);
+    this.uncertainApply = false;
+    this.pending.set(null);
+    this.preview.set(null);
+    this.message.set(
+      'Đã tạo toàn bộ Task DRAFT. Chưa duyệt kế hoạch hoặc thực thi.',
+    );
+  }
+  async readReceipt() {
+    const command = this.pending();
+    if (!command || this.busy()) return;
+    const generation = ++this.epoch;
+    this.busy.set(true);
+    try {
+      await this.admin();
+      if (generation !== this.epoch) return;
+      const {data} = await firstValueFrom(
+        this.http
+          .get<{
+            data: {receipt: Receipt};
+          }>(this.base() + '/receipt', {
+            params: {idempotencyKey: command.idempotencyKey},
+          })
+          .pipe(timeout(20000)),
+      );
+      if (generation !== this.epoch) return;
+      if (!data?.receipt) throw new Error('Missing receipt');
+      this.acceptReceipt(data.receipt, command);
+    } catch (error) {
+      if (generation !== this.epoch) return;
+      if (
+        error instanceof HttpErrorResponse &&
+        [401, 403].includes(error.status)
+      )
+        this.fail(error);
+      else
+        this.message.set(
+          'Chưa xác nhận được biên nhận. Giữ nguyên mã lệnh; không tạo lệnh áp dụng mới.',
+        );
+    } finally {
+      if (generation === this.epoch) this.busy.set(false);
+    }
+  }
   async send() {
     const command = this.pending();
     if (!command || this.busy()) return;
@@ -732,35 +802,7 @@ export class MissionPlanProposalComponent {
       await this.admin();
       const {data} = await this.post<Receipt>('/apply', command, generation);
       if (generation !== this.epoch) return;
-      if (
-        !this.scope(data) ||
-        data.executionAuthorized !== false ||
-        data.idempotencyKey !== command.idempotencyKey ||
-        data.sourceRunId !== command.sourceRunId ||
-        data.reviewedFingerprint !== command.expectedFingerprint ||
-        !/^[0-9a-f]{64}$/.test(data.snapshotSha256) ||
-        !['AGENT_OUTPUT', 'HUMAN_CORRECTED'].includes(data.origin) ||
-        data.origin !== this.pendingReview?.origin ||
-        data.intakeVersionBefore !== this.pendingReview?.intakeVersion ||
-        !/^(0|[1-9][0-9]{0,18})$/.test(data.intakeVersionBefore) ||
-        !/^[1-9][0-9]{0,18}$/.test(data.intakeVersionAfter) ||
-        BigInt(data.intakeVersionAfter) !==
-          BigInt(data.intakeVersionBefore) + 1n ||
-        !data.taskIds ||
-        Object.keys(data.taskIds).sort().join(',') !==
-          Object.keys(command.owners).sort().join(',') ||
-        Object.values(data.taskIds).some(id => !uuid(id)) ||
-        new Set(Object.values(data.taskIds)).size !==
-          Object.keys(command.owners).length
-      )
-        throw new Error('Uncertain receipt');
-      this.receipt.set(data);
-      this.uncertainApply = false;
-      this.pending.set(null);
-      this.preview.set(null);
-      this.message.set(
-        'Đã tạo toàn bộ Task DRAFT. Chưa duyệt kế hoạch hoặc thực thi.',
-      );
+      this.acceptReceipt(data, command);
     } catch (e) {
       if (generation !== this.epoch) return;
       if (
