@@ -503,11 +503,12 @@ test('accepted diamond graph admits all Runs and releases dependencies after exa
   await page.route(applyApi,async route=>{
     if(route.request().method()!=='POST')return route.continue();
     applyCommands.push(route.request().postDataJSON());
+    if(applyCommands.length>2)throw new Error('Unexpected additional apply POST during receipt lookup');
     // Fault-only409 is explicit: it is not a real backend conflict or a successful receipt.
     if(applyCommands.length===2)return route.fulfill({status:409,json:{error:'Injected retry conflict'}});
     const response=await route.fetch({maxRetries:0});
     expect(response.status()).toBe(200);
-    expect(response.headers()['idempotency-replayed']).toBe(applyCommands.length===1?'false':'true');
+    expect(response.headers()['idempotency-replayed']).toBe('false');
     if(applyCommands.length===1)return route.abort('failed');
     return route.fulfill({response});
   });
@@ -530,14 +531,26 @@ test('accepted diamond graph admits all Runs and releases dependencies after exa
   await expect(applyRetry).toBeEnabled();
   await expect(page.getByRole('button',{name:'Tải lại điều kiện nhập',exact:true})).toBeDisabled();
   expect(applyCommands[1]).toEqual(applyCommands[0]);
-  await applyRetry.click();
+  const receiptRead=page.waitForResponse(response=>{
+    const url=new URL(response.url());
+    return response.request().method()==='GET'&&url.pathname===`/api/v1/organizations/${org}/teams/${team}/missions/${process.env.PROVIDER_PLAN_PROPOSAL_TARGET}/plan-proposal/receipt`&&url.searchParams.get('idempotencyKey')===applyCommands[0].idempotencyKey;
+  });
+  await page.getByRole('button',{name:'Tra cứu kết quả lệnh đang giữ',exact:true}).click();
+  const receiptResponse=await receiptRead;
+  expect(receiptResponse.status()).toBe(200);
+  expect(receiptResponse.headers()['cache-control']).toBe('no-store');
+  const recoveredReceipt=(await receiptResponse.json()).data.receipt;
+  expect(recoveredReceipt.idempotencyKey).toBe(applyCommands[0].idempotencyKey);
+  expect(recoveredReceipt.reviewedFingerprint).toBe(applyCommands[0].expectedFingerprint);
+  expect(Object.keys(recoveredReceipt.taskIds).sort()).toEqual(['a','b','c','d']);
+
 
   await expect(
     page.getByRole('heading', {name: 'Đã nhập 4 Task', exact: true}),
   ).toBeVisible();
-  expect(bulkApplyPosts).toBe(3);
-  expect(applyCommands).toHaveLength(3);
-  expect(applyCommands[2]).toEqual(applyCommands[0]);
+  expect(bulkApplyPosts).toBe(2);
+  expect(applyCommands).toHaveLength(2);
+  await expect(page.getByText(new RegExp('Snapshot '+recoveredReceipt.snapshotSha256))).toBeVisible();
   await page.unroute(applyApi);
   page.off('request',countBulkCommands);
   await page
