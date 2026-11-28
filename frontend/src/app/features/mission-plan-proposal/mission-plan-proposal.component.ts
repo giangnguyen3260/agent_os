@@ -198,6 +198,27 @@ interface Receipt {
             (danh sách key). Tối đa 20 Task và 100 quan hệ; không đặt owner hoặc
             lệnh thực thi trong JSON.
           </p>
+          @if (rows().length > 0 && !proposalIssue()) {
+            <label
+              >Agent dùng cho toàn bộ Task
+              <select
+                aria-label="Agent dùng cho toàn bộ Task"
+                [(ngModel)]="bulkOwner"
+              >
+                <option value="">Chọn Agent</option>
+                @for (owner of current.owners; track owner.id) {
+                  <option [value]="owner.id">{{ owner.name }}</option>
+                }
+              </select>
+            </label>
+            <button (click)="bindAll()" [disabled]="!bulkOwner">
+              Gán Agent đã chọn cho toàn bộ Task
+            </button>
+            <p>
+              Thao tác thay các lựa chọn Agent hiện có. Bạn có thể đổi từng Task
+              và phải xem trước lại trước khi áp dụng.
+            </p>
+          }
           @for (task of rows(); track task.key) {
             <label
               >{{ task.key }} — {{ task.title }}
@@ -320,6 +341,7 @@ export class MissionPlanProposalComponent {
     this.sourceRun = '';
     this.proposalText = '';
     this.owners = {};
+    this.bulkOwner = '';
   }
   workspace() {
     return [
@@ -346,12 +368,28 @@ export class MissionPlanProposalComponent {
     this.sourceText.set('');
     this.proposalText = '';
     this.owners = {};
+    this.bulkOwner = '';
     this.preview.set(null);
   }
   edit(value: string) {
     this.proposalText = value;
     this.preview.set(null);
     this.owners = {};
+    this.bulkOwner = '';
+  }
+  bulkOwner = '';
+  bindAll() {
+    const rows = this.rows();
+    if (
+      this.busy() ||
+      this.pending() ||
+      this.proposalIssue() ||
+      !rows.length ||
+      !this.context()?.owners.some(o => o.id === this.bulkOwner)
+    )
+      return;
+    this.owners = Object.fromEntries(rows.map(t => [t.key, this.bulkOwner]));
+    this.preview.set(null);
   }
   restoreSource() {
     const source = this.sourceText();
@@ -492,6 +530,7 @@ export class MissionPlanProposalComponent {
       this.sourceText.set('');
       this.proposalText = '';
       this.owners = {};
+      this.bulkOwner = '';
       this.pending.set(null);
       this.message.set('Quyền ADMIN hiện tại không còn hiệu lực.');
     } else
@@ -551,6 +590,7 @@ export class MissionPlanProposalComponent {
       this.sourceText.set(data.content);
       this.proposalText = data.content;
       this.owners = {};
+      this.bulkOwner = '';
       this.message.set('Đã đọc nguồn. Chọn Agent và xem trước kế hoạch.');
     } catch (e) {
       if (generation === this.epoch) this.fail(e);
