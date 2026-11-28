@@ -466,21 +466,46 @@ test('accepted diamond graph admits all Runs and releases dependencies after exa
   await expect(page.getByRole('button',{name:'Áp dụng thành Task DRAFT',exact:true})).toHaveCount(0);
   for(const key of ['a','b','c','d'])await expect(page.getByLabel('Agent cho '+key,{exact:true})).toHaveValue('');
   await expect(page.getByRole('button',{name:'Xem trước toàn bộ kế hoạch',exact:true})).toBeDisabled();
-  for (const key of ['a', 'b', 'c', 'd'])
-    await page
-      .getByLabel('Agent cho ' + key, {exact: true})
-      .selectOption(process.env.PROVIDER_PLAN_PROPOSAL_OWNER);
+  let bulkPreviewPosts=0,bulkApplyPosts=0;
+  const countBulkCommands=request=>{
+    if(request.method()!=='POST')return;
+    const pathname=new URL(request.url()).pathname;
+    if(pathname.endsWith('/plan-proposal/preview'))bulkPreviewPosts++;
+    if(pathname.endsWith('/plan-proposal/apply'))bulkApplyPosts++;
+  };
+  page.on('request',countBulkCommands);
+  const bulk=page.getByRole('button',{name:'Gán Agent đã chọn cho toàn bộ Task',exact:true});
+  await expect(bulk).toBeDisabled();
+  await page.getByLabel('Agent dùng cho toàn bộ Task',{exact:true}).selectOption(process.env.PROVIDER_PLAN_PROPOSAL_OWNER);
+  for(const key of ['a','b','c','d'])await expect(page.getByLabel('Agent cho '+key,{exact:true})).toHaveValue('');
+  await bulk.click();
+  for(const key of ['a','b','c','d'])await expect(page.getByLabel('Agent cho '+key,{exact:true})).toHaveValue(process.env.PROVIDER_PLAN_PROPOSAL_OWNER);
+  expect(bulkPreviewPosts).toBe(0);
+  expect(bulkApplyPosts).toBe(0);
   await page
     .getByRole('button', {name: 'Xem trước toàn bộ kế hoạch', exact: true})
     .click();
   await expect(page.locator('article')).toHaveCount(4);
   await expect(page.getByText(/AGENT_OUTPUT · Output/)).toBeVisible();
+  expect(bulkPreviewPosts).toBe(1);
+  expect(bulkApplyPosts).toBe(0);
+  await bulk.click();
+  await expect(page.getByRole('heading',{name:'Kế hoạch sẽ nhập',exact:true})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Áp dụng thành Task DRAFT',exact:true})).toHaveCount(0);
+  expect(bulkPreviewPosts).toBe(1);
+  expect(bulkApplyPosts).toBe(0);
+  await page.getByRole('button',{name:'Xem trước toàn bộ kế hoạch',exact:true}).click();
+  await expect(page.getByText(/AGENT_OUTPUT · Output/)).toBeVisible();
+  expect(bulkPreviewPosts).toBe(2);
+
   await page
     .getByRole('button', {name: 'Áp dụng thành Task DRAFT', exact: true})
     .click();
   await expect(
     page.getByRole('heading', {name: 'Đã nhập 4 Task', exact: true}),
   ).toBeVisible();
+  expect(bulkApplyPosts).toBe(1);
+  page.off('request',countBulkCommands);
   await page
     .getByRole('link', {name: 'Xem và duyệt kế hoạch từ Task', exact: true})
     .click();
