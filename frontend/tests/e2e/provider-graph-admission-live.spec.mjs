@@ -444,6 +444,28 @@ test('accepted diamond graph admits all Runs and releases dependencies after exa
   await expect(page.getByLabel('JSON đề xuất', {exact: true})).toHaveValue(
     process.env.PROVIDER_PLAN_PROPOSAL_JSON,
   );
+  const editor=page.getByLabel('JSON đề xuất',{exact:true});
+  const restore=page.getByRole('button',{name:'Khôi phục JSON nguồn đã ACCEPT',exact:true});
+  await expect(restore).toBeDisabled();
+  await editor.fill('{bad');
+  await expect(page.getByRole('alert')).toContainText('JSON chưa hợp lệ.');
+  await expect(page.getByRole('button',{name:'Xem trước toàn bộ kế hoạch',exact:true})).toBeDisabled();
+  const corrected=process.env.PROVIDER_PLAN_PROPOSAL_JSON+' ';
+  await editor.fill(corrected);
+  for(const key of ['a','b','c','d'])await page.getByLabel('Agent cho '+key,{exact:true}).selectOption(process.env.PROVIDER_PLAN_PROPOSAL_OWNER);
+  await page.getByRole('button',{name:'Xem trước toàn bộ kế hoạch',exact:true}).click();
+  await expect(page.getByText(/HUMAN_CORRECTED · Output/)).toBeVisible();
+  page.once('dialog',dialog=>dialog.dismiss());
+  await restore.click();
+  await expect(editor).toHaveValue(corrected);
+  await expect(page.getByRole('heading',{name:'Kế hoạch sẽ nhập',exact:true})).toBeVisible();
+  page.once('dialog',dialog=>dialog.accept());
+  await restore.click();
+  await expect(editor).toHaveValue(process.env.PROVIDER_PLAN_PROPOSAL_JSON);
+  await expect(page.getByRole('heading',{name:'Kế hoạch sẽ nhập',exact:true})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Áp dụng thành Task DRAFT',exact:true})).toHaveCount(0);
+  for(const key of ['a','b','c','d'])await expect(page.getByLabel('Agent cho '+key,{exact:true})).toHaveValue('');
+  await expect(page.getByRole('button',{name:'Xem trước toàn bộ kế hoạch',exact:true})).toBeDisabled();
   for (const key of ['a', 'b', 'c', 'd'])
     await page
       .getByLabel('Agent cho ' + key, {exact: true})
