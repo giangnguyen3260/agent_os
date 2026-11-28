@@ -498,13 +498,47 @@ test('accepted diamond graph admits all Runs and releases dependencies after exa
   await expect(page.getByText(/AGENT_OUTPUT · Output/)).toBeVisible();
   expect(bulkPreviewPosts).toBe(2);
 
+  const applyApi=`**/api/v1/organizations/${org}/teams/${team}/missions/${process.env.PROVIDER_PLAN_PROPOSAL_TARGET}/plan-proposal/apply`;
+  const applyCommands=[];
+  await page.route(applyApi,async route=>{
+    if(route.request().method()!=='POST')return route.continue();
+    applyCommands.push(route.request().postDataJSON());
+    // Fault-only409 is explicit: it is not a real backend conflict or a successful receipt.
+    if(applyCommands.length===2)return route.fulfill({status:409,json:{error:'Injected retry conflict'}});
+    const response=await route.fetch({maxRetries:0});
+    expect(response.status()).toBe(200);
+    expect(response.headers()['idempotency-replayed']).toBe(applyCommands.length===1?'false':'true');
+    if(applyCommands.length===1)return route.abort('failed');
+    return route.fulfill({response});
+  });
   await page
     .getByRole('button', {name: 'Áp dụng thành Task DRAFT', exact: true})
     .click();
+  await expect(page.getByRole('status')).toHaveText('Chưa xác định kết quả. Gửi lại đúng lệnh đang giữ để đối chiếu.');
+  const applyRetry=page.getByRole('button',{name:'Gửi lại đúng lệnh áp dụng',exact:true});
+  await expect(applyRetry).toBeEnabled();
+  expect(applyCommands).toHaveLength(1);
+  await expect(page.getByRole('heading',{name:'Đã nhập 4 Task',exact:true})).toHaveCount(0);
+  page.once('dialog',async dialog=>{
+    expect(dialog.message()).toContain('chưa rõ kết quả');
+    await dialog.dismiss();
+  });
+  await page.getByRole('link',{name:'Về Mission workspace',exact:true}).click();
+  await expect(page).toHaveURL(new RegExp('/plan-proposal$'));
+  await applyRetry.click();
+  await expect.poll(()=>applyCommands.length).toBe(2);
+  await expect(applyRetry).toBeEnabled();
+  await expect(page.getByRole('button',{name:'Tải lại điều kiện nhập',exact:true})).toBeDisabled();
+  expect(applyCommands[1]).toEqual(applyCommands[0]);
+  await applyRetry.click();
+
   await expect(
     page.getByRole('heading', {name: 'Đã nhập 4 Task', exact: true}),
   ).toBeVisible();
-  expect(bulkApplyPosts).toBe(1);
+  expect(bulkApplyPosts).toBe(3);
+  expect(applyCommands).toHaveLength(3);
+  expect(applyCommands[2]).toEqual(applyCommands[0]);
+  await page.unroute(applyApi);
   page.off('request',countBulkCommands);
   await page
     .getByRole('link', {name: 'Xem và duyệt kế hoạch từ Task', exact: true})
