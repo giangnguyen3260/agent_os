@@ -774,6 +774,30 @@ export class MissionPlanProposalComponent {
       if (generation === this.epoch) this.busy.set(false);
     }
   }
+  private hasUnsavedWork() {
+    return (
+      !!this.pending() ||
+      (!this.receipt() &&
+        ((!!this.proposalText && this.proposalText !== this.sourceText()) ||
+          Object.keys(this.owners).length > 0))
+    );
+  }
+  canLeave() {
+    if (!this.hasUnsavedWork()) return true;
+    return window.confirm(
+      this.pending()
+        ? 'Lệnh áp dụng chưa rõ kết quả. Rời trang sẽ mất mã lệnh gửi lại; không tạo lệnh mới khi chưa đối chiếu. Vẫn rời trang?'
+        : 'Bản chỉnh sửa hoặc lựa chọn Agent chưa được áp dụng. Rời trang sẽ mất nội dung đang sửa. Vẫn rời trang?',
+    );
+  }
+  @HostListener('window:beforeunload', ['$event']) beforeUnload(
+    event: BeforeUnloadEvent,
+  ) {
+    if (this.hasUnsavedWork()) {
+      event.preventDefault();
+      event.returnValue = '';
+    }
+  }
   @HostListener('window:focus') focus() {
     this.preview.set(null);
     if (!this.busy() && !this.pending() && !this.receipt()) void this.load();
